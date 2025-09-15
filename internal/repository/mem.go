@@ -4,22 +4,29 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
-// MemStorage stores a map of metric hash to metric data in memory.
+type memStorageData map[model.MetricHash]model.Metric
+
 type memStorage struct {
-	values map[model.MetricHash]model.Metric
+	data memStorageData
 }
 
 // NewMemStorage initialises an empty memory storage
 func NewMemStorage() *memStorage {
-	return &memStorage{values: make(map[model.MetricHash]model.Metric)}
+	return &memStorage{data: make(memStorageData)}
 }
 
 // Get retrieves a metric by its hash from in-memory map.
 func (s *memStorage) Get(hash model.MetricHash) (model.Metric, error) {
-	return model.Metric{}, nil
+	var metric model.Metric
+	metric, ok := s.data[hash]
+	if !ok {
+		return metric, ErrMetricNotFound
+	}
+	return metric, nil
 }
 
 // Set stores a given metric to in-memory map.
 func (s *memStorage) Set(metric model.Metric) error {
+	s.data[metric.Hash] = metric
 	return nil
 }
