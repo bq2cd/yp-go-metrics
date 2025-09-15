@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )
@@ -22,5 +24,18 @@ func NewMetrics(storage repository.Storage) *metricService {
 
 // Update implements a mechanism to update or replace a given metric.
 func (s *metricService) Update(metric model.Metric) error {
-	return nil
+	switch metric.Type {
+	case model.MetricTypeCounter:
+		prev, err := s.storage.Get(metric.Hash)
+		if err == repository.ErrMetricNotFound {
+			return s.storage.Set(metric)
+		}
+		if err != nil {
+			return fmt.Errorf("failed to retrieve existing metric: %w", err)
+		}
+		*metric.Delta += *prev.Delta
+	default:
+		// pass
+	}
+	return s.storage.Set(metric)
 }
