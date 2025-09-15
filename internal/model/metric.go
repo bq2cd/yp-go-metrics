@@ -29,9 +29,3 @@ type Metric struct {
 	Value *float64   `json:"value,omitempty"`
 	Hash  MetricHash `json:"hash,omitempty"`
 }
-
-// NewMetricFromURLPath converts an URL path (e.g. /update/TYPE/ID/VALUE)
-// into a metric. Returns error if the conversion is not possible.
-func NewMetricFromURLPath(path string) (Metric, error) {
-	return Metric{}, nil
-}
