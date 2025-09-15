@@ -1,21 +1,25 @@
 package handler
 
 import (
-	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"net/http"
+
+	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
 // Router implements HTTP routing for the server part.
 type router struct {
-	mux     *http.ServeMux
+	mux     http.Handler
 	metrics service.Metrics
 }
 
 // NewRouter instantiates a router with necessary dependencies.
-func NewRouter(metrics service.Metrics) *router {
-	mux := http.NewServeMux()
+func NewRouter(metrics service.Metrics, mux *http.ServeMux) *router {
+	if mux == nil {
+		mux = http.NewServeMux()
 
-	mux.Handle("/update/", &updateHandler{metrics: metrics})
+		mux.Handle("/", &defaultHandler{})
+		mux.Handle("/update/", &updateHandler{metrics: metrics})
+	}
 
 	return &router{
 		mux:     mux,

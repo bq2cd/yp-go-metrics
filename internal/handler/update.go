@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"net/http"
+
+	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
 type updateHandler struct {
@@ -11,5 +12,24 @@ type updateHandler struct {
 
 // ServeHTTP implements http.Handler for /update endpoint
 func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "not implemented", http.StatusNotImplemented)
+	metric, err := NewMetricFromURLPath(r.URL.Path)
+	switch err {
+	case nil:
+		// pass
+	case ErrEmptyMetricID:
+		http.Error(w, "", http.StatusNotFound)
+		return
+	default:
+		http.Error(w, "", http.StatusBadRequest)
+		return
+	}
+
+	err = h.metrics.Update(metric)
+	if err != nil {
+		http.Error(w, "failed to update metric", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("content-type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
 }

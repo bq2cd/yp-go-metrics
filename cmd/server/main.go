@@ -15,7 +15,7 @@ const defaultAddress = ":8080"
 func run(config server.Config) error {
 	storage := repository.NewMemStorage()
 	svc := service.NewMetrics(storage)
-	router := handler.NewRouter(svc)
+	router := handler.NewRouter(svc, nil)
 
 	log.Printf("listening on %v", config.ListenAddress)
 
