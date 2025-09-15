@@ -1,5 +1,7 @@
 package model
 
+import "fmt"
+
 const (
 	// MetricTypeCounter defines a counter type
 	MetricTypeCounter = MetricType("counter")
@@ -28,4 +30,33 @@ type Metric struct {
 	Delta *int64     `json:"delta,omitempty"`
 	Value *float64   `json:"value,omitempty"`
 	Hash  MetricHash `json:"hash,omitempty"`
+}
+
+// NewCounterMetric creates an instance of a counter type metric.
+func NewCounterMetric(mID string, value int64) Metric {
+	metric := Metric{
+		ID:    mID,
+		Type:  MetricTypeCounter,
+		Delta: &value,
+	}
+	metric.updateHash()
+	return metric
+}
+
+// NewGaugeMetric creates an instance of a counter type metric.
+func NewGaugeMetric(mID string, value float64) Metric {
+	metric := Metric{
+		ID:    mID,
+		Type:  MetricTypeGauge,
+		Value: &value,
+	}
+	metric.updateHash()
+	return metric
+}
+
+// It is very easy to mess up with the Metric struct because the fields are
+// exported.
+// TODO: find better solution.
+func (m *Metric) updateHash() {
+	m.Hash = MetricHash(fmt.Sprintf("%s/%s", m.Type, m.ID))
 }
