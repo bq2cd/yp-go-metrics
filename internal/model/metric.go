@@ -1,7 +1,5 @@
 package model
 
-import "fmt"
-
 const (
 	// MetricTypeCounter defines a counter type
 	MetricTypeCounter = MetricType("counter")
@@ -17,6 +15,19 @@ type (
 	// MetricHash wraps a string into a user type.
 	MetricHash string
 )
+
+// MetricKey defines a (type, id) pair to be used as a map key.
+// This is different from metric hash as the hash can have a different
+// logic behind it.
+type MetricKey struct {
+	Type MetricType
+	ID   string
+}
+
+// NewMetricKey is a convenience function to create a MetricKey struct instance.
+func NewMetricKey(mType MetricType, mID string) MetricKey {
+	return MetricKey{Type: mType, ID: mID}
+}
 
 // Metric defines a basic data structure to store metric values and metadata.
 // NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
@@ -39,7 +50,6 @@ func NewCounterMetric(mID string, value int64) Metric {
 		Type:  MetricTypeCounter,
 		Delta: &value,
 	}
-	metric.updateHash()
 	return metric
 }
 
@@ -50,13 +60,10 @@ func NewGaugeMetric(mID string, value float64) Metric {
 		Type:  MetricTypeGauge,
 		Value: &value,
 	}
-	metric.updateHash()
 	return metric
 }
 
-// It is very easy to mess up with the Metric struct because the fields are
-// exported.
-// TODO: find better solution.
-func (m *Metric) updateHash() {
-	m.Hash = MetricHash(fmt.Sprintf("%s/%s", m.Type, m.ID))
+// Key returns a MetricKey struct for this metric.
+func (m *Metric) Key() MetricKey {
+	return MetricKey{Type: m.Type, ID: m.ID}
 }

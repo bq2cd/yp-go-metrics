@@ -4,7 +4,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
-type memStorageData map[model.MetricHash]model.Metric
+type memStorageData map[model.MetricKey]model.Metric
 
 type memStorage struct {
 	data memStorageData
@@ -16,9 +16,9 @@ func NewMemStorage() *memStorage {
 }
 
 // Get retrieves a metric by its hash from in-memory map.
-func (s *memStorage) Get(hash model.MetricHash) (model.Metric, error) {
+func (s *memStorage) Get(key model.MetricKey) (model.Metric, error) {
 	var metric model.Metric
-	metric, ok := s.data[hash]
+	metric, ok := s.data[key]
 	if !ok {
 		return metric, ErrMetricNotFound
 	}
@@ -27,6 +27,6 @@ func (s *memStorage) Get(hash model.MetricHash) (model.Metric, error) {
 
 // Set stores a given metric to in-memory map.
 func (s *memStorage) Set(metric model.Metric) error {
-	s.data[metric.Hash] = metric
+	s.data[metric.Key()] = metric
 	return nil
 }

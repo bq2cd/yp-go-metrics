@@ -29,7 +29,7 @@ func Test_memStorage_Get(t *testing.T) {
 		data memStorageData
 	}
 	type args struct {
-		hash model.MetricHash
+		key model.MetricKey
 	}
 	tests := []struct {
 		name      string
@@ -41,7 +41,7 @@ func Test_memStorage_Get(t *testing.T) {
 		{
 			name:   "empty storage",
 			fields: fields{data: memStorageData{}},
-			args:   args{hash: model.MetricHash("counter/id1")},
+			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.Equal(t, ErrMetricNotFound, err)
@@ -50,21 +50,21 @@ func Test_memStorage_Get(t *testing.T) {
 		{
 			name: "metric exists",
 			fields: fields{data: memStorageData{
-				"counter/id1": model.Metric{
+				model.NewMetricKey(model.MetricTypeCounter, "id1"): model.Metric{
 					ID:   "id1",
 					Type: model.MetricTypeCounter,
-					Hash: "counter/id1",
+					Hash: "counter1",
 				},
-				"gauge/id1": model.Metric{
+				model.NewMetricKey(model.MetricTypeGauge, "id1"): model.Metric{
 					ID:   "id1",
 					Type: model.MetricTypeGauge,
-					Hash: "gauge/id1",
+					Hash: "gauge1",
 				}}},
-			args: args{hash: model.MetricHash("counter/id1")},
+			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want: model.Metric{
 				ID:   "id1",
 				Type: model.MetricTypeCounter,
-				Hash: "counter/id1",
+				Hash: "counter1",
 			},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -76,7 +76,7 @@ func Test_memStorage_Get(t *testing.T) {
 			s := &memStorage{
 				data: tt.fields.data,
 			}
-			got, err := s.Get(tt.args.hash)
+			got, err := s.Get(tt.args.key)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -105,7 +105,7 @@ func Test_memStorage_Set(t *testing.T) {
 					ID:    "id1",
 					Type:  model.MetricTypeCounter,
 					Delta: &value,
-					Hash:  "counter/id1",
+					Hash:  "counter1",
 				}
 			}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -115,15 +115,15 @@ func Test_memStorage_Set(t *testing.T) {
 		{
 			name: "metric added",
 			fields: fields{data: memStorageData{
-				"counter/id1": model.Metric{
+				model.NewMetricKey(model.MetricTypeCounter, "id1"): model.Metric{
 					ID:   "id1",
 					Type: model.MetricTypeCounter,
-					Hash: "counter/id1",
+					Hash: "counter1",
 				},
-				"gauge/id1": model.Metric{
+				model.NewMetricKey(model.MetricTypeGauge, "id1"): model.Metric{
 					ID:   "id1",
 					Type: model.MetricTypeGauge,
-					Hash: "gauge/id1",
+					Hash: "gauge1",
 				},
 			}},
 			args: args{metric: func() model.Metric {
@@ -132,7 +132,7 @@ func Test_memStorage_Set(t *testing.T) {
 					ID:    "id3",
 					Type:  model.MetricTypeCounter,
 					Delta: &value,
-					Hash:  "counter/id3",
+					Hash:  "counter3",
 				}
 			}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -142,15 +142,15 @@ func Test_memStorage_Set(t *testing.T) {
 		{
 			name: "metric replaced",
 			fields: fields{data: memStorageData{
-				"counter/id1": model.Metric{
+				model.NewMetricKey(model.MetricTypeCounter, "id1"): model.Metric{
 					ID:   "id1",
 					Type: model.MetricTypeCounter,
-					Hash: "counter/id1",
+					Hash: "counter1",
 				},
-				"gauge/id1": model.Metric{
+				model.NewMetricKey(model.MetricTypeGauge, "id1"): model.Metric{
 					ID:   "id1",
 					Type: model.MetricTypeGauge,
-					Hash: "gauge/id1",
+					Hash: "gauge1",
 				},
 			}},
 			args: args{metric: func() model.Metric {
@@ -159,7 +159,7 @@ func Test_memStorage_Set(t *testing.T) {
 					ID:    "id1",
 					Type:  model.MetricTypeCounter,
 					Delta: &value,
-					Hash:  "counter/id1",
+					Hash:  "counter1",
 				}
 			}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -174,8 +174,8 @@ func Test_memStorage_Set(t *testing.T) {
 			}
 			metric := tt.args.metric()
 			tt.assertion(t, s.Set(metric))
-			assert.Contains(t, tt.fields.data, metric.Hash)
-			assert.Equal(t, metric, tt.fields.data[metric.Hash])
+			assert.Contains(t, tt.fields.data, metric.Key())
+			assert.Equal(t, metric, tt.fields.data[metric.Key()])
 		})
 	}
 }

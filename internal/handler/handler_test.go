@@ -131,8 +131,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update counter type with correct positive value",
 			args: args{path: "/update/counter/myCounter/123"},
 			want: func() model.Metric {
-				var value int64 = 123
-				return model.Metric{ID: "myCounter", Type: model.MetricTypeCounter, Delta: &value, Value: nil, Hash: model.MetricHash("counter/myCounter")}
+				return model.NewCounterMetric("myCounter", 123)
 			},
 			wantErr: nil,
 		},
@@ -140,8 +139,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update counter type with correct positive value and leading+trailing slashes",
 			args: args{path: "/update/counter/myCounter/123/"},
 			want: func() model.Metric {
-				var value int64 = 123
-				return model.Metric{ID: "myCounter", Type: model.MetricTypeCounter, Delta: &value, Value: nil, Hash: model.MetricHash("counter/myCounter")}
+				return model.NewCounterMetric("myCounter", 123)
 			},
 			wantErr: nil,
 		},
@@ -149,8 +147,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update counter type with correct positive value and no leading slash",
 			args: args{path: "update/counter/myCounter/123"},
 			want: func() model.Metric {
-				var value int64 = 123
-				return model.Metric{ID: "myCounter", Type: model.MetricTypeCounter, Delta: &value, Value: nil, Hash: model.MetricHash("counter/myCounter")}
+				return model.NewCounterMetric("myCounter", 123)
 			},
 			wantErr: nil,
 		},
@@ -158,8 +155,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update counter type with correct positive value and no leading but trailing slash",
 			args: args{path: "update/counter/myCounter/123/"},
 			want: func() model.Metric {
-				var value int64 = 123
-				return model.Metric{ID: "myCounter", Type: model.MetricTypeCounter, Delta: &value, Value: nil, Hash: model.MetricHash("counter/myCounter")}
+				return model.NewCounterMetric("myCounter", 123)
 			},
 			wantErr: nil,
 		},
@@ -167,8 +163,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update counter type with correct negative value",
 			args: args{path: "/update/counter/myCounter/-456"},
 			want: func() model.Metric {
-				var value int64 = -456
-				return model.Metric{ID: "myCounter", Type: model.MetricTypeCounter, Delta: &value, Value: nil, Hash: model.MetricHash("counter/myCounter")}
+				return model.NewCounterMetric("myCounter", -456)
 			},
 			wantErr: nil,
 		},
@@ -176,8 +171,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update gauge type with correct positive value",
 			args: args{path: "/update/gauge/myGauge/1.23"},
 			want: func() model.Metric {
-				var value = 1.23
-				return model.Metric{ID: "myGauge", Type: model.MetricTypeGauge, Delta: nil, Value: &value, Hash: model.MetricHash("gauge/myGauge")}
+				return model.NewGaugeMetric("myGauge", 1.23)
 			},
 			wantErr: nil,
 		},
@@ -185,8 +179,7 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			name: "update gauge type with correct negative value",
 			args: args{path: "/update/gauge/myGauge/-4.56"},
 			want: func() model.Metric {
-				var value = -4.56
-				return model.Metric{ID: "myGauge", Type: model.MetricTypeGauge, Delta: nil, Value: &value, Hash: model.MetricHash("gauge/myGauge")}
+				return model.NewGaugeMetric("myGauge", -4.56)
 			},
 			wantErr: nil,
 		},

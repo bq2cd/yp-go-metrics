@@ -18,8 +18,8 @@ type faultyStorage struct {
 	realStorage repository.Storage
 }
 
-func (s *faultyStorage) Get(h model.MetricHash) (model.Metric, error) {
-	m, err := s.realStorage.Get(h)
+func (s *faultyStorage) Get(k model.MetricKey) (model.Metric, error) {
+	m, err := s.realStorage.Get(k)
 	switch m.ID {
 	case faultyStorageErrorTrigger:
 		return model.Metric{}, errors.New("faulty storage get error")
@@ -144,7 +144,7 @@ func Test_metricService_storeSingle(t *testing.T) {
 				storage: tt.fields.storage(),
 			}
 			tt.assertion(t, s.storeSingle(tt.args.metric))
-			got, err := s.storage.Get(tt.args.metric.Hash)
+			got, err := s.storage.Get(tt.args.metric.Key())
 			require.NoError(t, err)
 			if tt.want != nil {
 				assert.Equal(t, tt.want.metric, got)
@@ -207,7 +207,7 @@ func Test_metricService_Store(t *testing.T) {
 			}
 			tt.assertion(t, s.Store(tt.args.metrics[0], tt.args.metrics[1:]...))
 			for _, m := range tt.want.metrics {
-				got, err := s.storage.Get(m.Hash)
+				got, err := s.storage.Get(m.Key())
 				assert.NoError(t, err)
 				assert.Equal(t, m, got)
 			}
@@ -220,7 +220,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 		storage func() repository.Storage
 	}
 	type args struct {
-		hashes []model.MetricHash
+		keys []model.MetricKey
 	}
 	tests := []struct {
 		name      string
@@ -239,7 +239,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 				}
 				return s
 			}},
-			args: args{hashes: []model.MetricHash{"counter/id1"}},
+			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1")}},
 			want: []model.Metric{model.NewCounterMetric("id1", 5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -255,7 +255,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 				}
 				return s
 			}},
-			args: args{hashes: []model.MetricHash{"counter/id1", "gauge/id2"}},
+			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2")}},
 			want: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -271,7 +271,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 				}
 				return s
 			}},
-			args: args{hashes: []model.MetricHash{"counter/id1", "gauge/id2"}},
+			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2")}},
 			want: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -283,7 +283,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 			s := &metricService{
 				storage: tt.fields.storage(),
 			}
-			got, err := s.Retrieve(tt.args.hashes[0], tt.args.hashes[1:]...)
+			got, err := s.Retrieve(tt.args.keys[0], tt.args.keys[1:]...)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})

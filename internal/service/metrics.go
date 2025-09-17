@@ -12,7 +12,7 @@ import (
 // E.g. store, retrieve, delete, etc.
 type Metrics interface {
 	Store(metric model.Metric, metrics ...model.Metric) error
-	Retrieve(hash model.MetricHash, hashes ...model.MetricHash) ([]model.Metric, error)
+	Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error)
 }
 
 type metricService struct {
@@ -27,7 +27,7 @@ func NewMetrics(storage repository.Storage) *metricService {
 func (s *metricService) storeSingle(metric model.Metric) error {
 	switch metric.Type {
 	case model.MetricTypeCounter:
-		prev, err := s.storage.Get(metric.Hash)
+		prev, err := s.storage.Get(metric.Key())
 		if err == repository.ErrMetricNotFound {
 			return s.storage.Set(metric)
 		}
@@ -59,21 +59,21 @@ func (s *metricService) Store(metric model.Metric, metrics ...model.Metric) erro
 }
 
 // Retrieve implements a mechanism to retrive a slice of metrics by their hashes.
-func (s *metricService) Retrieve(hash model.MetricHash, hashes ...model.MetricHash) ([]model.Metric, error) {
+func (s *metricService) Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error) {
 	var errFinal error
 
-	metrics := make([]model.Metric, 0, len(hashes)+1)
+	metrics := make([]model.Metric, 0, len(keys)+1)
 
 	// performing a separate call to avoid allocating another slice
 	// for a subsequent loop
-	if m, err := s.storage.Get(hash); err != nil {
+	if m, err := s.storage.Get(key); err != nil {
 		errFinal = errors.Join(errFinal, err)
 	} else {
 		metrics = append(metrics, m)
 	}
 
-	for _, h := range hashes {
-		m, err := s.storage.Get(h)
+	for _, k := range keys {
+		m, err := s.storage.Get(k)
 		if err != nil {
 			errFinal = errors.Join(errFinal, err)
 			continue

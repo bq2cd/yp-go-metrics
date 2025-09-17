@@ -26,7 +26,6 @@ func TestNewCounterMetric(t *testing.T) {
 					Type:  MetricTypeCounter,
 					Delta: &value,
 					Value: nil,
-					Hash:  MetricHash("counter/id1"),
 				}
 			},
 		},
@@ -40,7 +39,6 @@ func TestNewCounterMetric(t *testing.T) {
 					Type:  MetricTypeCounter,
 					Delta: &value,
 					Value: nil,
-					Hash:  MetricHash("counter/id1"),
 				}
 			},
 		},
@@ -54,7 +52,6 @@ func TestNewCounterMetric(t *testing.T) {
 					Type:  MetricTypeCounter,
 					Delta: &value,
 					Value: nil,
-					Hash:  MetricHash("counter/id1"),
 				}
 			},
 		},
@@ -86,7 +83,6 @@ func TestNewGaugeMetric(t *testing.T) {
 					Type:  MetricTypeGauge,
 					Delta: nil,
 					Value: &value,
-					Hash:  MetricHash("gauge/id1"),
 				}
 			},
 		},
@@ -100,7 +96,6 @@ func TestNewGaugeMetric(t *testing.T) {
 					Type:  MetricTypeGauge,
 					Delta: nil,
 					Value: &value,
-					Hash:  MetricHash("gauge/id1"),
 				}
 			},
 		},
@@ -114,7 +109,6 @@ func TestNewGaugeMetric(t *testing.T) {
 					Type:  MetricTypeGauge,
 					Delta: nil,
 					Value: &value,
-					Hash:  MetricHash("gauge/id1"),
 				}
 			},
 		}}
@@ -125,54 +119,98 @@ func TestNewGaugeMetric(t *testing.T) {
 	}
 }
 
-func TestMetric_updateHash(t *testing.T) {
+func TestMetric_Key(t *testing.T) {
 	type fields struct {
-		ID   string
-		Type MetricType
-		Hash MetricHash
+		ID    string
+		Type  MetricType
+		Delta *int64
+		Value *float64
+		Hash  MetricHash
 	}
 	tests := []struct {
 		name   string
 		fields fields
-		want   string
+		want   MetricKey
 	}{
 		{
-			name: "empty initial hash",
-			fields: fields{
-				ID:   "id1",
-				Type: MetricTypeCounter,
-				Hash: "",
-			},
-			want: "counter/id1",
+			name:   "empty metric",
+			fields: fields{},
+			want:   MetricKey{},
 		},
 		{
-			name: "incorrect initial hash",
-			fields: fields{
-				ID:   "id1",
-				Type: MetricTypeCounter,
-				Hash: "badHash",
-			},
-			want: "counter/id1",
+			name:   "empty ID",
+			fields: fields{Type: MetricTypeCounter},
+			want:   MetricKey{Type: MetricTypeCounter},
 		},
 		{
-			name: "correct initial hash",
-			fields: fields{
-				ID:   "id1",
-				Type: MetricTypeCounter,
-				Hash: "counter/id1",
-			},
-			want: "counter/id1",
+			name:   "empty type",
+			fields: fields{ID: "id1"},
+			want:   MetricKey{ID: "id1"},
+		},
+		{
+			name:   "normal metric",
+			fields: fields{Type: MetricTypeGauge, ID: "id1"},
+			want:   MetricKey{Type: MetricTypeGauge, ID: "id1"},
+		},
+		{
+			name:   "custom type",
+			fields: fields{Type: MetricType("custom"), ID: "id1"},
+			want:   MetricKey{Type: MetricType("custom"), ID: "id1"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &Metric{
-				ID:   tt.fields.ID,
-				Type: tt.fields.Type,
-				Hash: tt.fields.Hash,
+				ID:    tt.fields.ID,
+				Type:  tt.fields.Type,
+				Delta: tt.fields.Delta,
+				Value: tt.fields.Value,
+				Hash:  tt.fields.Hash,
 			}
-			m.updateHash()
-			assert.Equal(t, MetricHash(tt.want), m.Hash)
+			assert.Equal(t, tt.want, m.Key())
+		})
+	}
+}
+
+func TestNewMetricKey(t *testing.T) {
+	type args struct {
+		mType MetricType
+		mID   string
+	}
+	tests := []struct {
+		name string
+		args args
+		want MetricKey
+	}{
+		{
+			name: "empty key",
+			args: args{},
+			want: MetricKey{},
+		},
+		{
+			name: "empty ID",
+			args: args{mType: MetricTypeCounter},
+			want: MetricKey{Type: MetricTypeCounter},
+		},
+		{
+			name: "empty type",
+			args: args{mID: "id1"},
+			want: MetricKey{ID: "id1"},
+		},
+		{
+			name: "normal key",
+			args: args{mType: MetricTypeGauge, mID: "id1"},
+			want: MetricKey{Type: MetricTypeGauge, ID: "id1"},
+		},
+		{
+			name: "custom key",
+			args: args{mType: MetricType("custom"), mID: "id1"},
+			want: MetricKey{Type: MetricType("custom"), ID: "id1"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, NewMetricKey(tt.args.mType, tt.args.mID))
 		})
 	}
 }
