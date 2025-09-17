@@ -24,7 +24,7 @@ func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.metrics.Update(metric)
+	err = h.metrics.Store(metric)
 	if err != nil {
 		http.Error(w, "failed to update metric", http.StatusInternalServerError)
 		return
