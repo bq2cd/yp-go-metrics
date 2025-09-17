@@ -13,6 +13,7 @@ import (
 type Metrics interface {
 	Store(metric model.Metric, metrics ...model.Metric) error
 	Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error)
+	RetrieveAll() ([]model.Metric, error)
 }
 
 type metricService struct {
@@ -82,4 +83,9 @@ func (s *metricService) Retrieve(key model.MetricKey, keys ...model.MetricKey) (
 	}
 
 	return metrics, errFinal
+}
+
+// RetrieveAll returns all metrics from the underlying storage.
+func (s *metricService) RetrieveAll() ([]model.Metric, error) {
+	return s.storage.GetAll()
 }

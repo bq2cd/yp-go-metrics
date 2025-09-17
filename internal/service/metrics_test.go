@@ -28,6 +28,10 @@ func (s *faultyStorage) Get(k model.MetricKey) (model.Metric, error) {
 	}
 }
 
+func (s *faultyStorage) GetAll() ([]model.Metric, error) {
+	return nil, errors.New("faulty storage internal error")
+}
+
 func (s *faultyStorage) Set(m model.Metric) error {
 	switch m.ID {
 	case faultyStorageErrorTrigger:
@@ -335,6 +339,73 @@ func Test_metricService_Retrieve(t *testing.T) {
 			got, err := s.Retrieve(tt.args.keys[0], tt.args.keys[1:]...)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_metricService_RetrieveAll(t *testing.T) {
+	type fields struct {
+		storage repository.Storage
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		want      []model.Metric
+		assertion assert.ErrorAssertionFunc
+	}{
+		// TODO: Add test cases.
+		{
+			name: "empty storage",
+			fields: fields{
+				storage: func() repository.Storage {
+					s := repository.NewMemStorage()
+					return s
+				}(),
+			},
+			want: []model.Metric{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "faulty storage",
+			fields: fields{
+				storage: func() repository.Storage {
+					s := &faultyStorage{realStorage: repository.NewMemStorage()}
+					return s
+				}(),
+			},
+			want: []model.Metric{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+		{
+			name: "multiple metrics",
+			fields: fields{
+				storage: func() repository.Storage {
+					s := repository.NewMemStorage()
+					for _, m := range []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)} {
+						err := s.Set(m)
+						assert.NoError(t, err)
+					}
+					return s
+				}(),
+			},
+			want: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &metricService{
+				storage: tt.fields.storage,
+			}
+			got, err := s.RetrieveAll()
+			tt.assertion(t, err)
+			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
 }

@@ -14,5 +14,6 @@ var (
 // Storage abstracts an underlying technology for storing metrics.
 type Storage interface {
 	Get(key model.MetricKey) (model.Metric, error)
+	GetAll() ([]model.Metric, error)
 	Set(metric model.Metric) error
 }

@@ -239,3 +239,45 @@ func Test_memStorage_Set(t *testing.T) {
 		})
 	}
 }
+
+func Test_memStorage_GetAll(t *testing.T) {
+	type fields struct {
+		data memStorageData
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		want      []model.Metric
+		assertion assert.ErrorAssertionFunc
+	}{
+		{
+			name:   "empty storage",
+			fields: fields{data: make(memStorageData)},
+			want:   []model.Metric{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "multiple metrics",
+			fields: fields{data: memStorageData{
+				model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 10),
+				model.NewMetricKey(model.MetricTypeGauge, "id1"):   model.NewGaugeMetric("id2", 1.5),
+			}},
+			want: []model.Metric{model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id2", 1.5)},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &memStorage{
+				data: tt.fields.data,
+			}
+			got, err := s.GetAll()
+			tt.assertion(t, err)
+			assert.ElementsMatch(t, tt.want, got)
+		})
+	}
+}

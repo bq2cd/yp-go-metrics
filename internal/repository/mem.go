@@ -28,6 +28,19 @@ func (s *memStorage) Get(key model.MetricKey) (model.Metric, error) {
 	return metric, nil
 }
 
+// GetAll returns all metrics currently stored in the in-memory map.
+func (s *memStorage) GetAll() ([]model.Metric, error) {
+	metrics := make([]model.Metric, 0, len(s.data))
+	for k := range s.data {
+		m := s.data[k]
+		if m.Empty() {
+			continue
+		}
+		metrics = append(metrics, m)
+	}
+	return metrics, nil
+}
+
 // Set stores a given metric to in-memory map.
 func (s *memStorage) Set(metric model.Metric) error {
 	if metric.Empty() {
