@@ -47,6 +47,11 @@ type defaultCollector struct {
 	pollCounter int
 }
 
+// NewDefaultCollector creates an instance of the default collector.
+func NewDefaultCollector() *defaultCollector {
+	return &defaultCollector{}
+}
+
 // Collect returns collected metrics.
 func (c *defaultCollector) Collect() ([]model.Metric, error) {
 	return nil, nil

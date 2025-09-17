@@ -61,3 +61,20 @@ func Test_defaultCollector_Collect(t *testing.T) {
 		})
 	}
 }
+
+func TestNewDefaultCollector(t *testing.T) {
+	tests := []struct {
+		name string
+		want *defaultCollector
+	}{
+		{
+			name: "default initialisation",
+			want: &defaultCollector{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, NewDefaultCollector())
+		})
+	}
+}

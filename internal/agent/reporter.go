@@ -14,6 +14,11 @@ type defaultReporter struct {
 	client *resty.Client
 }
 
+// NewDefaultReporter creates an instance of the default reporter.
+func NewDefaultReporter(client *resty.Client) *defaultReporter {
+	return &defaultReporter{client: client}
+}
+
 // Report sends incoming metrics to an upstream.
 func (r *defaultReporter) Report(metrics []model.Metric) error {
 	return nil

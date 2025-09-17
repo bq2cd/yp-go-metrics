@@ -240,3 +240,27 @@ func Test_defaultStorer_Retrieve(t *testing.T) {
 		})
 	}
 }
+
+func TestNewDefaultStorer(t *testing.T) {
+	type args struct {
+		storage service.Metrics
+	}
+	tests := []struct {
+		name      string
+		args      args
+		assertion func(assert.TestingT, args, *defaultStorer)
+	}{
+		{
+			name: "default initialisation",
+			args: args{storage: service.NewMetrics(repository.NewMemStorage())},
+			assertion: func(t assert.TestingT, want args, got *defaultStorer) {
+				assert.Equal(t, want.storage, got.storage)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertion(t, tt.args, NewDefaultStorer(tt.args.storage))
+		})
+	}
+}

@@ -156,3 +156,27 @@ func Test_defaultReporter_Report(t *testing.T) {
 		})
 	}
 }
+
+func TestNewDefaultReporter(t *testing.T) {
+	type args struct {
+		client *resty.Client
+	}
+	tests := []struct {
+		name      string
+		args      args
+		assertion func(assert.TestingT, args, *defaultReporter)
+	}{
+		{
+			name: "default initialisation",
+			args: args{client: resty.New()},
+			assertion: func(t assert.TestingT, want args, got *defaultReporter) {
+				assert.Equal(t, want.client, got.client)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertion(t, tt.args, NewDefaultReporter(tt.args.client))
+		})
+	}
+}

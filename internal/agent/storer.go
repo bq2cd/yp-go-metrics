@@ -16,6 +16,12 @@ type defaultStorer struct {
 	storage service.Metrics
 }
 
+// NewDefaultStorer creates an instance of the default storer
+// backed by in-memory storage.
+func NewDefaultStorer(storage service.Metrics) *defaultStorer {
+	return &defaultStorer{storage: storage}
+}
+
 // Store receives incoming metrics and stores them in the underlying storage.
 func (s *defaultStorer) Store(metrics []model.Metric) error {
 	if len(metrics) == 0 {
