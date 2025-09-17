@@ -44,11 +44,43 @@ func Test_memStorage_Get(t *testing.T) {
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				assert.Error(t, err)
 				return assert.Equal(t, ErrMetricNotFound, err)
 			},
 		},
 		{
 			name: "metric exists",
+			fields: fields{data: memStorageData{
+				model.NewMetricKey(model.MetricTypeCounter, "id1"): func() model.Metric {
+					var value int64 = 9
+					return model.Metric{
+						ID:    "id1",
+						Type:  model.MetricTypeCounter,
+						Delta: &value,
+						Hash:  "counter1",
+					}
+				}(),
+				model.NewMetricKey(model.MetricTypeGauge, "id1"): model.Metric{
+					ID:   "id1",
+					Type: model.MetricTypeGauge,
+					Hash: "gauge1",
+				}}},
+			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
+			want: func() model.Metric {
+				var value int64 = 9
+				return model.Metric{
+					ID:    "id1",
+					Type:  model.MetricTypeCounter,
+					Delta: &value,
+					Hash:  "counter1",
+				}
+			}(),
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "empty metric requested",
 			fields: fields{data: memStorageData{
 				model.NewMetricKey(model.MetricTypeCounter, "id1"): model.Metric{
 					ID:   "id1",
@@ -61,13 +93,10 @@ func Test_memStorage_Get(t *testing.T) {
 					Hash: "gauge1",
 				}}},
 			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
-			want: model.Metric{
-				ID:   "id1",
-				Type: model.MetricTypeCounter,
-				Hash: "counter1",
-			},
+			want: model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+				assert.Error(t, err)
+				return assert.Equal(t, err, ErrMetricNotFound)
 			},
 		},
 	}
@@ -95,6 +124,7 @@ func Test_memStorage_Set(t *testing.T) {
 		fields    fields
 		args      args
 		assertion assert.ErrorAssertionFunc
+		contains  func(assert.TestingT, memStorageData, model.Metric)
 	}{
 		{
 			name:   "empty storage",
@@ -110,6 +140,29 @@ func Test_memStorage_Set(t *testing.T) {
 			}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
+			},
+			contains: func(t assert.TestingT, data memStorageData, metric model.Metric) {
+				assert.Contains(t, data, metric.Key())
+				assert.Equal(t, metric, data[metric.Key()])
+			},
+		},
+		{
+			name:   "empty metric not added",
+			fields: fields{data: make(memStorageData)},
+			args: args{metric: func() model.Metric {
+				var value int64 = 5
+				return model.Metric{
+					ID:    "id3",
+					Type:  model.MetricTypeGauge,
+					Delta: &value,
+					Hash:  "gauge3",
+				}
+			}},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+			contains: func(t assert.TestingT, data memStorageData, metric model.Metric) {
+				assert.NotContains(t, data, metric.Key())
 			},
 		},
 		{
@@ -138,6 +191,10 @@ func Test_memStorage_Set(t *testing.T) {
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
 			},
+			contains: func(t assert.TestingT, data memStorageData, metric model.Metric) {
+				assert.Contains(t, data, metric.Key())
+				assert.Equal(t, metric, data[metric.Key()])
+			},
 		},
 		{
 			name: "metric replaced",
@@ -165,6 +222,10 @@ func Test_memStorage_Set(t *testing.T) {
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
 			},
+			contains: func(t assert.TestingT, data memStorageData, metric model.Metric) {
+				assert.Contains(t, data, metric.Key())
+				assert.Equal(t, metric, data[metric.Key()])
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -174,8 +235,7 @@ func Test_memStorage_Set(t *testing.T) {
 			}
 			metric := tt.args.metric()
 			tt.assertion(t, s.Set(metric))
-			assert.Contains(t, tt.fields.data, metric.Key())
-			assert.Equal(t, metric, tt.fields.data[metric.Key()])
+			tt.contains(t, tt.fields.data, metric)
 		})
 	}
 }

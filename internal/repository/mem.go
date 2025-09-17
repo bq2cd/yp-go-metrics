@@ -22,11 +22,17 @@ func (s *memStorage) Get(key model.MetricKey) (model.Metric, error) {
 	if !ok {
 		return metric, ErrMetricNotFound
 	}
+	if metric.Empty() {
+		return model.Metric{}, ErrMetricNotFound
+	}
 	return metric, nil
 }
 
 // Set stores a given metric to in-memory map.
 func (s *memStorage) Set(metric model.Metric) error {
+	if metric.Empty() {
+		return nil
+	}
 	s.data[metric.Key()] = metric
 	return nil
 }

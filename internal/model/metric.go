@@ -67,3 +67,33 @@ func NewGaugeMetric(mID string, value float64) Metric {
 func (m *Metric) Key() MetricKey {
 	return MetricKey{Type: m.Type, ID: m.ID}
 }
+
+// Empty returns true if either of the following is true:
+// - metric id is empty
+// - metric type is empty
+// - metric type is counter and delta is nil
+// - metric type is gauge and value is nil
+// - metric type is custom and both value and delta are nil
+func (m *Metric) Empty() bool {
+	if m.ID == "" {
+		return true
+	}
+	if m.Type == MetricType("") {
+		return true
+	}
+	switch m.Type {
+	case MetricTypeCounter:
+		if m.Delta == nil {
+			return true
+		}
+	case MetricTypeGauge:
+		if m.Value == nil {
+			return true
+		}
+	default:
+		if m.Delta == nil && m.Value == nil {
+			return true
+		}
+	}
+	return false
+}

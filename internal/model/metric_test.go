@@ -214,3 +214,93 @@ func TestNewMetricKey(t *testing.T) {
 		})
 	}
 }
+
+func TestMetric_Empty(t *testing.T) {
+	type fields struct {
+		ID    string
+		Type  MetricType
+		Delta *int64
+		Value *float64
+		Hash  MetricHash
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   bool
+	}{
+		// true.
+		{
+			name:   "all fields empty",
+			fields: fields{},
+			want:   true,
+		},
+		{
+			name:   "empty id",
+			fields: fields{Type: MetricTypeCounter},
+			want:   true,
+		},
+		{
+			name:   "empty type",
+			fields: fields{ID: "id1"},
+			want:   true,
+		},
+		{
+			name: "empty counter",
+			fields: func() fields {
+				var value = 1.1
+				return fields{ID: "id1", Type: MetricTypeCounter, Value: &value}
+			}(),
+			want: true,
+		},
+		{
+			name: "empty gauge",
+			fields: func() fields {
+				var value int64 = 10
+				return fields{ID: "id1", Type: MetricTypeGauge, Delta: &value}
+			}(),
+			want: true,
+		},
+		{
+			name:   "empty custom type",
+			fields: fields{ID: "id1", Type: MetricType("custom")},
+			want:   true,
+		},
+		// false
+		{
+			name: "normal counter",
+			fields: func() fields {
+				var value int64 = 10
+				return fields{ID: "id1", Type: MetricTypeCounter, Delta: &value}
+			}(),
+			want: false,
+		},
+		{
+			name: "normal gauge",
+			fields: func() fields {
+				var value = 9.2
+				return fields{ID: "id1", Type: MetricTypeGauge, Value: &value}
+			}(),
+			want: false,
+		},
+		{
+			name: "normal custom type",
+			fields: func() fields {
+				var value = 9.2
+				return fields{ID: "id1", Type: MetricType("custom"), Value: &value}
+			}(),
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Metric{
+				ID:    tt.fields.ID,
+				Type:  tt.fields.Type,
+				Delta: tt.fields.Delta,
+				Value: tt.fields.Value,
+				Hash:  tt.fields.Hash,
+			}
+			assert.Equal(t, tt.want, m.Empty())
+		})
+	}
+}

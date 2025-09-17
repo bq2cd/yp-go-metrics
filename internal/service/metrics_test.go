@@ -173,6 +173,33 @@ func Test_metricService_Store(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
+			name:   "empty counter metric",
+			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
+			args: args{metrics: []model.Metric{
+				func() model.Metric {
+					return model.Metric{ID: "id1", Type: model.MetricTypeCounter}
+				}(),
+			}},
+			want: want{metrics: []model.Metric{}},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "empty gauge metric",
+			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
+			args: args{metrics: []model.Metric{
+				func() model.Metric {
+					var value int64 = 5
+					return model.Metric{ID: "id1", Type: model.MetricTypeGauge, Delta: &value}
+				}(),
+			}},
+			want: want{metrics: []model.Metric{}},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
 			name:   "single metric",
 			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
 			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
@@ -185,6 +212,15 @@ func Test_metricService_Store(t *testing.T) {
 			name:   "multiple metrics",
 			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
 			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
+			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "multiple metrics, some empty",
+			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
+			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.Metric{}, model.Metric{ID: "id5", Type: model.MetricTypeCounter}, model.Metric{ID: "id6", Type: model.MetricTypeGauge}}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -229,6 +265,19 @@ func Test_metricService_Retrieve(t *testing.T) {
 		want      []model.Metric
 		assertion assert.ErrorAssertionFunc
 	}{
+		{
+			name: "missing metric",
+			fields: fields{storage: func() repository.Storage {
+				s := repository.NewMemStorage()
+				return s
+			}},
+			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1")}},
+			want: []model.Metric{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				assert.Error(t, err)
+				return assert.ErrorIs(t, err, repository.ErrMetricNotFound)
+			},
+		},
 		{
 			name: "single metric",
 			fields: fields{storage: func() repository.Storage {
