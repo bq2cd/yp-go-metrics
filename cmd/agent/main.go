@@ -33,7 +33,7 @@ func run(ctx context.Context, cfg config.Config) error {
 	collector := agent.NewDefaultCollector()
 	storer := agent.NewDefaultStorer(service.NewMetrics(repository.NewMemStorage()))
 
-	client := resty.New().SetBaseURL(cfg.UpstreamURL.String())
+	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
 	reporter := agent.NewDefaultReporter(ctx, client)
 
 	ag := agent.NewAgent(ctx, cfg, collector, storer, reporter)
