@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/go-resty/resty/v2"
 )
@@ -11,12 +13,13 @@ type Reporter interface {
 }
 
 type defaultReporter struct {
-	client *resty.Client
+	context context.Context
+	client  *resty.Client
 }
 
 // NewDefaultReporter creates an instance of the default reporter.
-func NewDefaultReporter(client *resty.Client) *defaultReporter {
-	return &defaultReporter{client: client}
+func NewDefaultReporter(ctx context.Context, client *resty.Client) *defaultReporter {
+	return &defaultReporter{context: ctx, client: client}
 }
 
 // Report sends incoming metrics to an upstream.

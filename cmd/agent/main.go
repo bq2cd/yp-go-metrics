@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -23,11 +24,17 @@ const (
 )
 
 func run(ctx context.Context, cfg config.Config) error {
+	if cfg.PollInterval >= cfg.ReportInterval {
+		return fmt.Errorf("poll interval must be less than report interval (got %v >= %v)", cfg.PollInterval, cfg.ReportInterval)
+	}
+
 	log.Printf("sending metrics to %s every %v (poll interval %v)", cfg.UpstreamURL.String(), cfg.ReportInterval, cfg.PollInterval)
 
 	collector := agent.NewDefaultCollector()
 	storer := agent.NewDefaultStorer(service.NewMetrics(repository.NewMemStorage()))
-	reporter := agent.NewDefaultReporter(resty.New().SetBaseURL(cfg.UpstreamURL.String()))
+
+	client := resty.New().SetBaseURL(cfg.UpstreamURL.String())
+	reporter := agent.NewDefaultReporter(ctx, client)
 
 	ag := agent.NewAgent(ctx, cfg, collector, storer, reporter)
 

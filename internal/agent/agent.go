@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 )
@@ -21,5 +24,51 @@ func NewAgent(ctx context.Context, cfg config.Config, collector Collector, store
 
 // Run launches main loop of the agent worker.
 func (a *agentWorker) Run() error {
-	return nil
+	var (
+		errRun error
+		wg     sync.WaitGroup
+	)
+
+	doPoll := func() {
+		metrics, err := a.collector.Collect()
+		errRun = errors.Join(errRun, err, a.storer.Store(metrics))
+	}
+
+	pollTicker := time.NewTicker(a.config.PollInterval)
+	reportTicker := time.NewTicker(a.config.ReportInterval)
+
+	errCh := make(chan error, 2)
+
+	// Perform first poll immediately rather than waiting for
+	// the poll interval to pass.
+	doPoll()
+
+loop:
+	for {
+		select {
+		case <-pollTicker.C:
+			doPoll()
+		case <-reportTicker.C:
+			metrics, err := a.storer.Retrieve()
+			errRun = errors.Join(errRun, err)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				errCh <- a.reporter.Report(metrics)
+			}()
+		case err := <-errCh:
+			errRun = errors.Join(errRun, err)
+		case <-a.context.Done():
+			go func() {
+				wg.Wait()
+				close(errCh)
+			}()
+			for err := range errCh {
+				errRun = errors.Join(errRun, err)
+			}
+			break loop
+		}
+	}
+
+	return errRun
 }

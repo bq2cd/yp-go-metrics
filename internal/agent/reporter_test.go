@@ -1,9 +1,11 @@
 package agent
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/go-resty/resty/v2"
@@ -15,11 +17,15 @@ import (
 type mockReporter struct {
 	mock.Mock
 	metrics []model.Metric
+	timeout time.Duration
 }
 
 func (m *mockReporter) Report(metrics []model.Metric) error {
 	m.Called(metrics)
 	m.metrics = metrics
+	if m.timeout > 0 {
+		time.Sleep(m.timeout)
+	}
 	return nil
 }
 
@@ -159,7 +165,8 @@ func Test_defaultReporter_Report(t *testing.T) {
 
 func TestNewDefaultReporter(t *testing.T) {
 	type args struct {
-		client *resty.Client
+		context context.Context
+		client  *resty.Client
 	}
 	tests := []struct {
 		name      string
@@ -168,15 +175,16 @@ func TestNewDefaultReporter(t *testing.T) {
 	}{
 		{
 			name: "default initialisation",
-			args: args{client: resty.New()},
+			args: args{context: context.Background(), client: resty.New()},
 			assertion: func(t assert.TestingT, want args, got *defaultReporter) {
+				assert.Equal(t, want.context, got.context)
 				assert.Equal(t, want.client, got.client)
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewDefaultReporter(tt.args.client))
+			tt.assertion(t, tt.args, NewDefaultReporter(tt.args.context, tt.args.client))
 		})
 	}
 }
