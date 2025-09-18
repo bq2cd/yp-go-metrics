@@ -4,6 +4,9 @@ import (
 	"maps"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/agent/source"
+	"github.com/bq2cd/yp-go-metrics/internal/agent/source/extra"
+	"github.com/bq2cd/yp-go-metrics/internal/agent/source/memstats"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -20,21 +23,26 @@ func (m *mockCollector) Collect() ([]model.Metric, error) {
 }
 
 func Test_defaultCollector_Collect(t *testing.T) {
+	type args struct {
+		collector Collector
+	}
 	type want struct {
 		metricIDToType map[string]model.MetricType
 	}
 	tests := []struct {
 		name      string
+		args      args
 		want      want
 		assertion func(assert.TestingT, want, []model.Metric)
 	}{
 		{
 			name: "default metrics",
+			args: args{collector: &defaultCollector{sources: []source.Source{memstats.New(), extra.New()}}},
 			want: want{
 				metricIDToType: func() map[string]model.MetricType {
-					m := make(map[string]model.MetricType, len(defaultRuntimeMetrics)+len(defaultExtraMetrics))
-					maps.Copy(m, defaultRuntimeMetrics)
-					maps.Copy(m, defaultExtraMetrics)
+					m := make(map[string]model.MetricType)
+					maps.Copy(m, memstats.GetSupportedMetrics())
+					maps.Copy(m, extra.GetSupportedMetrics())
 					return m
 				}(),
 			},
@@ -54,8 +62,7 @@ func Test_defaultCollector_Collect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &defaultCollector{}
-			got, err := c.Collect()
+			got, err := tt.args.collector.Collect()
 			assert.NoError(t, err)
 			tt.assertion(t, tt.want, got)
 		})
@@ -69,7 +76,7 @@ func TestNewDefaultCollector(t *testing.T) {
 	}{
 		{
 			name: "default initialisation",
-			want: &defaultCollector{},
+			want: &defaultCollector{sources: source.DefaultSources()},
 		},
 	}
 	for _, tt := range tests {
