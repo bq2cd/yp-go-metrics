@@ -21,17 +21,27 @@ var (
 func NewMetricFromURLPath(path string) (model.Metric, error) {
 	var metric model.Metric
 
+	// strings.Split will produce a slice with at least a single element,
+	// even if the initial string is empty.
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 
-	if len(parts) < 2 {
-		return metric, fmt.Errorf("expected at least 2 path parts: %w", ErrInvalidURLPath)
+	// validate operation
+	operation := parts[0]
+
+	switch operation {
+	case "update":
+		// ok
+	default:
+		return metric, fmt.Errorf("invalid operation: %w", ErrInvalidURLPath)
 	}
 
-	if parts[0] != "update" {
-		return metric, fmt.Errorf("expected update operation: %w", ErrInvalidURLPath)
+	// validate metric type
+	if len(parts) < 2 {
+		return metric, fmt.Errorf("missing metric type: %w", ErrInvalidURLPath)
 	}
 
 	mType := model.MetricType(parts[1])
+
 	switch mType {
 	case model.MetricTypeCounter:
 	case model.MetricTypeGauge:
@@ -39,6 +49,7 @@ func NewMetricFromURLPath(path string) (model.Metric, error) {
 		return metric, fmt.Errorf("invalid metric type: %w", ErrInvalidURLPath)
 	}
 
+	// validate metric ID
 	if len(parts) < 3 {
 		return metric, ErrEmptyMetricID
 	}
@@ -49,11 +60,17 @@ func NewMetricFromURLPath(path string) (model.Metric, error) {
 		return metric, ErrEmptyMetricID
 	}
 
-	if len(parts) != 4 {
-		return metric, fmt.Errorf("expected exactly 4 path parts: %w", ErrInvalidURLPath)
+	// validate metric value
+	if len(parts) < 4 {
+		return metric, fmt.Errorf("missing metric value: %w", ErrInvalidURLPath)
 	}
 
 	mValue := strings.TrimSpace(parts[3])
+
+	// fail if path contains extra elements
+	if len(parts) > 4 {
+		return metric, fmt.Errorf("extra path elements: %w", ErrInvalidURLPath)
+	}
 
 	switch mType {
 	case model.MetricTypeCounter:
@@ -69,7 +86,8 @@ func NewMetricFromURLPath(path string) (model.Metric, error) {
 		}
 		metric = model.NewGaugeMetric(mID, parsed)
 	default:
-		return metric, fmt.Errorf("invalid metric type: %w", ErrInvalidURLPath)
+		// we already check for invalid metric type above, so this
+		// branch is unreachable
 	}
 
 	return metric, nil

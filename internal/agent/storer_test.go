@@ -56,6 +56,21 @@ func Test_defaultStorer_Store(t *testing.T) {
 		assertion func(assert.TestingT, repository.Storage, want, error)
 	}{
 		{
+			name:   "no metrics",
+			fields: fields{storage: repository.NewMemStorage()},
+			init: func(s repository.Storage) Storer {
+				return &defaultStorer{storage: service.NewMetrics(s)}
+			},
+			args: args{metrics: []model.Metric{}},
+			want: want{metrics: []model.Metric{}},
+			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
+				assert.NoError(t, err)
+				metrics, err := s.GetAll()
+				assert.NoError(t, err)
+				assert.ElementsMatch(t, want.metrics, metrics)
+			},
+		},
+		{
 			name:   "single metric",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {

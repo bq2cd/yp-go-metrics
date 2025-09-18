@@ -25,6 +25,12 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			wantErr: ErrInvalidURLPath,
 		},
 		{
+			name:    "no operation",
+			args:    args{path: "/"},
+			want:    func() model.Metric { return model.Metric{} },
+			wantErr: ErrInvalidURLPath,
+		},
+		{
 			name:    "wrong operation",
 			args:    args{path: "/badOperation"},
 			want:    func() model.Metric { return model.Metric{} },
