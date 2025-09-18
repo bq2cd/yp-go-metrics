@@ -74,18 +74,25 @@ func Test_metricService_storeSingle(t *testing.T) {
 		metric model.Metric
 	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		want      *want
-		assertion assert.ErrorAssertionFunc
+		name               string
+		fields             fields
+		args               args
+		want               want
+		assertion          assert.ErrorAssertionFunc
+		assertStoredMetric func(assert.TestingT, repository.Storage, want)
 	}{
 		{
 			name:   "empty storage",
 			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
 			args:   args{metric: model.NewCounterMetric("id1", 10)},
+			want:   want{metric: model.NewCounterMetric("id1", 10)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
+			},
+			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
+				got, err := s.Get(want.metric.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, want.metric, got)
 			},
 		},
 		{
@@ -97,8 +104,14 @@ func Test_metricService_storeSingle(t *testing.T) {
 				return storage
 			}},
 			args: args{metric: model.NewCounterMetric("id2", 10)},
+			want: want{metric: model.NewCounterMetric("id2", 10)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
+			},
+			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
+				got, err := s.Get(want.metric.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, want.metric, got)
 			},
 		},
 		{
@@ -110,9 +123,14 @@ func Test_metricService_storeSingle(t *testing.T) {
 				return storage
 			}},
 			args: args{metric: model.NewCounterMetric("id1", 10)},
-			want: &want{metric: model.NewCounterMetric("id1", 15)},
+			want: want{metric: model.NewCounterMetric("id1", 15)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
+			},
+			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
+				got, err := s.Get(want.metric.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, want.metric, got)
 			},
 		},
 		{
@@ -124,8 +142,14 @@ func Test_metricService_storeSingle(t *testing.T) {
 				return storage
 			}},
 			args: args{metric: model.NewGaugeMetric("id2", 5.1)},
+			want: want{metric: model.NewGaugeMetric("id2", 5.1)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
+			},
+			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
+				got, err := s.Get(want.metric.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, want.metric, got)
 			},
 		},
 		{
@@ -137,8 +161,33 @@ func Test_metricService_storeSingle(t *testing.T) {
 				return storage
 			}},
 			args: args{metric: model.NewGaugeMetric("id1", -1.5)},
+			want: want{metric: model.NewGaugeMetric("id1", -1.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
+			},
+			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
+				got, err := s.Get(want.metric.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, want.metric, got)
+			},
+		},
+		{
+			name: "faulty storage",
+			fields: fields{storage: func() repository.Storage {
+				s := &faultyStorage{realStorage: repository.NewMemStorage()}
+				err := s.realStorage.Set(model.NewCounterMetric(faultyStorageErrorTrigger, 10))
+				require.NoError(t, err)
+				return s
+			}},
+			args: args{metric: model.NewCounterMetric(faultyStorageErrorTrigger, 5)},
+			want: want{metric: model.NewCounterMetric(faultyStorageErrorTrigger, 10)},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Errorf(t, err, "faulty storage get error")
+			},
+			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
+				got, err := s.(*faultyStorage).realStorage.Get(want.metric.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, want.metric, got)
 			},
 		},
 	}
@@ -148,13 +197,7 @@ func Test_metricService_storeSingle(t *testing.T) {
 				storage: tt.fields.storage(),
 			}
 			tt.assertion(t, s.storeSingle(tt.args.metric))
-			got, err := s.storage.Get(tt.args.metric.Key())
-			require.NoError(t, err)
-			if tt.want != nil {
-				assert.Equal(t, tt.want.metric, got)
-			} else {
-				assert.Equal(t, tt.args.metric, got)
-			}
+			tt.assertStoredMetric(t, s.storage, tt.want)
 		})
 	}
 }
@@ -324,10 +367,10 @@ func Test_metricService_Retrieve(t *testing.T) {
 				}
 				return s
 			}},
-			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2")}},
+			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2"), model.NewMetricKey(model.MetricTypeCounter, faultyStorageErrorTrigger)}},
 			want: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+				return assert.Errorf(t, err, "faulty storage get error")
 			},
 		},
 	}
@@ -338,7 +381,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 			}
 			got, err := s.Retrieve(tt.args.keys[0], tt.args.keys[1:]...)
 			tt.assertion(t, err)
-			assert.Equal(t, tt.want, got)
+			assert.ElementsMatch(t, tt.want, got)
 		})
 	}
 }

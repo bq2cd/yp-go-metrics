@@ -269,6 +269,20 @@ func Test_memStorage_GetAll(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 		},
+		{
+			name: "storage with empty metrics",
+			fields: fields{data: memStorageData{
+				model.NewMetricKey(model.MetricTypeCounter, "id1"):   model.NewCounterMetric("id1", 10),
+				model.NewMetricKey(model.MetricTypeGauge, "id1"):     model.NewGaugeMetric("id2", 1.5),
+				model.NewMetricKey(model.MetricTypeCounter, ""):      model.Metric{Type: model.MetricTypeCounter},
+				model.NewMetricKey("", ""):                           model.Metric{},
+				model.NewMetricKey(model.MetricTypeGauge, "emptyMe"): model.Metric{ID: "emptyMe", Type: model.MetricTypeGauge},
+			}},
+			want: []model.Metric{model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id2", 1.5)},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

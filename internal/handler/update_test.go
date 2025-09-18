@@ -7,11 +7,26 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type faultyMetricService struct{}
+
+func (s *faultyMetricService) Store(metric model.Metric, metrics ...model.Metric) error {
+	return fmt.Errorf("faulty storage set error")
+}
+
+func (s *faultyMetricService) Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error) {
+	return nil, fmt.Errorf("faulty storage get error")
+}
+
+func (s *faultyMetricService) RetrieveAll() ([]model.Metric, error) {
+	return nil, fmt.Errorf("faulty storage internal error")
+}
 
 func Test_updateHandler_ServeHTTP(t *testing.T) {
 	type fields struct {
@@ -107,6 +122,13 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/ /456", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
+		// Internal error
+		{
+			name:   "POST %s INTERNAL_ERROR",
+			fields: fields{metrics: &faultyMetricService{}},
+			args:   args{method: http.MethodPost, url: "/update/counter/id1/123", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusInternalServerError, body: "failed to update metric\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// OK
 		{

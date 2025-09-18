@@ -183,6 +183,22 @@ func TestNewMetricFromURLPath(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "update gauge type with incorrect value",
+			args: args{path: "/update/gauge/myGauge/-4.56.78"},
+			want: func() model.Metric {
+				return model.Metric{}
+			},
+			wantErr: ErrInvalidURLPath,
+		},
+		{
+			name: "update unknown type with correct value",
+			args: args{path: "/update/unknownType/myID/-7.89"},
+			want: func() model.Metric {
+				return model.Metric{}
+			},
+			wantErr: ErrInvalidURLPath,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
