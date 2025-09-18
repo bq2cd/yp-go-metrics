@@ -1,0 +1,26 @@
+package source
+
+import (
+	"testing"
+
+	"github.com/bq2cd/yp-go-metrics/internal/agent/source/extra"
+	"github.com/bq2cd/yp-go-metrics/internal/agent/source/memstats"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestDefaultSources(t *testing.T) {
+	tests := []struct {
+		name string
+		want []Source
+	}{
+		{
+			name: "default sources",
+			want: []Source{memstats.New(), extra.New()},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.ElementsMatch(t, tt.want, DefaultSources())
+		})
+	}
+}
