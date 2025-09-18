@@ -1,6 +1,7 @@
 package extra
 
 import (
+	"math/rand/v2"
 	"sync"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -34,5 +35,11 @@ func New() *source {
 // into internal representation.
 func (s *source) ReadMetrics() ([]model.Metric, error) {
 	s.pollCounter++
-	return nil, nil
+
+	metrics := []model.Metric{
+		model.NewCounterMetric("PollCount", int64(s.pollCounter)),
+		model.NewGaugeMetric("RandomValue", rand.Float64()),
+	}
+
+	return metrics, nil
 }
