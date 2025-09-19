@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 // Router implements HTTP routing for the server part.
@@ -13,16 +15,23 @@ type router struct {
 }
 
 // NewRouter instantiates a router with necessary dependencies.
-func NewRouter(metrics service.Metrics, mux *http.ServeMux) *router {
-	if mux == nil {
-		mux = http.NewServeMux()
-
-		mux.Handle("/", &defaultHandler{})
-		mux.Handle("/update/", &updateHandler{metrics: metrics})
+func NewRouter(metrics service.Metrics, mux http.Handler) *router {
+	if mux != nil {
+		return &router{
+			mux:     mux,
+			metrics: metrics,
+		}
 	}
 
+	rt := chi.NewRouter()
+
+	rt.Use(middleware.Logger)
+
+	rt.Handle("/", &defaultHandler{})
+	rt.Method(http.MethodPost, "/update/*", &updateHandler{metrics: metrics})
+
 	return &router{
-		mux:     mux,
+		mux:     rt,
 		metrics: metrics,
 	}
 }

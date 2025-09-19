@@ -9,6 +9,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -17,17 +18,62 @@ import (
 func TestNewRouter(t *testing.T) {
 	type args struct {
 		metrics service.Metrics
-		mux     *http.ServeMux
+		mux     http.Handler
+	}
+	type want struct {
+		walkFn func(map[string]any) chi.WalkFunc
 	}
 	tests := []struct {
-		name string
-		args args
-		want func(*router) bool
+		name      string
+		args      args
+		want      want
+		assertion func(*router, want) bool
 	}{
 		{
 			name: "new router with mux=nil",
 			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: nil},
-			want: func(rt *router) bool {
+			want: want{
+				walkFn: func(seen map[string]any) chi.WalkFunc {
+					walk := func(method string, route string, hh http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+						seen[fmt.Sprintf("%s %s", method, route)] = true
+						switch route {
+						case "/":
+							h, ok := hh.(*defaultHandler)
+							if !ok {
+								return fmt.Errorf("invalid handler for /: %+v, %T", h, hh)
+							}
+							return nil
+						case "/update/*":
+							if method != http.MethodPost {
+								return fmt.Errorf("invalid method for /update")
+							}
+							h, ok := hh.(*updateHandler)
+							if !ok {
+								return fmt.Errorf("invalid handler for POST /update: %+v %T", h, hh)
+							}
+							return nil
+						}
+						return fmt.Errorf("unknown route: %v %v", method, route)
+					}
+					return walk
+				},
+			},
+			assertion: func(rt *router, want want) bool {
+				assert.NotNil(t, rt.mux)
+				assert.Implements(t, (*chi.Router)(nil), rt.mux)
+				assert.NotNil(t, rt.metrics)
+				assert.Implements(t, (*service.Metrics)(nil), rt.metrics)
+				seen := make(map[string]any)
+				err := chi.Walk(rt.mux.(chi.Router), want.walkFn(seen))
+				assert.NoError(t, err)
+				assert.Contains(t, seen, "POST /update/*")
+				return true
+			},
+		},
+		{
+			name: "new router with mux=NewServeMux()",
+			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: http.NewServeMux()},
+			assertion: func(rt *router, want want) bool {
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*http.Handler)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
@@ -36,9 +82,9 @@ func TestNewRouter(t *testing.T) {
 			},
 		},
 		{
-			name: "new router with mux=NewServeMux()",
-			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: http.NewServeMux()},
-			want: func(rt *router) bool {
+			name: "new router with mux=chi.NewRouter()",
+			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: chi.NewRouter()},
+			assertion: func(rt *router, want want) bool {
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*http.Handler)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
@@ -49,7 +95,7 @@ func TestNewRouter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.True(t, tt.want(NewRouter(tt.args.metrics, tt.args.mux)))
+			assert.True(t, tt.assertion(NewRouter(tt.args.metrics, tt.args.mux), tt.want))
 		})
 	}
 }
@@ -100,14 +146,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf(tt.name, tt.args.method, tt.args.url), func(t *testing.T) {
-			mux := new(MockServeMux)
-
-			mux.On("ServeHTTP", mock.Anything, mock.Anything).Return()
-
-			rt := &router{
-				mux:     mux,
-				metrics: service.NewMetrics(repository.NewMemStorage()),
-			}
+			rt := NewRouter(service.NewMetrics(repository.NewMemStorage()), nil)
 			ts := httptest.NewServer(rt)
 			defer ts.Close()
 
@@ -116,13 +155,12 @@ func Test_router_ServeHTTP(t *testing.T) {
 
 			resp, err := ts.Client().Do(req)
 			require.NoError(t, err)
-			_, _ = io.Copy(io.Discard, resp.Body)
-			_ = resp.Body.Close()
+			_, err = io.Copy(io.Discard, resp.Body)
+			require.NoError(t, err)
+			err = resp.Body.Close()
+			require.NoError(t, err)
 
-			mux.AssertExpectations(t)
-			mux.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
-			assert.Equal(t, tt.args.url, mux.urlPath)
+			assert.Equal(t, tt.args.url, resp.Request.URL.Path)
 		})
 	}
 
