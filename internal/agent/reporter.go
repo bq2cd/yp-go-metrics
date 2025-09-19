@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
+	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/go-resty/resty/v2"
 )
@@ -26,14 +26,11 @@ func NewDefaultReporter(ctx context.Context, client *resty.Client) *defaultRepor
 }
 
 func (r *defaultReporter) reportSingle(metric model.Metric) error {
-	var mValue string
-	switch metric.Type {
-	case model.MetricTypeCounter:
-		mValue = strconv.FormatInt(*metric.Delta, 10)
-	default:
-		mValue = strconv.FormatFloat(*metric.Value, 'g', 10, 64)
+	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, metric)
+	urlPath, err := metricOp.ToURLPath()
+	if err != nil {
+		return fmt.Errorf("cannot convert metric to url path: %w", err)
 	}
-	urlPath := fmt.Sprintf("/update/%s/%s/%s", string(metric.Type), metric.ID, mValue)
 
 	req := r.client.R().SetContext(r.context)
 

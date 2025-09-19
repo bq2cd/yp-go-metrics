@@ -59,18 +59,6 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
-			args:   args{method: http.MethodPost, url: "/update/badType", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
-		},
-		{
-			name:   "POST %s BAD_REQUEST",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
-			args:   args{method: http.MethodPost, url: "/update/badType/", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
-		},
-		{
-			name:   "POST %s BAD_REQUEST",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
 			args:   args{method: http.MethodPost, url: "/update/badType/someID", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
 		},
@@ -92,7 +80,31 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 			args:   args{method: http.MethodPost, url: "/update/counter/someID/123/bla", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
 		},
+		{
+			name:   "POST %s BAD_REQUEST",
+			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			args:   args{method: http.MethodPost, url: "/update/counter//456", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
+		{
+			name:   "POST %s BAD_REQUEST",
+			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			args:   args{method: http.MethodPost, url: "/update/counter//456/", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
 		// Not Found
+		{
+			name:   "POST %s NOT_FOUND",
+			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			args:   args{method: http.MethodPost, url: "/update/badType", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
+		{
+			name:   "POST %s NOT_FOUND",
+			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			args:   args{method: http.MethodPost, url: "/update/badType/", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
 		{
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
@@ -103,18 +115,6 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
-		},
-		{
-			name:   "POST %s NOT_FOUND",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
-			args:   args{method: http.MethodPost, url: "/update/counter//456", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
-		},
-		{
-			name:   "POST %s NOT_FOUND",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
-			args:   args{method: http.MethodPost, url: "/update/counter//456/", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{

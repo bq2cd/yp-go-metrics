@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/go-resty/resty/v2"
 	"github.com/jarcoal/httpmock"
@@ -140,7 +140,7 @@ func Test_defaultReporter_Report(t *testing.T) {
 				responder: func(t assert.TestingT) httpmock.Responder {
 					return func(r *http.Request) (*http.Response, error) {
 						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						m, err := handler.NewMetricFromURLPath(r.URL.Path)
+						m, err := urlpath.NewOperationFromURLPath(r.URL.Path).ToMetric()
 						assert.NoError(t, err)
 						if m.Type == model.MetricTypeGauge && m.ID == "id1" {
 							return httpmock.NewStringResponse(http.StatusInternalServerError, ""), nil
