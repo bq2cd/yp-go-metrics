@@ -27,8 +27,11 @@ func NewRouter(metrics service.Metrics, mux http.Handler) *router {
 
 	rt.Use(middleware.Logger)
 
-	rt.Handle("/", &defaultHandler{})
+	rt.Handle("/*", &defaultHandler{})
+
+	rt.Method(http.MethodGet, "/", &readHandler{metrics: metrics})
 	rt.Method(http.MethodPost, "/update/*", &updateHandler{metrics: metrics})
+	rt.Method(http.MethodGet, "/value/*", &valueHandler{metrics: metrics})
 
 	return &router{
 		mux:     rt,

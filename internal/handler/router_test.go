@@ -5,8 +5,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -21,7 +23,8 @@ func TestNewRouter(t *testing.T) {
 		mux     http.Handler
 	}
 	type want struct {
-		walkFn func(map[string]any) chi.WalkFunc
+		routes map[string]string
+		walkFn func(map[string]string, map[string]string) chi.WalkFunc
 	}
 	tests := []struct {
 		name      string
@@ -33,27 +36,19 @@ func TestNewRouter(t *testing.T) {
 			name: "new router with mux=nil",
 			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: nil},
 			want: want{
-				walkFn: func(seen map[string]any) chi.WalkFunc {
+				routes: map[string]string{
+					"/":         "GET",
+					"/update/*": "POST",
+					"/value/*":  "GET",
+				},
+				walkFn: func(want map[string]string, seen map[string]string) chi.WalkFunc {
 					walk := func(method string, route string, hh http.Handler, middlewares ...func(http.Handler) http.Handler) error {
-						seen[fmt.Sprintf("%s %s", method, route)] = true
-						switch route {
-						case "/":
-							h, ok := hh.(*defaultHandler)
-							if !ok {
-								return fmt.Errorf("invalid handler for /: %+v, %T", h, hh)
+						if v, ok := want[route]; ok {
+							if v == method {
+								seen[route] = method
 							}
-							return nil
-						case "/update/*":
-							if method != http.MethodPost {
-								return fmt.Errorf("invalid method for /update")
-							}
-							h, ok := hh.(*updateHandler)
-							if !ok {
-								return fmt.Errorf("invalid handler for POST /update: %+v %T", h, hh)
-							}
-							return nil
 						}
-						return fmt.Errorf("unknown route: %v %v", method, route)
+						return nil
 					}
 					return walk
 				},
@@ -63,10 +58,10 @@ func TestNewRouter(t *testing.T) {
 				assert.Implements(t, (*chi.Router)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
 				assert.Implements(t, (*service.Metrics)(nil), rt.metrics)
-				seen := make(map[string]any)
-				err := chi.Walk(rt.mux.(chi.Router), want.walkFn(seen))
+				seen := make(map[string]string)
+				err := chi.Walk(rt.mux.(chi.Router), want.walkFn(want.routes, seen))
 				assert.NoError(t, err)
-				assert.Contains(t, seen, "POST /update/*")
+				assert.Equal(t, want.routes, seen)
 				return true
 			},
 		},
@@ -112,41 +107,141 @@ func (m *MockServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func Test_router_ServeHTTP(t *testing.T) {
 	type args struct {
-		method string
-		url    string
+		method  string
+		url     string
+		metrics []model.Metric
+	}
+	type want struct {
+		code int
+		body string
 	}
 	tests := []struct {
-		name string
-		args args
+		args      args
+		want      want
+		assertion func(assert.TestingT, want, string)
 	}{
 		{
-			name: "%s %s",
-			args: args{method: http.MethodGet, url: "/"},
+			args: args{
+				method: http.MethodGet,
+				url:    "/",
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", 123),
+					model.NewGaugeMetric("id2", -1.23),
+					model.NewGaugeMetric("id3", 0.01),
+				},
+			},
+			want: want{code: http.StatusOK, body: "id1 123\nid2 -1.23\nid3 0.01\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.ElementsMatch(t, strings.Split(want.body, "\n"), strings.Split(body, "\n"))
+			},
 		},
 		{
-			name: "%s %s",
 			args: args{method: http.MethodGet, url: "/bla"},
+			want: want{code: http.StatusMethodNotAllowed, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
 		},
 		{
-			name: "%s %s",
 			args: args{method: http.MethodGet, url: "/update"},
+			want: want{code: http.StatusMethodNotAllowed, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
 		},
 		{
-			name: "%s %s",
+			args: args{method: http.MethodGet, url: "/value"},
+			want: want{code: http.StatusMethodNotAllowed, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
 			args: args{method: http.MethodPost, url: "/update/"},
+			want: want{code: http.StatusBadRequest, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
 		},
 		{
-			name: "%s %s",
 			args: args{method: http.MethodPost, url: "/update/counter"},
+			want: want{code: http.StatusNotFound, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
 		},
 		{
-			name: "%s %s",
 			args: args{method: http.MethodPost, url: "/update/counter/id1/123"},
+			want: want{code: http.StatusOK, body: ""},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{method: http.MethodPost, url: "/update/counter/id1/123/none"},
+			want: want{code: http.StatusBadRequest, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{method: http.MethodGet, url: "/value/counter"},
+			want: want{code: http.StatusNotFound, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{method: http.MethodGet, url: "/value/counter/"},
+			want: want{code: http.StatusNotFound, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{method: http.MethodGet, url: "/value/counter/id1"},
+			want: want{code: http.StatusNotFound, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{
+				method:  http.MethodGet,
+				url:     "/value/counter/id1",
+				metrics: []model.Metric{model.NewCounterMetric("id1", 456)},
+			},
+			want: want{code: http.StatusOK, body: "456"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{
+				method:  http.MethodGet,
+				url:     "/value/gauge/id1",
+				metrics: []model.Metric{model.NewGaugeMetric("id1", -4.56)},
+			},
+			want: want{code: http.StatusOK, body: "-4.56"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{method: http.MethodGet, url: "/value/counter/id1/123"},
+			want: want{code: http.StatusBadRequest, body: "\n"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
 		},
 	}
 	for _, tt := range tests {
-		t.Run(fmt.Sprintf(tt.name, tt.args.method, tt.args.url), func(t *testing.T) {
-			rt := NewRouter(service.NewMetrics(repository.NewMemStorage()), nil)
+		t.Run(fmt.Sprintf("%s %s %d", tt.args.method, tt.args.url, tt.want.code), func(t *testing.T) {
+			stor := repository.NewMemStorage()
+			for _, m := range tt.args.metrics {
+				require.NoError(t, stor.Set(m))
+			}
+			rt := NewRouter(service.NewMetrics(stor), nil)
 			ts := httptest.NewServer(rt)
 			defer ts.Close()
 
@@ -155,12 +250,14 @@ func Test_router_ServeHTTP(t *testing.T) {
 
 			resp, err := ts.Client().Do(req)
 			require.NoError(t, err)
-			_, err = io.Copy(io.Discard, resp.Body)
+			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			err = resp.Body.Close()
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.args.url, resp.Request.URL.Path)
+			assert.Equal(t, tt.want.code, resp.StatusCode)
+			tt.assertion(t, tt.want, string(body))
 		})
 	}
 
