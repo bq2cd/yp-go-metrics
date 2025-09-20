@@ -21,7 +21,7 @@ const (
 	defaultReportIntervalSec = 10
 )
 
-func run(ctx context.Context, cfg config.Config) error {
+func runAgent(ctx context.Context, cfg config.Config) error {
 	if cfg.PollInterval >= cfg.ReportInterval {
 		return fmt.Errorf("poll interval must be less than report interval (got %v >= %v)", cfg.PollInterval, cfg.ReportInterval)
 	}
@@ -38,13 +38,15 @@ func run(ctx context.Context, cfg config.Config) error {
 	return ag.Run()
 }
 
-func main() {
+func run(args []string) error {
+	_ = args
+
 	upstreamURL, err := url.Parse(defaultUpstreamURL)
 	if err != nil {
 		log.Fatalf("failed to parse upstream url: %v", err)
 	}
 
-	config := config.Config{
+	cfg := config.Config{
 		UpstreamURL:    *upstreamURL,
 		PollInterval:   defaultPollIntervalSec * time.Second,
 		ReportInterval: defaultReportIntervalSec * time.Second,
@@ -53,9 +55,14 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	err = run(ctx, config)
+	err = runAgent(ctx, cfg)
 	<-ctx.Done()
 
+	return err
+}
+
+func main() {
+	err := run(os.Args[1:])
 	if err != nil {
 		log.Fatalf("failed to start agent: %v", err)
 	}

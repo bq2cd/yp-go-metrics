@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
@@ -12,7 +13,7 @@ import (
 
 const defaultAddress = ":8080"
 
-func run(config server.Config) error {
+func runServer(config server.Config) error {
 	storage := repository.NewMemStorage()
 	svc := service.NewMetrics(storage)
 	router := handler.NewRouter(svc, nil)
@@ -22,10 +23,15 @@ func run(config server.Config) error {
 	return http.ListenAndServe(config.ListenAddress, router)
 }
 
-func main() {
+func run(args []string) error {
+	_ = args
 	config := server.Config{ListenAddress: defaultAddress}
 
-	err := run(config)
+	return runServer(config)
+}
+
+func main() {
+	err := run(os.Args[1:])
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
