@@ -47,6 +47,31 @@ func Test_defaultReporter_Report(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
+			name: "invalid metric",
+			fields: fields{
+				client: resty.New().SetBaseURL("http://localhost:1234"),
+			},
+			args: args{
+				method:    http.MethodPost,
+				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
+				responder: func(t assert.TestingT) httpmock.Responder {
+					return func(r *http.Request) (*http.Response, error) {
+						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
+						return httpmock.NewStringResponse(http.StatusOK, ""), nil
+					}
+				},
+				metrics: []model.Metric{{Type: model.MetricTypeCounter, ID: "id1"}},
+			},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				calls := httpmock.GetCallCountInfo()
+				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
+				for _, key := range keys {
+					assert.NotContains(t, calls, key)
+				}
+				return assert.ErrorIs(t, err, urlpath.ErrMissingMetricValue)
+			},
+		},
+		{
 			name: "send single counter",
 			fields: fields{
 				client: resty.New().SetBaseURL("http://localhost:1234"),

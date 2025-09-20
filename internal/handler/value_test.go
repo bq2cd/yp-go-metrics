@@ -35,6 +35,22 @@ func Test_valueHandler_ServeHTTP(t *testing.T) {
 		args   args
 		want   want
 	}{
+		// Internal Error
+		{
+			name:   "GET %s INTERNAL_ERROR",
+			fields: fields{metrics: &faultyMetricService{}},
+			args:   args{method: http.MethodGet, url: "/value/counter/id1", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusInternalServerError, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
+		{
+			name: "GET %s INTERNAL_ERROR",
+			fields: fields{metrics: &faultyMetricService{
+				metrics:                       []model.Metric{model.NewGaugeMetric("id1", 1.23), model.NewGaugeMetric("id1", -1.23)},
+				returnMultipleInsteadOfSingle: true,
+			}},
+			args: args{method: http.MethodGet, url: "/value/gauge/id1", contentType: "text/plain", body: http.NoBody},
+			want: want{code: http.StatusInternalServerError, body: "\n", contentType: "text/plain; charset=utf-8"},
+		},
 		// Not Found
 		{
 			name:   "GET %s NOT_FOUND",

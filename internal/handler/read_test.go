@@ -37,6 +37,16 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		want      want
 		assertion func(assert.TestingT, want, string)
 	}{
+		// Internal Error
+		{
+			name:   "GET %s INTERNAL_ERROR",
+			fields: fields{metrics: &faultyMetricService{}},
+			args:   args{method: http.MethodGet, url: "/", contentType: "text/plain", body: http.NoBody},
+			want:   want{code: http.StatusInternalServerError, body: "\n", contentType: "text/plain; charset=utf-8"},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
 		// OK
 		{
 			name: "GET %s OK (no metrics)",
