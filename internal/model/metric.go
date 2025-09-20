@@ -97,3 +97,21 @@ func (m *Metric) Empty() bool {
 	}
 	return false
 }
+
+// Copy creates a duplicate of the given metric.
+func (m *Metric) Copy() Metric {
+	metric := Metric{
+		Type: m.Type,
+		ID:   m.ID,
+		Hash: m.Hash,
+	}
+	if m.Delta != nil {
+		tmp := *m.Delta
+		metric.Delta = &tmp
+	}
+	if m.Value != nil {
+		tmp := *m.Value
+		metric.Value = &tmp
+	}
+	return metric
+}

@@ -35,6 +35,7 @@ func (s *metricService) storeSingle(metric model.Metric) error {
 		if err != nil {
 			return fmt.Errorf("failed to retrieve existing metric: %w", err)
 		}
+		metric = metric.Copy()
 		*metric.Delta += *prev.Delta
 	default:
 		// pass

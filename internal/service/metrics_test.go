@@ -267,8 +267,17 @@ func Test_metricService_Store(t *testing.T) {
 		{
 			name:   "multiple metrics, some empty",
 			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
-			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.Metric{}, model.Metric{ID: "id5", Type: model.MetricTypeCounter}, model.Metric{ID: "id6", Type: model.MetricTypeGauge}}},
+			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), {}, {ID: "id5", Type: model.MetricTypeCounter}, {ID: "id6", Type: model.MetricTypeGauge}}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "multiple counters with same id",
+			fields: fields{storage: func() repository.Storage { return repository.NewMemStorage() }},
+			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewCounterMetric("id1", -5)}},
+			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 10)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
 			},
@@ -288,12 +297,17 @@ func Test_metricService_Store(t *testing.T) {
 			s := &metricService{
 				storage: tt.fields.storage(),
 			}
-			tt.assertion(t, s.Store(tt.args.metrics[0], tt.args.metrics[1:]...))
+			metrics := make([]model.Metric, 0, len(tt.args.metrics))
+			for _, m := range tt.args.metrics {
+				metrics = append(metrics, m.Copy())
+			}
+			tt.assertion(t, s.Store(metrics[0], metrics[1:]...))
 			for _, m := range tt.want.metrics {
 				got, err := s.storage.Get(m.Key())
 				assert.NoError(t, err)
 				assert.Equal(t, m, got)
 			}
+			assert.Equal(t, tt.args.metrics, metrics)
 		})
 	}
 }

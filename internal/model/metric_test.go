@@ -304,3 +304,94 @@ func TestMetric_Empty(t *testing.T) {
 		})
 	}
 }
+
+func TestMetric_Copy(t *testing.T) {
+	type fields struct {
+		ID    string
+		Type  MetricType
+		Delta *int64
+		Value *float64
+		Hash  MetricHash
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		want      Metric
+		assertion func(assert.TestingT, Metric, Metric)
+	}{
+		{
+			name:   "empty",
+			fields: fields{},
+			want:   Metric{},
+			assertion: func(t assert.TestingT, want, got Metric) {
+				assert.Equal(t, want, got)
+			},
+		},
+		{
+			name: "no delta or value",
+			fields: fields{
+				ID:   "id1",
+				Type: MetricType("custom"),
+				Hash: "something",
+			},
+			want: Metric{
+				ID:   "id1",
+				Type: MetricType("custom"),
+				Hash: "something",
+			},
+			assertion: func(t assert.TestingT, want, got Metric) {
+				assert.Equal(t, want, got)
+			},
+		},
+		{
+			name: "counter",
+			fields: func() fields {
+				var v int64 = 10
+				return fields{
+					ID:    "id1",
+					Type:  MetricTypeCounter,
+					Delta: &v,
+				}
+			}(),
+			want: NewCounterMetric("id1", 10),
+			assertion: func(t assert.TestingT, want, got Metric) {
+				assert.Equal(t, want, got)
+				*got.Delta += 15
+				assert.NotEqual(t, want, got)
+				assert.Equal(t, int64(10), *want.Delta)
+				assert.Equal(t, int64(25), *got.Delta)
+			},
+		},
+		{
+			name: "gauge",
+			fields: func() fields {
+				var v = 0.1
+				return fields{
+					ID:    "id1",
+					Type:  MetricTypeGauge,
+					Value: &v,
+				}
+			}(),
+			want: NewGaugeMetric("id1", 0.1),
+			assertion: func(t assert.TestingT, want, got Metric) {
+				assert.Equal(t, want, got)
+				*got.Value += 1.5
+				assert.NotEqual(t, want, got)
+				assert.Equal(t, 0.1, *want.Value)
+				assert.Equal(t, 1.6, *got.Value)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &Metric{
+				ID:    tt.fields.ID,
+				Type:  tt.fields.Type,
+				Delta: tt.fields.Delta,
+				Value: tt.fields.Value,
+				Hash:  tt.fields.Hash,
+			}
+			tt.assertion(t, tt.want, m.Copy())
+		})
+	}
+}
