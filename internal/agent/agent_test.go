@@ -108,6 +108,40 @@ func Test_agentWorker_Run(t *testing.T) {
 			},
 		},
 		{
+			name:    "slow reporter 2",
+			timeout: 27 * time.Millisecond,
+			fields: fields{
+				config: config.Config{PollInterval: 6 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
+				collector: &mockCollector{
+					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				},
+				storer:   &mockStorer{},
+				reporter: &mockReporter{timeout: 30 * time.Millisecond},
+			},
+			want: want{
+				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				numCallsCollect: 5,
+				numCallsReport:  1,
+			},
+		},
+		{
+			name:    "slow reporter 3",
+			timeout: 27 * time.Millisecond,
+			fields: fields{
+				config: config.Config{PollInterval: 6 * time.Millisecond, ReportInterval: 8 * time.Millisecond},
+				collector: &mockCollector{
+					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				},
+				storer:   &mockStorer{},
+				reporter: &mockReporter{timeout: 30 * time.Millisecond},
+			},
+			want: want{
+				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				numCallsCollect: 5,
+				numCallsReport:  1,
+			},
+		},
+		{
 			name:    "poll interval > report interval",
 			timeout: 25 * time.Millisecond,
 			fields: fields{

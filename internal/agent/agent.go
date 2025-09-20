@@ -27,6 +27,7 @@ func (a *agentWorker) Run() error {
 	var (
 		errRun error
 		wg     sync.WaitGroup
+		mu     sync.Mutex
 	)
 
 	doPoll := func() {
@@ -49,11 +50,16 @@ loop:
 		case <-pollTicker.C:
 			doPoll()
 		case <-reportTicker.C:
-			metrics, err := a.storer.Retrieve()
-			errRun = errors.Join(errRun, err)
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				if mu.TryLock() {
+					defer mu.Unlock()
+				} else {
+					return
+				}
+				metrics, err := a.storer.Retrieve()
+				errCh <- err
 				errCh <- a.reporter.Report(metrics)
 			}()
 		case err := <-errCh:
