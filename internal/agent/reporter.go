@@ -7,6 +7,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -16,17 +17,32 @@ type Reporter interface {
 }
 
 type defaultReporter struct {
-	context context.Context
-	client  *resty.Client
+	context  context.Context
+	client   *resty.Client
+	reported repository.Storage
 }
 
 // NewDefaultReporter creates an instance of the default reporter.
 func NewDefaultReporter(ctx context.Context, client *resty.Client) *defaultReporter {
-	return &defaultReporter{context: ctx, client: client}
+	return &defaultReporter{context: ctx, client: client, reported: repository.NewMemStorage()}
 }
 
 func (r *defaultReporter) reportSingle(metric model.Metric) error {
-	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, metric)
+	current := metric.Copy()
+
+	if reported, err := r.reported.Get(current.Key()); err == nil {
+		switch current.Type {
+		case model.MetricTypeCounter:
+			if current.Delta == nil {
+				return fmt.Errorf("empty counter")
+			}
+			if reported.Delta != nil {
+				*current.Delta -= *reported.Delta
+			}
+		}
+	}
+
+	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, current)
 	urlPath, err := metricOp.ToURLPath()
 	if err != nil {
 		return fmt.Errorf("cannot convert metric to url path: %w", err)
@@ -43,7 +59,13 @@ func (r *defaultReporter) reportSingle(metric model.Metric) error {
 		return fmt.Errorf("expected success, got status %v", resp.Status())
 	}
 
-	return nil
+	// There is a chance of discrepancy here if the underlying storage would
+	// fail to store the metric.
+	// If that happens, we would report full value instead of delta.
+	// On the other hand, if we store metric in memory and restart the agent,
+	// we will still report the full value on the first report.
+	// This is something we would need to address at a later stage.
+	return r.reported.Set(metric)
 }
 
 // Report sends incoming metrics to an upstream.
