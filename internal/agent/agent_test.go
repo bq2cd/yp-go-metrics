@@ -15,7 +15,6 @@ func TestNewAgent(t *testing.T) {
 		ctx       context.Context
 		cfg       config.Config
 		collector Collector
-		storer    Storer
 		reporter  Reporter
 	}
 	tests := []struct {
@@ -28,7 +27,6 @@ func TestNewAgent(t *testing.T) {
 				ctx:       context.Background(),
 				cfg:       config.Config{},
 				collector: &defaultCollector{},
-				storer:    &defaultStorer{},
 				reporter:  &defaultReporter{},
 			},
 		},
@@ -38,18 +36,16 @@ func TestNewAgent(t *testing.T) {
 				ctx:       context.Background(),
 				cfg:       config.Config{},
 				collector: &mockCollector{},
-				storer:    &mockStorer{},
 				reporter:  &mockReporter{},
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewAgent(tt.args.ctx, tt.args.cfg, tt.args.collector, tt.args.storer, tt.args.reporter)
+			got := NewAgent(tt.args.ctx, tt.args.cfg, tt.args.collector, tt.args.reporter)
 			assert.Equal(t, tt.args.ctx, got.context)
 			assert.Equal(t, tt.args.cfg, got.config)
 			assert.Equal(t, tt.args.collector, got.collector)
-			assert.Equal(t, tt.args.storer, got.storer)
 			assert.Equal(t, tt.args.reporter, got.reporter)
 		})
 	}
@@ -59,7 +55,6 @@ func Test_agentWorker_Run(t *testing.T) {
 	type fields struct {
 		config    config.Config
 		collector *mockCollector
-		storer    *mockStorer
 		reporter  *mockReporter
 	}
 	type want struct {
@@ -81,7 +76,6 @@ func Test_agentWorker_Run(t *testing.T) {
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				storer:   &mockStorer{},
 				reporter: &mockReporter{},
 			},
 			want: want{
@@ -98,7 +92,6 @@ func Test_agentWorker_Run(t *testing.T) {
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				storer:   &mockStorer{},
 				reporter: &mockReporter{timeout: 20 * time.Millisecond},
 			},
 			want: want{
@@ -115,7 +108,6 @@ func Test_agentWorker_Run(t *testing.T) {
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				storer:   &mockStorer{},
 				reporter: &mockReporter{timeout: 30 * time.Millisecond},
 			},
 			want: want{
@@ -132,7 +124,6 @@ func Test_agentWorker_Run(t *testing.T) {
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				storer:   &mockStorer{},
 				reporter: &mockReporter{timeout: 30 * time.Millisecond},
 			},
 			want: want{
@@ -149,7 +140,6 @@ func Test_agentWorker_Run(t *testing.T) {
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				storer:   &mockStorer{},
 				reporter: &mockReporter{},
 			},
 			want: want{
@@ -166,7 +156,6 @@ func Test_agentWorker_Run(t *testing.T) {
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				storer:   &mockStorer{},
 				reporter: &mockReporter{},
 			},
 			want: want{
@@ -185,24 +174,20 @@ func Test_agentWorker_Run(t *testing.T) {
 				context:   ctx,
 				config:    tt.fields.config,
 				collector: tt.fields.collector,
-				storer:    tt.fields.storer,
 				reporter:  tt.fields.reporter,
 			}
 
-			mCollector := tt.fields.collector.On("Collect").Return(tt.want.metrics, nil)
-			mStorer := tt.fields.storer.On("Store", tt.want.metrics).Return(nil).On("Retrieve").Return(tt.want.metrics, nil)
+			mCollector := tt.fields.collector.On("Collect").Return(nil).On("Snapshot").Return(tt.want.metrics, nil)
 			mReporter := tt.fields.reporter.On("Report", tt.want.metrics).Return(nil)
 
 			err := a.Run()
 			assert.NoError(t, err)
 
 			mCollector.Parent.AssertExpectations(t)
-			mStorer.Parent.AssertExpectations(t)
 			mReporter.Parent.AssertExpectations(t)
 
 			mCollector.Parent.AssertNumberOfCalls(t, "Collect", tt.want.numCallsCollect)
-			mStorer.Parent.AssertNumberOfCalls(t, "Store", tt.want.numCallsCollect)
-			mStorer.Parent.AssertNumberOfCalls(t, "Retrieve", tt.want.numCallsReport)
+			mCollector.Parent.AssertNumberOfCalls(t, "Snapshot", tt.want.numCallsReport)
 			mReporter.Parent.AssertNumberOfCalls(t, "Report", tt.want.numCallsReport)
 
 		})

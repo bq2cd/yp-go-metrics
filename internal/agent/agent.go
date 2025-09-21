@@ -13,13 +13,12 @@ type agentWorker struct {
 	context   context.Context
 	config    config.Config
 	collector Collector
-	storer    Storer
 	reporter  Reporter
 }
 
 // NewAgent creates an instance of an agent worker.
-func NewAgent(ctx context.Context, cfg config.Config, collector Collector, storer Storer, reporter Reporter) *agentWorker {
-	return &agentWorker{context: ctx, config: cfg, collector: collector, storer: storer, reporter: reporter}
+func NewAgent(ctx context.Context, cfg config.Config, collector Collector, reporter Reporter) *agentWorker {
+	return &agentWorker{context: ctx, config: cfg, collector: collector, reporter: reporter}
 }
 
 // Run launches main loop of the agent worker.
@@ -31,8 +30,7 @@ func (a *agentWorker) Run() error {
 	)
 
 	doPoll := func() {
-		metrics, err := a.collector.Collect()
-		errRun = errors.Join(errRun, err, a.storer.Store(metrics))
+		errRun = errors.Join(errRun, a.collector.Collect())
 	}
 
 	pollTicker := time.NewTicker(a.config.PollInterval)
@@ -58,7 +56,7 @@ loop:
 				} else {
 					return
 				}
-				metrics, err := a.storer.Retrieve()
+				metrics, err := a.collector.Snapshot()
 				errCh <- err
 				errCh <- a.reporter.Report(metrics)
 			}()

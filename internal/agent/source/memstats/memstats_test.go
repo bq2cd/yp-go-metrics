@@ -297,3 +297,19 @@ func Test_castToFloat64(t *testing.T) {
 		})
 	}
 }
+
+func Test_memStats_ReadStats(t *testing.T) {
+	tests := []struct {
+		name string
+		m    *memStats
+		want reflect.Value
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &memStats{}
+			assert.Equal(t, tt.want, m.ReadStats())
+		})
+	}
+}

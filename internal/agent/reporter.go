@@ -22,9 +22,16 @@ type defaultReporter struct {
 	reported repository.Storage
 }
 
-// NewDefaultReporter creates an instance of the default reporter.
+// NewDefaultReporter creates an instance of the default reporter
+// with in-memory internal storage.
 func NewDefaultReporter(ctx context.Context, client *resty.Client) *defaultReporter {
 	return &defaultReporter{context: ctx, client: client, reported: repository.NewMemStorage()}
+}
+
+// NewReporter creates an instance of the default reporter with
+// specified internal storage.
+func NewReporter(ctx context.Context, client *resty.Client, storage repository.Storage) *defaultReporter {
+	return &defaultReporter{context: ctx, client: client, reported: storage}
 }
 
 func (r *defaultReporter) reportSingle(metric model.Metric) error {

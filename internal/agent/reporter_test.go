@@ -603,3 +603,58 @@ func Test_defaultReporter_reportSingle(t *testing.T) {
 		})
 	}
 }
+
+func TestNewReporter(t *testing.T) {
+	type args struct {
+		ctx     context.Context
+		client  *resty.Client
+		storage repository.Storage
+	}
+	tests := []struct {
+		name      string
+		args      args
+		assertion func(assert.TestingT, args, *defaultReporter)
+	}{
+		{
+			name: "emtpy",
+			args: args{},
+			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+				assert.Nil(t, r.context)
+				assert.Nil(t, r.client)
+				assert.Nil(t, r.reported)
+			},
+		},
+		{
+			name: "ctx only",
+			args: args{ctx: context.Background()},
+			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+				assert.Equal(t, args.ctx, r.context)
+				assert.Nil(t, r.client)
+				assert.Nil(t, r.reported)
+			},
+		},
+		{
+			name: "ctx + client",
+			args: args{ctx: context.Background(), client: resty.New()},
+			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+				assert.Equal(t, args.ctx, r.context)
+				assert.Equal(t, args.client, r.client)
+				assert.Nil(t, r.reported)
+			},
+		},
+		{
+			name: "all in one",
+			args: args{ctx: context.Background(), client: resty.New(), storage: repository.NewMemStorage()},
+			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+				assert.Equal(t, args.ctx, r.context)
+				assert.Equal(t, args.client, r.client)
+				assert.Equal(t, args.storage, r.reported)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertion(t, tt.args, NewReporter(tt.args.ctx, tt.args.client, tt.args.storage))
+		})
+	}
+}
