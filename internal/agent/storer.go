@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"errors"
+
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )
 
 // Storer abstracts a way to store metrics locally before reporting to an upstream.
@@ -13,24 +15,25 @@ type Storer interface {
 }
 
 type defaultStorer struct {
-	storage service.Metrics
+	storage repository.Storage
 }
 
 // NewDefaultStorer creates an instance of the default storer
 // backed by in-memory storage.
-func NewDefaultStorer(storage service.Metrics) *defaultStorer {
+func NewDefaultStorer(storage repository.Storage) *defaultStorer {
 	return &defaultStorer{storage: storage}
 }
 
 // Store receives incoming metrics and stores them in the underlying storage.
 func (s *defaultStorer) Store(metrics []model.Metric) error {
-	if len(metrics) == 0 {
-		return nil
+	var errFinal error
+	for _, m := range metrics {
+		errFinal = errors.Join(errFinal, s.storage.Set(m))
 	}
-	return s.storage.Store(metrics[0], metrics[1:]...)
+	return errFinal
 }
 
 // Retrieve outputs all metrics available in the underlying storage
 func (s *defaultStorer) Retrieve() ([]model.Metric, error) {
-	return s.storage.RetrieveAll()
+	return s.storage.GetAll()
 }

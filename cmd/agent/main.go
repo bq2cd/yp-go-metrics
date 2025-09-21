@@ -13,7 +13,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/agent"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/go-resty/resty/v2"
 )
 
@@ -31,7 +30,7 @@ func run(ctx context.Context, cfg config.Config) error {
 	log.Printf("sending metrics to %s every %v (poll interval %v)", cfg.UpstreamURL.String(), cfg.ReportInterval, cfg.PollInterval)
 
 	collector := agent.NewDefaultCollector()
-	storer := agent.NewDefaultStorer(service.NewMetrics(repository.NewMemStorage()))
+	storer := agent.NewDefaultStorer(repository.NewMemStorage())
 
 	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
 	reporter := agent.NewDefaultReporter(ctx, client)

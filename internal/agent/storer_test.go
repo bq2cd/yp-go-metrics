@@ -6,7 +6,6 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -59,7 +58,7 @@ func Test_defaultStorer_Store(t *testing.T) {
 			name:   "no metrics",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			args: args{metrics: []model.Metric{}},
 			want: want{metrics: []model.Metric{}},
@@ -74,7 +73,7 @@ func Test_defaultStorer_Store(t *testing.T) {
 			name:   "single metric",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
@@ -89,7 +88,7 @@ func Test_defaultStorer_Store(t *testing.T) {
 			name:   "multiple metrics",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
@@ -104,7 +103,7 @@ func Test_defaultStorer_Store(t *testing.T) {
 			name:   "multiple metrics 2",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
@@ -119,10 +118,25 @@ func Test_defaultStorer_Store(t *testing.T) {
 			name:   "multiple counters with the same id",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
-			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 15), model.NewGaugeMetric("id1", 8.3)}},
+			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
+			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
+				assert.NoError(t, err)
+				metrics, err := s.GetAll()
+				assert.NoError(t, err)
+				assert.ElementsMatch(t, want.metrics, metrics)
+			},
+		},
+		{
+			name:   "multiple counters with the same id 2",
+			fields: fields{storage: repository.NewMemStorage()},
+			init: func(s repository.Storage) Storer {
+				return &defaultStorer{storage: s}
+			},
+			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3), model.NewCounterMetric("id1", -5)}},
+			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
 			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
 				assert.NoError(t, err)
 				metrics, err := s.GetAll()
@@ -134,7 +148,7 @@ func Test_defaultStorer_Store(t *testing.T) {
 			name:   "multiple gauges with the same id",
 			fields: fields{storage: repository.NewMemStorage()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			args: args{metrics: []model.Metric{model.NewGaugeMetric("id1", 0.5), model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
@@ -184,7 +198,7 @@ func Test_defaultStorer_Retrieve(t *testing.T) {
 				return s
 			}()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			want: []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -202,7 +216,7 @@ func Test_defaultStorer_Retrieve(t *testing.T) {
 				return s
 			}()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			want: []model.Metric{model.NewCounterMetric("id1", 5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -220,7 +234,7 @@ func Test_defaultStorer_Retrieve(t *testing.T) {
 				return s
 			}()},
 			init: func(s repository.Storage) Storer {
-				return &defaultStorer{storage: service.NewMetrics(s)}
+				return &defaultStorer{storage: s}
 			},
 			want: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -4.1)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -258,7 +272,7 @@ func Test_defaultStorer_Retrieve(t *testing.T) {
 
 func TestNewDefaultStorer(t *testing.T) {
 	type args struct {
-		storage service.Metrics
+		storage repository.Storage
 	}
 	tests := []struct {
 		name      string
@@ -267,7 +281,7 @@ func TestNewDefaultStorer(t *testing.T) {
 	}{
 		{
 			name: "default initialisation",
-			args: args{storage: service.NewMetrics(repository.NewMemStorage())},
+			args: args{storage: repository.NewMemStorage()},
 			assertion: func(t assert.TestingT, want args, got *defaultStorer) {
 				assert.Equal(t, want.storage, got.storage)
 			},
