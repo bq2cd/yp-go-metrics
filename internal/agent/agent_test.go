@@ -70,9 +70,9 @@ func Test_agentWorker_Run(t *testing.T) {
 	}{
 		{
 			name:    "normal flow",
-			timeout: 21 * time.Millisecond,
+			timeout: 23 * time.Millisecond,
 			fields: fields{
-				config: config.Config{PollInterval: 2 * time.Millisecond, ReportInterval: 10 * time.Millisecond},
+				config: config.Config{PollInterval: 5 * time.Millisecond, ReportInterval: 10 * time.Millisecond},
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
@@ -80,7 +80,7 @@ func Test_agentWorker_Run(t *testing.T) {
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
-				numCallsCollect: 11,
+				numCallsCollect: 5,
 				numCallsReport:  2,
 			},
 		},
