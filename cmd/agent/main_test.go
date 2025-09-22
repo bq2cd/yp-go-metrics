@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -152,11 +153,19 @@ func Test_parseArgs(t *testing.T) {
 
 type mockServer struct {
 	mock.Mock
-	t *testing.T
+	mu sync.RWMutex
+}
+
+func (m *mockServer) NumCalls() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.Calls)
 }
 
 func (m *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
 	m.Called()
+	m.mu.Unlock()
 	w.Header().Set("content-type", "test/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 }
@@ -168,7 +177,7 @@ func TestRun(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 1_500*time.Millisecond)
 
-	m := &mockServer{t: t}
+	m := &mockServer{}
 	m.On("ServeHTTP", mock.Anything, mock.Anything).Return()
 
 	ts := httptest.NewServer(m)
@@ -187,7 +196,7 @@ loop:
 	for {
 		select {
 		case <-ticker.C:
-			if len(m.Calls) > 0 {
+			if m.NumCalls() > 0 {
 				break loop
 			}
 		case <-ctx.Done():
@@ -229,7 +238,7 @@ func TestRun_SignalImitation(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 
-	m := &mockServer{t: t}
+	m := &mockServer{}
 
 	ts := httptest.NewServer(m)
 
@@ -247,7 +256,7 @@ loop:
 	for {
 		select {
 		case <-ticker.C:
-			if len(m.Calls) > 0 {
+			if m.NumCalls() > 0 {
 				break loop
 			}
 		case <-ctx.Done():
