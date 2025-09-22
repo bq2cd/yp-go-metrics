@@ -21,7 +21,8 @@ func NewAgent(ctx context.Context, cfg config.Config, collector Collector, repor
 	return &agentWorker{context: ctx, config: cfg, collector: collector, reporter: reporter}
 }
 
-// Run launches main loop of the agent worker.
+// Run launches main loop of the agent worker:
+// collecting metrics and reporting them back to a server.
 func (a *agentWorker) Run() error {
 	var (
 		errRun error

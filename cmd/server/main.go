@@ -1,29 +1,36 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/server"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
-const defaultAddress = "localhost:8080"
+const (
+	defaultAddress         = "localhost:8080"
+	defaultShutdownTimeout = 1 * time.Second
+)
 
-func runServer(cfg config.Config) error {
+func runServer(ctx context.Context, cfg config.Config) error {
 	storage := repository.NewMemStorage()
 	svc := service.NewMetrics(storage)
 	router := handler.NewRouter(svc, nil)
 
-	log.Printf("listening on %v", cfg.ListenAddress)
+	srv := server.NewServer(ctx, cfg, router)
 
-	return http.ListenAndServe(cfg.ListenAddress, router)
+	return srv.Run()
 }
 
 func parseArgs(args []string) (config.Config, error) {
@@ -50,6 +57,8 @@ func parseArgs(args []string) (config.Config, error) {
 		cfg.ListenAddress = listenAddress
 	}
 
+	cfg.ShutdownTimeout = defaultShutdownTimeout
+
 	return cfg, nil
 }
 
@@ -59,7 +68,13 @@ func run(args []string) error {
 		return fmt.Errorf("failed to parse args: %w", err)
 	}
 
-	return runServer(cfg)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	err = runServer(ctx, cfg)
+	<-ctx.Done()
+
+	return err
 }
 
 func main() {
