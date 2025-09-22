@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"testing"
@@ -12,7 +11,8 @@ import (
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 )
 
 type mockRouter struct {
@@ -99,28 +99,6 @@ func TestNewServer(t *testing.T) {
 	}
 }
 
-func getRandomListenAddress(t *testing.T) string {
-	l, err := net.Listen("tcp4", "localhost:0")
-	require.NoError(t, err)
-	addr := l.Addr().String()
-	err = l.Close()
-	require.NoError(t, err)
-	return addr
-}
-
-func makeRequest(c *http.Client, r *http.Request) error {
-	if c == nil {
-		c = http.DefaultClient
-	}
-	resp, err := c.Do(r)
-	if err != nil {
-		return err
-	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
-	return nil
-}
-
 func Test_serverWorker_Run(t *testing.T) {
 	type fields struct {
 		config    config.Config
@@ -136,13 +114,13 @@ func Test_serverWorker_Run(t *testing.T) {
 			name: "normal run",
 			fields: fields{
 				config: config.Config{
-					ListenAddress:   getRandomListenAddress(t),
+					ListenAddress:   servertest.GetRandomListenAddress(t),
 					ShutdownTimeout: 100 * time.Millisecond},
 				router:    &mockRouter{},
 				lnFactory: &listenerFactory{},
 			},
 			assertion: func(t *testing.T, m *mock.Call, req *http.Request, errCh chan error) {
-				err := makeRequest(nil, req)
+				err := servertest.MakeRequestDiscardResponse(nil, req)
 				assert.NoError(t, err)
 
 				m.Parent.AssertExpectations(t)
@@ -161,7 +139,7 @@ func Test_serverWorker_Run(t *testing.T) {
 				lnFactory: &listenerFactory{},
 			},
 			assertion: func(t *testing.T, m *mock.Call, req *http.Request, errCh chan error) {
-				err := makeRequest(nil, req)
+				err := servertest.MakeRequestDiscardResponse(nil, req)
 				assert.Error(t, err)
 
 				m.Parent.AssertNotCalled(t, "ServeHTTP")
@@ -173,16 +151,16 @@ func Test_serverWorker_Run(t *testing.T) {
 			name: "slow router",
 			fields: fields{
 				config: config.Config{
-					ListenAddress:   getRandomListenAddress(t),
+					ListenAddress:   servertest.GetRandomListenAddress(t),
 					ShutdownTimeout: 200 * time.Millisecond},
 				router:    &mockRouter{timeout: 2_000 * time.Millisecond},
 				lnFactory: &listenerFactory{},
 			},
 			assertion: func(t *testing.T, m *mock.Call, req *http.Request, errCh chan error) {
-				err := makeRequest(nil, req)
+				err := servertest.MakeRequestDiscardResponse(nil, req)
 				assert.NoError(t, err)
 
-				err = makeRequest(nil, req)
+				err = servertest.MakeRequestDiscardResponse(nil, req)
 				assert.Error(t, err)
 
 				m.Parent.AssertExpectations(t)
@@ -195,13 +173,13 @@ func Test_serverWorker_Run(t *testing.T) {
 			name: "listener error",
 			fields: fields{
 				config: config.Config{
-					ListenAddress:   getRandomListenAddress(t),
+					ListenAddress:   servertest.GetRandomListenAddress(t),
 					ShutdownTimeout: 100 * time.Millisecond},
 				router:    &mockRouter{},
 				lnFactory: &faultyListenerFactory{},
 			},
 			assertion: func(t *testing.T, m *mock.Call, req *http.Request, errCh chan error) {
-				err := makeRequest(nil, req)
+				err := servertest.MakeRequestDiscardResponse(nil, req)
 				assert.Error(t, err)
 
 				m.Parent.AssertNotCalled(t, "ServeHTTP")

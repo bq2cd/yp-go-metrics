@@ -28,10 +28,6 @@ var (
 )
 
 func runAgent(ctx context.Context, cfg config.Config) error {
-	if cfg.PollInterval >= cfg.ReportInterval {
-		return fmt.Errorf("poll interval must be less than report interval (got %v >= %v)", cfg.PollInterval, cfg.ReportInterval)
-	}
-
 	log.Printf("sending metrics to %s every %v (poll interval %v)", cfg.UpstreamURL.String(), cfg.ReportInterval, cfg.PollInterval)
 
 	collector := agent.NewDefaultCollector()
@@ -101,13 +97,13 @@ func parseArgs(args []string) (config.Config, error) {
 	return cfg, nil
 }
 
-func run(args []string) error {
+func run(ctx context.Context, args []string) error {
 	cfg, err := parseArgs(args)
 	if err != nil {
 		return fmt.Errorf("unable to parse args: %w", err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	err = runAgent(ctx, cfg)
@@ -117,7 +113,7 @@ func run(args []string) error {
 }
 
 func main() {
-	err := run(os.Args[1:])
+	err := run(context.Background(), os.Args[1:])
 	if err != nil {
 		log.Fatalf("failed to start agent: %v", err)
 	}

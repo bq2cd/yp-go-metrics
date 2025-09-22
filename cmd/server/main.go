@@ -62,13 +62,13 @@ func parseArgs(args []string) (config.Config, error) {
 	return cfg, nil
 }
 
-func run(args []string) error {
+func run(ctx context.Context, args []string) error {
 	cfg, err := parseArgs(args)
 	if err != nil {
 		return fmt.Errorf("failed to parse args: %w", err)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	err = runServer(ctx, cfg)
@@ -78,7 +78,7 @@ func run(args []string) error {
 }
 
 func main() {
-	err := run(os.Args[1:])
+	err := run(context.Background(), os.Args[1:])
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

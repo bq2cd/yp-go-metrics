@@ -1,10 +1,17 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"net/http"
 	"testing"
+	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 )
 
 func Test_parseArgs(t *testing.T) {
@@ -97,4 +104,77 @@ func Test_parseArgs(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestRun(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+
+	addr := servertest.GetRandomListenAddress(t)
+
+	t.Logf("got random listen address: %v", addr)
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/", addr), http.NoBody)
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- run(ctx, []string{"-a", addr})
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	err = servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
+	assert.NoError(t, err)
+
+	cancel()
+
+	err = <-errCh
+	t.Logf("run finished with %v", err)
+	assert.NoError(t, err)
+}
+
+func TestRun_BadArgs(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- run(ctx, []string{"-zzz", "gibberish"})
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	cancel()
+
+	err := <-errCh
+	t.Logf("run finished with %v", err)
+	assert.Error(t, err)
+}
+
+func TestRun_SignalImitation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+
+	addr := servertest.GetRandomListenAddress(t)
+
+	t.Logf("got random listen address: %v", addr)
+
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/", addr), http.NoBody)
+	require.NoError(t, err)
+
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- run(ctx, []string{"-a", addr})
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	err = servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
+	assert.NoError(t, err)
+
+	err = <-errCh
+	t.Logf("run finished with %v", err)
+	assert.NoError(t, err)
 }
