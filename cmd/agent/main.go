@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -40,14 +41,12 @@ func runAgent(ctx context.Context, cfg config.Config) error {
 	return ag.Run()
 }
 
-func parseArgs(args []string) (config.Config, error) {
+func parseArgs(fs *flag.FlagSet, args []string) (config.Config, error) {
 	var (
 		upstreamURL    string
 		pollInterval   uint
 		reportInterval uint
 	)
-
-	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
 
 	fs.StringVar(&upstreamURL, "a", defaultUpstreamURL, "upstream url in the format [http://]HOST[:PORT]")
 	fs.UintVar(&pollInterval, "p", defaultPollIntervalSec, "poll interval in seconds")
@@ -97,8 +96,11 @@ func parseArgs(args []string) (config.Config, error) {
 	return cfg, nil
 }
 
-func run(ctx context.Context, args []string) error {
-	cfg, err := parseArgs(args)
+func run(ctx context.Context, args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	cfg, err := parseArgs(fs, args)
 	if err != nil {
 		return fmt.Errorf("unable to parse args: %w", err)
 	}
@@ -113,7 +115,7 @@ func run(ctx context.Context, args []string) error {
 }
 
 func main() {
-	err := run(context.Background(), os.Args[1:])
+	err := run(context.Background(), os.Args[1:], os.Stderr)
 	if err != nil {
 		log.Fatalf("failed to start agent: %v", err)
 	}

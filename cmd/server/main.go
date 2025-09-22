@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -33,12 +34,10 @@ func runServer(ctx context.Context, cfg config.Config) error {
 	return srv.Run()
 }
 
-func parseArgs(args []string) (config.Config, error) {
+func parseArgs(fs *flag.FlagSet, args []string) (config.Config, error) {
 	var (
 		listenAddress string
 	)
-
-	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 
 	fs.StringVar(&listenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
 
@@ -62,8 +61,11 @@ func parseArgs(args []string) (config.Config, error) {
 	return cfg, nil
 }
 
-func run(ctx context.Context, args []string) error {
-	cfg, err := parseArgs(args)
+func run(ctx context.Context, args []string, stderr io.Writer) error {
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	cfg, err := parseArgs(fs, args)
 	if err != nil {
 		return fmt.Errorf("failed to parse args: %w", err)
 	}
@@ -78,7 +80,7 @@ func run(ctx context.Context, args []string) error {
 }
 
 func main() {
-	err := run(context.Background(), os.Args[1:])
+	err := run(context.Background(), os.Args[1:], os.Stderr)
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

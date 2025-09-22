@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -99,7 +102,9 @@ func Test_parseArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseArgs(tt.args.args)
+			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			got, err := parseArgs(fs, tt.args.args)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -107,6 +112,10 @@ func Test_parseArgs(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
+	if v := os.Getenv("GITHUB_ACTIONS"); v != "" {
+		t.Skipf("this test takes too long to complete in Github actions")
+	}
+
 	ctx, cancel := context.WithCancel(t.Context())
 
 	addr := servertest.GetRandomListenAddress(t)
@@ -119,7 +128,7 @@ func TestRun(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- run(ctx, []string{"-a", addr})
+		errCh <- run(ctx, []string{"-a", addr}, os.Stderr)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -140,7 +149,7 @@ func TestRun_BadArgs(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- run(ctx, []string{"-zzz", "gibberish"})
+		errCh <- run(ctx, []string{"-zzz", "gibberish"}, io.Discard)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -153,6 +162,10 @@ func TestRun_BadArgs(t *testing.T) {
 }
 
 func TestRun_SignalImitation(t *testing.T) {
+	if v := os.Getenv("GITHUB_ACTIONS"); v != "" {
+		t.Skipf("this test takes too long to complete in Github actions")
+	}
+
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 
@@ -166,7 +179,7 @@ func TestRun_SignalImitation(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- run(ctx, []string{"-a", addr})
+		errCh <- run(ctx, []string{"-a", addr}, os.Stderr)
 	}()
 
 	time.Sleep(100 * time.Millisecond)

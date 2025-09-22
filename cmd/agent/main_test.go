@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"flag"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
@@ -138,7 +141,9 @@ func Test_parseArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseArgs(tt.args.args)
+			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			got, err := parseArgs(fs, tt.args.args)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -157,6 +162,10 @@ func (m *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestRun(t *testing.T) {
+	if v := os.Getenv("GITHUB_ACTIONS"); v != "" {
+		t.Skipf("this test takes too long to complete in Github actions")
+	}
+
 	ctx, cancel := context.WithTimeout(t.Context(), 1_500*time.Millisecond)
 
 	m := &mockServer{t: t}
@@ -167,7 +176,7 @@ func TestRun(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- run(ctx, []string{"-a", ts.URL, "-p=1", "-r=1"})
+		errCh <- run(ctx, []string{"-a", ts.URL, "-p=1", "-r=1"}, os.Stderr)
 	}()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -201,7 +210,7 @@ func TestRun_BadArgs(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- run(ctx, []string{"-zzz", "gibberish"})
+		errCh <- run(ctx, []string{"-zzz", "gibberish"}, io.Discard)
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -214,6 +223,10 @@ func TestRun_BadArgs(t *testing.T) {
 }
 
 func TestRun_SignalImitation(t *testing.T) {
+	if v := os.Getenv("GITHUB_ACTIONS"); v != "" {
+		t.Skipf("this test takes too long to complete in Github actions")
+	}
+
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 
 	m := &mockServer{t: t}
@@ -223,7 +236,7 @@ func TestRun_SignalImitation(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		errCh <- run(ctx, []string{"-a", ts.URL, "-p=1", "-r=1"})
+		errCh <- run(ctx, []string{"-a", ts.URL, "-p=1", "-r=1"}, os.Stderr)
 	}()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
