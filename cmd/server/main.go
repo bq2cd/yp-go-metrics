@@ -1,33 +1,65 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
-	"github.com/bq2cd/yp-go-metrics/internal/config/server"
+	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
-const defaultAddress = ":8080"
+const defaultAddress = "localhost:8080"
 
-func runServer(config server.Config) error {
+func runServer(cfg config.Config) error {
 	storage := repository.NewMemStorage()
 	svc := service.NewMetrics(storage)
 	router := handler.NewRouter(svc, nil)
 
-	log.Printf("listening on %v", config.ListenAddress)
+	log.Printf("listening on %v", cfg.ListenAddress)
 
-	return http.ListenAndServe(config.ListenAddress, router)
+	return http.ListenAndServe(cfg.ListenAddress, router)
+}
+
+func parseArgs(args []string) (config.Config, error) {
+	var (
+		listenAddress string
+	)
+
+	fs := flag.NewFlagSet("server", flag.ContinueOnError)
+
+	fs.StringVar(&listenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
+
+	if err := fs.Parse(args); err != nil {
+		return config.Config{}, fmt.Errorf("invalid args: %w", err)
+	}
+
+	cfg := config.Config{}
+
+	// validate listen address
+	{
+		parts := strings.Split(listenAddress, ":")
+		if len(parts) > 2 {
+			return config.Config{}, fmt.Errorf("invalid listen address")
+		}
+		cfg.ListenAddress = listenAddress
+	}
+
+	return cfg, nil
 }
 
 func run(args []string) error {
-	_ = args
-	config := server.Config{ListenAddress: defaultAddress}
+	cfg, err := parseArgs(args)
+	if err != nil {
+		return fmt.Errorf("failed to parse args: %w", err)
+	}
 
-	return runServer(config)
+	return runServer(cfg)
 }
 
 func main() {
