@@ -56,12 +56,12 @@ func TestNewServer(t *testing.T) {
 	tests := []struct {
 		name      string
 		args      args
-		assertion func(assert.TestingT, args, *serverWorker)
+		assertion func(assert.TestingT, args, *server)
 	}{
 		{
 			name: "no args",
 			args: args{},
-			assertion: func(t assert.TestingT, args args, s *serverWorker) {
+			assertion: func(t assert.TestingT, args args, s *server) {
 				assert.Nil(t, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
@@ -72,7 +72,7 @@ func TestNewServer(t *testing.T) {
 		{
 			name: "ctx only",
 			args: args{ctx: context.Background()},
-			assertion: func(t assert.TestingT, args args, s *serverWorker) {
+			assertion: func(t assert.TestingT, args args, s *server) {
 				assert.Equal(t, args.ctx, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
@@ -83,7 +83,7 @@ func TestNewServer(t *testing.T) {
 		{
 			name: "ctx + router",
 			args: args{ctx: context.Background(), router: http.NewServeMux()},
-			assertion: func(t assert.TestingT, args args, s *serverWorker) {
+			assertion: func(t assert.TestingT, args args, s *server) {
 				assert.Equal(t, args.ctx, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Equal(t, args.router, s.router)
@@ -99,7 +99,7 @@ func TestNewServer(t *testing.T) {
 	}
 }
 
-func Test_serverWorker_Run(t *testing.T) {
+func Test_server_Run(t *testing.T) {
 	type fields struct {
 		config    config.Config
 		router    *mockRouter
@@ -193,7 +193,7 @@ func Test_serverWorker_Run(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.config.ShutdownTimeout)
 			defer cancel()
 
-			s := &serverWorker{
+			s := &server{
 				context:   ctx,
 				config:    tt.fields.config,
 				router:    tt.fields.router,

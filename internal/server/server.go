@@ -28,7 +28,7 @@ func (f *listenerFactory) Create(ctx context.Context, addr string) (net.Listener
 	return ln, nil
 }
 
-type serverWorker struct {
+type server struct {
 	context   context.Context
 	config    config.Config
 	router    http.Handler
@@ -36,13 +36,13 @@ type serverWorker struct {
 }
 
 // NewServer creates an instance of a server worker.
-func NewServer(ctx context.Context, cfg config.Config, router http.Handler) *serverWorker {
-	return &serverWorker{context: ctx, config: cfg, router: router, lnFactory: &listenerFactory{}}
+func NewServer(ctx context.Context, cfg config.Config, router http.Handler) *server {
+	return &server{context: ctx, config: cfg, router: router, lnFactory: &listenerFactory{}}
 }
 
 // Run launches main loop of the server worker:
 // listening on provided address and serving incoming HTTP requests.
-func (s *serverWorker) Run() error {
+func (s *server) Run() error {
 	log.Printf("listening on %v", s.config.ListenAddress)
 
 	ln, err := s.lnFactory.Create(s.context, s.config.ListenAddress)
