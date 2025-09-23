@@ -17,15 +17,22 @@ import (
 type mockCollector struct {
 	mock.Mock
 	metrics []model.Metric
+	wantErr bool
 }
 
 func (m *mockCollector) Collect() error {
 	m.Called()
+	if m.wantErr {
+		return errors.New("collect error")
+	}
 	return nil
 }
 
 func (m *mockCollector) Snapshot() ([]model.Metric, error) {
 	m.Called()
+	if m.wantErr {
+		return nil, errors.New("snapshot error")
+	}
 	return m.metrics, nil
 }
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"regexp"
 	"sync"
@@ -21,6 +22,7 @@ type mockReporter struct {
 	mock.Mock
 	metrics []model.Metric
 	timeout time.Duration
+	wantErr bool
 	mu      sync.Mutex
 }
 
@@ -31,6 +33,9 @@ func (m *mockReporter) Report(metrics []model.Metric) error {
 	m.metrics = metrics
 	if m.timeout > 0 {
 		time.Sleep(m.timeout)
+	}
+	if m.wantErr {
+		return errors.New("report error")
 	}
 	return nil
 }
