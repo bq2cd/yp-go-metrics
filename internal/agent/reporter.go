@@ -34,22 +34,8 @@ func NewReporter(ctx context.Context, client *resty.Client, storage repository.S
 	return &defaultReporter{context: ctx, client: client, reported: storage}
 }
 
-func (r *defaultReporter) reportSingle(metric model.Metric) error {
-	current := metric.Copy()
-
-	if reported, err := r.reported.Get(current.Key()); err == nil {
-		switch current.Type {
-		case model.MetricTypeCounter:
-			if current.Delta == nil {
-				return fmt.Errorf("empty counter")
-			}
-			if reported.Delta != nil {
-				*current.Delta -= *reported.Delta
-			}
-		}
-	}
-
-	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, current)
+func (r *defaultReporter) sendMetric(metric model.Metric) error {
+	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, metric)
 	urlPath, err := metricOp.ToURLPath()
 	if err != nil {
 		return fmt.Errorf("cannot convert metric to url path: %w", err)
@@ -64,6 +50,44 @@ func (r *defaultReporter) reportSingle(metric model.Metric) error {
 
 	if !resp.IsSuccess() {
 		return fmt.Errorf("expected success, got status %v", resp.Status())
+	}
+
+	return nil
+}
+
+func (r *defaultReporter) getSendableMetric(metric model.Metric) model.Metric {
+	reported, err := r.reported.Get(metric.Key())
+	if err != nil {
+		// This includes cases where metric was not found or a storage error;
+		// to avoid dropping metrics in case of storage error, we prefer to send
+		// the full value instead.
+		// This behaviour can be changed in the future if needed.
+		return metric
+	}
+
+	switch reported.Type {
+	case model.MetricTypeCounter:
+		if metric.Delta == nil {
+			// This looks like an invalid metric,
+			// but we will leave it up to the sender to decide
+			// what to do with it.
+			return metric
+		}
+		if reported.Delta != nil {
+			metric = metric.Copy()
+			*metric.Delta -= *reported.Delta
+		}
+	}
+
+	return metric
+}
+
+func (r *defaultReporter) reportSingle(metric model.Metric) error {
+	sendable := r.getSendableMetric(metric)
+
+	err := r.sendMetric(sendable)
+	if err != nil {
+		return err
 	}
 
 	// There is a chance of discrepancy here if the underlying storage would
