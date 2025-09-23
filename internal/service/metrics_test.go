@@ -29,7 +29,7 @@ func (s *faultyStorage) Get(k model.MetricKey) (model.Metric, error) {
 }
 
 func (s *faultyStorage) GetAll() ([]model.Metric, error) {
-	return nil, errors.New("faulty storage internal error")
+	return nil, errors.New("faulty storage getAll error")
 }
 
 func (s *faultyStorage) Set(m model.Metric) error {
@@ -63,7 +63,7 @@ func TestNewMetrics(t *testing.T) {
 	}
 }
 
-func Test_metricService_storeSingle(t *testing.T) {
+func Test_metricService_StoreSingle(t *testing.T) {
 	type fields struct {
 		storage func() repository.Storage
 	}
@@ -196,13 +196,13 @@ func Test_metricService_storeSingle(t *testing.T) {
 			s := &metricService{
 				storage: tt.fields.storage(),
 			}
-			tt.assertion(t, s.storeSingle(tt.args.metric))
+			tt.assertion(t, s.StoreSingle(tt.args.metric))
 			tt.assertStoredMetric(t, s.storage, tt.want)
 		})
 	}
 }
 
-func Test_metricService_Store(t *testing.T) {
+func Test_metricService_StoreBatch(t *testing.T) {
 	type fields struct {
 		storage func() repository.Storage
 	}
@@ -301,7 +301,7 @@ func Test_metricService_Store(t *testing.T) {
 			for _, m := range tt.args.metrics {
 				metrics = append(metrics, m.Copy())
 			}
-			tt.assertion(t, s.Store(metrics[0], metrics[1:]...))
+			tt.assertion(t, s.StoreBatch(metrics))
 			for _, m := range tt.want.metrics {
 				got, err := s.storage.Get(m.Key())
 				assert.NoError(t, err)
@@ -312,7 +312,79 @@ func Test_metricService_Store(t *testing.T) {
 	}
 }
 
-func Test_metricService_Retrieve(t *testing.T) {
+func Test_metricService_RetrieveSingle(t *testing.T) {
+	type fields struct {
+		storage func() repository.Storage
+	}
+	type args struct {
+		key model.MetricKey
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		want      model.Metric
+		assertion assert.ErrorAssertionFunc
+	}{
+		{
+			name: "missing metric",
+			fields: fields{storage: func() repository.Storage {
+				s := repository.NewMemStorage()
+				return s
+			}},
+			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
+			want: model.Metric{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				assert.Error(t, err)
+				return assert.ErrorIs(t, err, repository.ErrMetricNotFound)
+			},
+		},
+		{
+			name: "single metric",
+			fields: fields{storage: func() repository.Storage {
+				s := repository.NewMemStorage()
+				for _, m := range []model.Metric{model.NewCounterMetric("id1", 5)} {
+					err := s.Set(m)
+					assert.NoError(t, err)
+				}
+				return s
+			}},
+			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
+			want: model.NewCounterMetric("id1", 5),
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "faulty storage",
+			fields: fields{storage: func() repository.Storage {
+				s := &faultyStorage{realStorage: repository.NewMemStorage()}
+				for _, m := range []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(faultyStorageErrorTrigger, 0)} {
+					err := s.realStorage.Set(m)
+					assert.NoError(t, err)
+				}
+				return s
+			}},
+			args: args{key: model.NewMetricKey(model.MetricTypeCounter, faultyStorageErrorTrigger)},
+			want: model.Metric{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Errorf(t, err, "faulty storage get error")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &metricService{
+				storage: tt.fields.storage(),
+			}
+			got, err := s.RetrieveSingle(tt.args.key)
+			tt.assertion(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_metricService_RetrieveBatch(t *testing.T) {
 	type fields struct {
 		storage func() repository.Storage
 	}
@@ -335,8 +407,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 			args: args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1")}},
 			want: []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				assert.Error(t, err)
-				return assert.ErrorIs(t, err, repository.ErrMetricNotFound)
+				return assert.NoError(t, err)
 			},
 		},
 		{
@@ -393,7 +464,7 @@ func Test_metricService_Retrieve(t *testing.T) {
 			s := &metricService{
 				storage: tt.fields.storage(),
 			}
-			got, err := s.Retrieve(tt.args.keys[0], tt.args.keys[1:]...)
+			got, err := s.RetrieveBatch(tt.args.keys)
 			tt.assertion(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})

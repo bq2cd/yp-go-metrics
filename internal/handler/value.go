@@ -31,7 +31,7 @@ func (h *valueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics, err := h.metrics.Retrieve(needle.Key())
+	metric, err := h.metrics.RetrieveSingle(needle.Key())
 	switch {
 	case errors.Is(err, repository.ErrMetricNotFound):
 		http.Error(w, "", http.StatusNotFound)
@@ -40,12 +40,6 @@ func (h *valueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
-	if len(metrics) != 1 {
-		http.Error(w, "", http.StatusInternalServerError)
-		return
-	}
-
-	metric := metrics[0]
 
 	w.Header().Set("content-type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

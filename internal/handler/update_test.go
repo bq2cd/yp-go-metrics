@@ -7,32 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type faultyMetricService struct {
-	metrics                       []model.Metric
-	returnMultipleInsteadOfSingle bool
-}
-
-func (s *faultyMetricService) Store(metric model.Metric, metrics ...model.Metric) error {
-	return fmt.Errorf("faulty storage set error")
-}
-
-func (s *faultyMetricService) Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error) {
-	if len(keys) == 0 && s.returnMultipleInsteadOfSingle {
-		return s.metrics, nil
-	}
-	return nil, fmt.Errorf("faulty storage get error")
-}
-
-func (s *faultyMetricService) RetrieveAll() ([]model.Metric, error) {
-	return nil, fmt.Errorf("faulty storage internal error")
-}
 
 func Test_updateHandler_ServeHTTP(t *testing.T) {
 	type fields struct {

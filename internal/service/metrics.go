@@ -11,8 +11,10 @@ import (
 // Metrics defines an interface to work with metrics.
 // E.g. store, retrieve, delete, etc.
 type Metrics interface {
-	Store(metric model.Metric, metrics ...model.Metric) error
-	Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error)
+	StoreSingle(metric model.Metric) error
+	StoreBatch(metrics []model.Metric) error
+	RetrieveSingle(key model.MetricKey) (model.Metric, error)
+	RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error)
 	RetrieveAll() ([]model.Metric, error)
 }
 
@@ -25,7 +27,8 @@ func NewMetrics(storage repository.Storage) *metricService {
 	return &metricService{storage: storage}
 }
 
-func (s *metricService) storeSingle(metric model.Metric) error {
+// StoreSingle updates or replaces a single metric.
+func (s *metricService) StoreSingle(metric model.Metric) error {
 	switch metric.Type {
 	case model.MetricTypeCounter:
 		prev, err := s.storage.Get(metric.Key())
@@ -43,44 +46,44 @@ func (s *metricService) storeSingle(metric model.Metric) error {
 	return s.storage.Set(metric)
 }
 
-// Store implements a mechanism to update or replace a slice of metrics.
-func (s *metricService) Store(metric model.Metric, metrics ...model.Metric) error {
+// StoreBatch updates or replaces a slice of metrics.
+// This method essentially calls StoreSingle method for each metric.
+func (s *metricService) StoreBatch(metrics []model.Metric) error {
 	var errFinal error
 
-	// performing a separate call to avoid allocating another slice
-	// for a subsequent loop
-	err := s.storeSingle(metric)
-	errFinal = errors.Join(errFinal, err)
-
 	for i := range metrics {
-		err := s.storeSingle(metrics[i])
+		err := s.StoreSingle(metrics[i])
 		errFinal = errors.Join(errFinal, err)
 	}
 
 	return errFinal
 }
 
-// Retrieve implements a mechanism to retrive a slice of metrics by their hashes.
-func (s *metricService) Retrieve(key model.MetricKey, keys ...model.MetricKey) ([]model.Metric, error) {
+// RetrieveSingle obtains a metric from the underlying storage by given key
+// or returns error if metric is not found or storage has failed.
+func (s *metricService) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
+	return s.storage.Get(key)
+}
+
+// RetrieveBatch obtains a slice of metrics from the underlying storage by given keys
+// or returns an error if storage has failed.
+// This method essentially wraps RetrieveSingle while skipping non-existent metrics.
+// NB. Number of metrics returned might be smaller than the number of the keys requested.
+func (s *metricService) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
 	var errFinal error
 
-	metrics := make([]model.Metric, 0, len(keys)+1)
-
-	// performing a separate call to avoid allocating another slice
-	// for a subsequent loop
-	if m, err := s.storage.Get(key); err != nil {
-		errFinal = errors.Join(errFinal, err)
-	} else {
-		metrics = append(metrics, m)
-	}
+	metrics := make([]model.Metric, 0, len(keys))
 
 	for _, k := range keys {
 		m, err := s.storage.Get(k)
-		if err != nil {
-			errFinal = errors.Join(errFinal, err)
+		switch err {
+		case nil:
+			metrics = append(metrics, m)
+		case repository.ErrMetricNotFound:
 			continue
+		default:
+			errFinal = errors.Join(errFinal, err)
 		}
-		metrics = append(metrics, m)
 	}
 
 	return metrics, errFinal
