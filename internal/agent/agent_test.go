@@ -44,8 +44,8 @@ func TestNewAgent(t *testing.T) {
 			args: args{
 				ctx:       context.Background(),
 				cfg:       config.Config{},
-				collector: &defaultCollector{},
-				reporter:  &defaultReporter{},
+				collector: &collector{},
+				reporter:  &reporter{},
 			},
 		},
 		{

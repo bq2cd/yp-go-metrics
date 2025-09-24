@@ -50,7 +50,7 @@ func (s *faultyStorage) GetAll() ([]model.Metric, error) {
 	return nil, errors.New("faulty storage getAll error")
 }
 
-func Test_defaultCollector_Collect(t *testing.T) {
+func Test_collector_Collect(t *testing.T) {
 	type args struct {
 		sources []source.Source
 		storage repository.Storage
@@ -126,29 +126,12 @@ func Test_defaultCollector_Collect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &defaultCollector{sources: tt.args.sources, collected: tt.args.storage}
+			c := &collector{sources: tt.args.sources, collected: tt.args.storage}
 			err := c.Collect()
 			assert.NoError(t, err)
 			got, err := tt.args.storage.GetAll()
 			assert.NoError(t, err)
 			tt.assertion(t, tt.want, got)
-		})
-	}
-}
-
-func TestNewDefaultCollector(t *testing.T) {
-	tests := []struct {
-		name string
-		want *defaultCollector
-	}{
-		{
-			name: "default initialisation",
-			want: &defaultCollector{sources: source.DefaultSources(), collected: repository.NewMemStorage()},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, NewDefaultCollector())
 		})
 	}
 }
@@ -161,22 +144,22 @@ func TestNewCollector(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want *defaultCollector
+		want *collector
 	}{
 		{
 			name: "empty",
 			args: args{},
-			want: &defaultCollector{},
+			want: &collector{},
 		},
 		{
 			name: "empty sources",
 			args: args{storage: repository.NewMemStorage()},
-			want: &defaultCollector{collected: repository.NewMemStorage()},
+			want: &collector{collected: repository.NewMemStorage()},
 		},
 		{
 			name: "some sources",
 			args: args{sources: []source.Source{extra.New()}, storage: repository.NewMemStorage()},
-			want: &defaultCollector{sources: []source.Source{extra.New()}, collected: repository.NewMemStorage()},
+			want: &collector{sources: []source.Source{extra.New()}, collected: repository.NewMemStorage()},
 		},
 	}
 	for _, tt := range tests {
@@ -186,7 +169,7 @@ func TestNewCollector(t *testing.T) {
 	}
 }
 
-func Test_defaultCollector_storeMetrics(t *testing.T) {
+func Test_collector_storeMetrics(t *testing.T) {
 	type fields struct {
 		sources   []source.Source
 		collected repository.Storage
@@ -401,7 +384,7 @@ func Test_defaultCollector_storeMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &defaultCollector{
+			c := &collector{
 				sources:   tt.fields.sources,
 				collected: tt.fields.collected,
 			}
@@ -410,7 +393,7 @@ func Test_defaultCollector_storeMetrics(t *testing.T) {
 	}
 }
 
-func Test_defaultCollector_Snapshot(t *testing.T) {
+func Test_collector_Snapshot(t *testing.T) {
 	type fields struct {
 		sources   []source.Source
 		collected repository.Storage
@@ -487,7 +470,7 @@ func Test_defaultCollector_Snapshot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &defaultCollector{
+			c := &collector{
 				sources:   tt.fields.sources,
 				collected: tt.fields.collected,
 			}

@@ -36,10 +36,10 @@ func TestGetRandomListenAddress(t *testing.T) {
 
 func TestMakeRequestDiscardResponse(t *testing.T) {
 	type setup struct {
-		method    string
-		url       string
-		body      io.ReadCloser
-		responder httpmock.Responder
+		method      string
+		url         string
+		body        io.ReadCloser
+		responder   httpmock.Responder
 		hookRequest func(r *http.Request)
 	}
 	type args struct {

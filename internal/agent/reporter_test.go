@@ -40,7 +40,7 @@ func (m *mockReporter) Report(metrics []model.Metric) error {
 	return nil
 }
 
-func Test_defaultReporter_Report(t *testing.T) {
+func Test_reporterreporterreporterReport(t *testing.T) {
 	type fields struct {
 		client   *resty.Client
 		reported repository.Storage
@@ -240,7 +240,7 @@ func Test_defaultReporter_Report(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &defaultReporter{
+			r := &reporter{
 				context:  t.Context(),
 				client:   tt.fields.client,
 				reported: tt.fields.reported,
@@ -255,35 +255,7 @@ func Test_defaultReporter_Report(t *testing.T) {
 	}
 }
 
-func TestNewDefaultReporter(t *testing.T) {
-	type args struct {
-		context  context.Context
-		client   *resty.Client
-		reported repository.Storage
-	}
-	tests := []struct {
-		name      string
-		args      args
-		assertion func(assert.TestingT, args, *defaultReporter)
-	}{
-		{
-			name: "default initialisation",
-			args: args{context: context.Background(), client: resty.New(), reported: repository.NewMemStorage()},
-			assertion: func(t assert.TestingT, want args, got *defaultReporter) {
-				assert.Equal(t, want.context, got.context)
-				assert.Equal(t, want.client, got.client)
-				assert.Equal(t, want.reported, got.reported)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewDefaultReporter(tt.args.context, tt.args.client))
-		})
-	}
-}
-
-func Test_defaultReporter_reportSingle(t *testing.T) {
+func Test_reporter_reportSingle(t *testing.T) {
 	type fields struct {
 		client   *resty.Client
 		reported repository.Storage
@@ -592,7 +564,7 @@ func Test_defaultReporter_reportSingle(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
 
-			r := &defaultReporter{
+			r := &reporter{
 				context:  ctx,
 				client:   tt.fields.client,
 				reported: tt.fields.reported,
@@ -618,12 +590,12 @@ func TestNewReporter(t *testing.T) {
 	tests := []struct {
 		name      string
 		args      args
-		assertion func(assert.TestingT, args, *defaultReporter)
+		assertion func(assert.TestingT, args, *reporter)
 	}{
 		{
 			name: "emtpy",
 			args: args{},
-			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+			assertion: func(t assert.TestingT, args args, r *reporter) {
 				assert.Nil(t, r.context)
 				assert.Nil(t, r.client)
 				assert.Nil(t, r.reported)
@@ -632,7 +604,7 @@ func TestNewReporter(t *testing.T) {
 		{
 			name: "ctx only",
 			args: args{ctx: context.Background()},
-			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+			assertion: func(t assert.TestingT, args args, r *reporter) {
 				assert.Equal(t, args.ctx, r.context)
 				assert.Nil(t, r.client)
 				assert.Nil(t, r.reported)
@@ -641,7 +613,7 @@ func TestNewReporter(t *testing.T) {
 		{
 			name: "ctx + client",
 			args: args{ctx: context.Background(), client: resty.New()},
-			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+			assertion: func(t assert.TestingT, args args, r *reporter) {
 				assert.Equal(t, args.ctx, r.context)
 				assert.Equal(t, args.client, r.client)
 				assert.Nil(t, r.reported)
@@ -650,7 +622,7 @@ func TestNewReporter(t *testing.T) {
 		{
 			name: "all in one",
 			args: args{ctx: context.Background(), client: resty.New(), storage: repository.NewMemStorage()},
-			assertion: func(t assert.TestingT, args args, r *defaultReporter) {
+			assertion: func(t assert.TestingT, args args, r *reporter) {
 				assert.Equal(t, args.ctx, r.context)
 				assert.Equal(t, args.client, r.client)
 				assert.Equal(t, args.storage, r.reported)
@@ -664,7 +636,7 @@ func TestNewReporter(t *testing.T) {
 	}
 }
 
-func Test_defaultReporter_sendMetric(t *testing.T) {
+func Test_reporter_sendMetric(t *testing.T) {
 	type fields struct {
 		context  context.Context
 		client   *resty.Client
@@ -683,7 +655,7 @@ func Test_defaultReporter_sendMetric(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &defaultReporter{
+			r := &reporter{
 				context:  tt.fields.context,
 				client:   tt.fields.client,
 				reported: tt.fields.reported,
@@ -693,7 +665,7 @@ func Test_defaultReporter_sendMetric(t *testing.T) {
 	}
 }
 
-func Test_defaultReporter_getSendableMetric(t *testing.T) {
+func Test_reporterdefaultReporter_getSendableMetric(t *testing.T) {
 	type fields struct {
 		context  context.Context
 		client   *resty.Client
@@ -712,7 +684,7 @@ func Test_defaultReporter_getSendableMetric(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &defaultReporter{
+			r := &reporter{
 				context:  tt.fields.context,
 				client:   tt.fields.client,
 				reported: tt.fields.reported,

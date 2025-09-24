@@ -16,25 +16,19 @@ type Reporter interface {
 	Report(metrics []model.Metric) error
 }
 
-type defaultReporter struct {
+type reporter struct {
 	context  context.Context
 	client   *resty.Client
 	reported repository.Storage
 }
 
-// NewDefaultReporter creates an instance of the default reporter
-// with in-memory internal storage.
-func NewDefaultReporter(ctx context.Context, client *resty.Client) *defaultReporter {
-	return &defaultReporter{context: ctx, client: client, reported: repository.NewMemStorage()}
-}
-
 // NewReporter creates an instance of the default reporter with
 // specified internal storage.
-func NewReporter(ctx context.Context, client *resty.Client, storage repository.Storage) *defaultReporter {
-	return &defaultReporter{context: ctx, client: client, reported: storage}
+func NewReporter(ctx context.Context, client *resty.Client, storage repository.Storage) *reporter {
+	return &reporter{context: ctx, client: client, reported: storage}
 }
 
-func (r *defaultReporter) sendMetric(metric model.Metric) error {
+func (r *reporter) sendMetric(metric model.Metric) error {
 	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, metric)
 	urlPath, err := metricOp.ToURLPath()
 	if err != nil {
@@ -55,7 +49,7 @@ func (r *defaultReporter) sendMetric(metric model.Metric) error {
 	return nil
 }
 
-func (r *defaultReporter) getSendableMetric(metric model.Metric) model.Metric {
+func (r *reporter) getSendableMetric(metric model.Metric) model.Metric {
 	reported, err := r.reported.Get(metric.Key())
 	if err != nil {
 		// This includes cases where metric was not found or a storage error;
@@ -82,7 +76,7 @@ func (r *defaultReporter) getSendableMetric(metric model.Metric) model.Metric {
 	return metric
 }
 
-func (r *defaultReporter) reportSingle(metric model.Metric) error {
+func (r *reporter) reportSingle(metric model.Metric) error {
 	sendable := r.getSendableMetric(metric)
 
 	err := r.sendMetric(sendable)
@@ -100,7 +94,7 @@ func (r *defaultReporter) reportSingle(metric model.Metric) error {
 }
 
 // Report sends incoming metrics to an upstream.
-func (r *defaultReporter) Report(metrics []model.Metric) error {
+func (r *reporter) Report(metrics []model.Metric) error {
 	var errFinal error
 	for _, m := range metrics {
 		errFinal = errors.Join(errFinal, r.reportSingle(m))
