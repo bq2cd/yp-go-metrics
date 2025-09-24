@@ -6,12 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/url"
 	"os"
 	"os/signal"
-	"regexp"
 	"syscall"
-	"time"
 
 	"github.com/bq2cd/yp-go-metrics/internal/agent"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
@@ -22,10 +19,6 @@ const (
 	defaultUpstreamURL       = "localhost:8080"
 	defaultPollIntervalSec   = 2
 	defaultReportIntervalSec = 10
-)
-
-var (
-	reURLCheck = regexp.MustCompile("^[^:/]+://.+")
 )
 
 func runAgent(ctx context.Context, cfg config.Config) error {
@@ -56,44 +49,20 @@ func parseArgs(fs *flag.FlagSet, args []string) (config.Config, error) {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
 	}
 
-	cfg := config.Config{}
-
-	// validate upstream url
-	{
-		if !reURLCheck.MatchString(upstreamURL) {
-			upstreamURL = "http://" + upstreamURL
-		}
-
-		parsed, err := url.Parse(upstreamURL)
-		if err != nil {
-			return config.Config{}, fmt.Errorf("invalid upstream url (%v)", upstreamURL)
-		}
-
-		cfg.UpstreamURL = *parsed
+	cfg, err := config.New(
+		config.UpstreamURL(upstreamURL),
+		config.PollInterval(pollInterval),
+		config.ReportInterval(reportInterval),
+	)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)
 	}
 
-	// validate poll interval
-	{
-		if pollInterval == 0 {
-			return config.Config{}, fmt.Errorf("poll interval must be non-zero")
-		}
-
-		cfg.PollInterval = time.Duration(pollInterval) * time.Second
+	if err := cfg.Validate(); err != nil {
+		return config.Config{}, fmt.Errorf("invalid config: %w", err)
 	}
 
-	// validate report interval
-	{
-		if reportInterval == 0 {
-			return config.Config{}, fmt.Errorf("report interval must be non-zero")
-		}
-		if reportInterval < pollInterval {
-			return config.Config{}, fmt.Errorf("report interval must be greater than poll interval")
-		}
-
-		cfg.ReportInterval = time.Duration(reportInterval) * time.Second
-	}
-
-	return cfg, nil
+	return *cfg, nil
 }
 
 func run(ctx context.Context, args []string, stderr io.Writer) error {

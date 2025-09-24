@@ -8,9 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
@@ -20,8 +18,8 @@ import (
 )
 
 const (
-	defaultAddress         = "localhost:8080"
-	defaultShutdownTimeout = 1 * time.Second
+	defaultAddress            = "localhost:8080"
+	defaultShutdownTimeoutSec = 1
 )
 
 func runServer(ctx context.Context, cfg config.Config) error {
@@ -36,29 +34,30 @@ func runServer(ctx context.Context, cfg config.Config) error {
 
 func parseArgs(fs *flag.FlagSet, args []string) (config.Config, error) {
 	var (
-		listenAddress string
+		listenAddress   string
+		shutdownTimeout uint
 	)
 
 	fs.StringVar(&listenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
+	fs.UintVar(&shutdownTimeout, "t", defaultShutdownTimeoutSec, "graceful shutdown timeout in seconds")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
 	}
 
-	cfg := config.Config{}
-
-	// validate listen address
-	{
-		parts := strings.Split(listenAddress, ":")
-		if len(parts) > 2 {
-			return config.Config{}, fmt.Errorf("invalid listen address")
-		}
-		cfg.ListenAddress = listenAddress
+	cfg, err := config.New(
+		config.ListenAddress(listenAddress),
+		config.ShutdownTimeout(shutdownTimeout),
+	)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)
 	}
 
-	cfg.ShutdownTimeout = defaultShutdownTimeout
+	if err := cfg.Validate(); err != nil {
+		return config.Config{}, fmt.Errorf("invalid config: %w", err)
+	}
 
-	return cfg, nil
+	return *cfg, nil
 }
 
 func run(ctx context.Context, args []string, stderr io.Writer) error {

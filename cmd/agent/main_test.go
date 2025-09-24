@@ -170,105 +170,187 @@ func (m *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func TestRun(t *testing.T) {
-	if v := os.Getenv("GITHUB_ACTIONS"); v != "" {
-		t.Skipf("this test takes too long to complete in Github actions")
+func Test_runAgent(t *testing.T) {
+	type args struct {
+		ctx context.Context
+		cfg config.Config
 	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 1_500*time.Millisecond)
-
-	m := &mockServer{}
-	m.On("ServeHTTP", mock.Anything, mock.Anything).Return()
-
-	ts := httptest.NewServer(m)
-
-	errCh := make(chan error, 1)
-
-	go func() {
-		errCh <- run(ctx, []string{"-a", ts.URL, "-p=1", "-r=1"}, os.Stderr)
-	}()
-
-	ticker := time.NewTicker(100 * time.Millisecond)
-
-	var err error
-
-loop:
-	for {
-		select {
-		case <-ticker.C:
-			if m.NumCalls() > 0 {
-				break loop
-			}
-		case <-ctx.Done():
-			break loop
-		}
+	tests := []struct {
+		name      string
+		args      args
+		assertion assert.ErrorAssertionFunc
+	}{
+		// `runAgent` is always called by `run`, so there is no
+		// need for a separate test here.
 	}
-
-	m.AssertExpectations(t)
-
-	cancel()
-
-	err = <-errCh
-	t.Logf("run finished with %v", err)
-	assert.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.assertion(t, runAgent(tt.args.ctx, tt.args.cfg))
+		})
+	}
 }
 
-func TestRun_BadArgs(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
+func Test_run(t *testing.T) {
+	type args struct {
+		stderr io.Writer
+	}
+	type setup struct {
+		contextFunc    func() (context.Context, context.CancelFunc)
+		mockServerFunc func() (*httptest.Server, *mockServer)
+		argsFunc       func(*httptest.Server) []string
+	}
+	tests := []struct {
+		name          string
+		skip          func() (bool, string)
+		args          args
+		setup         setup
+		assertionMock func(*testing.T, *mockServer)
+		assertionErr  assert.ErrorAssertionFunc
+	}{
+		{
+			name: "normal flow",
+			skip: func() (bool, string) {
+				v := (os.Getenv("GITHUB_ACTIONS") != "")
+				return v, "takes too long inside Github actions"
+			},
+			args: args{stderr: os.Stderr},
+			setup: setup{
+				contextFunc: func() (context.Context, context.CancelFunc) {
+					return context.WithTimeout(t.Context(), 1_500*time.Millisecond)
+				},
+				mockServerFunc: func() (*httptest.Server, *mockServer) {
+					m := &mockServer{}
+					m.On("ServeHTTP", mock.Anything, mock.Anything).Return()
+					ts := httptest.NewServer(m)
+					return ts, m
+				},
+				argsFunc: func(ts *httptest.Server) []string {
+					return []string{"-a", ts.URL, "-r=1", "-p=1"}
+				},
+			},
+			assertionMock: func(t *testing.T, m *mockServer) {
+				m.AssertExpectations(t)
+			},
+			assertionErr: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "signal imitation",
+			skip: func() (bool, string) {
+				v := (os.Getenv("GITHUB_ACTIONS") != "")
+				return v, "takes too long inside Github actions"
+			},
+			args: args{stderr: os.Stderr},
+			setup: setup{
+				contextFunc: func() (context.Context, context.CancelFunc) {
+					return context.WithTimeout(t.Context(), 500*time.Millisecond)
+				},
+				mockServerFunc: func() (*httptest.Server, *mockServer) {
+					m := &mockServer{}
+					m.On("ServeHTTP", mock.Anything, mock.Anything).Return()
+					ts := httptest.NewServer(m)
+					return ts, m
+				},
+				argsFunc: func(ts *httptest.Server) []string {
+					return []string{"-a", ts.URL, "-r=1", "-p=1"}
+				},
+			},
+			assertionMock: func(t *testing.T, m *mockServer) {
+				m.AssertNotCalled(t, "ServeHTTP")
+			},
+			assertionErr: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "bad args",
+			skip: func() (bool, string) {
+				return false, ""
+			},
+			args: args{stderr: io.Discard},
+			setup: setup{
+				contextFunc: func() (context.Context, context.CancelFunc) {
+					return context.WithTimeout(t.Context(), 500*time.Millisecond)
+				},
+				mockServerFunc: func() (*httptest.Server, *mockServer) {
+					m := &mockServer{}
+					m.On("ServeHTTP", mock.Anything, mock.Anything).Return()
+					ts := httptest.NewServer(m)
+					return ts, m
+				},
+				argsFunc: func(ts *httptest.Server) []string {
+					return []string{"-zzz", "gibberish"}
+				},
+			},
+			assertionMock: func(t *testing.T, m *mockServer) {
+				m.AssertNotCalled(t, "ServeHTTP")
+			},
+			assertionErr: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if ok, msg := tt.skip(); ok {
+				t.Skipf("%s", msg)
+			}
 
-	errCh := make(chan error, 1)
+			ctx, cancel := tt.setup.contextFunc()
 
-	go func() {
-		errCh <- run(ctx, []string{"-zzz", "gibberish"}, io.Discard)
-	}()
+			ts, m := tt.setup.mockServerFunc()
+			defer ts.Close()
 
-	time.Sleep(100 * time.Millisecond)
+			args := tt.setup.argsFunc(ts)
 
-	cancel()
+			errCh := make(chan error, 1)
 
-	err := <-errCh
-	t.Logf("run finished with %v", err)
-	assert.Error(t, err)
+			go func() {
+				errCh <- run(ctx, args, tt.args.stderr)
+			}()
+
+			ticker := time.NewTicker(100 * time.Millisecond)
+
+			var err error
+
+		loop:
+			for {
+				select {
+				case <-ticker.C:
+					if m.NumCalls() > 0 {
+						break loop
+					}
+				case <-ctx.Done():
+					break loop
+				}
+			}
+
+			tt.assertionMock(t, m)
+
+			cancel()
+
+			err = <-errCh
+			t.Logf("run finished with %v", err)
+
+			tt.assertionErr(t, err)
+		})
+	}
 }
 
-func TestRun_SignalImitation(t *testing.T) {
-	if v := os.Getenv("GITHUB_ACTIONS"); v != "" {
-		t.Skipf("this test takes too long to complete in Github actions")
+func Test_main(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		// `main` only calls `run` under the hood,
+		// so there's not much to test here
+		// unless we could mock `run` function;
+		// and the only way to mock it would be
+		// to assign it to a global variable.
 	}
-
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-
-	m := &mockServer{}
-
-	ts := httptest.NewServer(m)
-
-	errCh := make(chan error, 1)
-
-	go func() {
-		errCh <- run(ctx, []string{"-a", ts.URL, "-p=1", "-r=1"}, os.Stderr)
-	}()
-
-	ticker := time.NewTicker(100 * time.Millisecond)
-
-	var err error
-
-loop:
-	for {
-		select {
-		case <-ticker.C:
-			if m.NumCalls() > 0 {
-				break loop
-			}
-		case <-ctx.Done():
-			break loop
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			main()
+		})
 	}
-
-	m.AssertNotCalled(t, "ServeHTTP")
-
-	cancel()
-
-	err = <-errCh
-	t.Logf("run finished with %v", err)
-	assert.NoError(t, err)
 }
