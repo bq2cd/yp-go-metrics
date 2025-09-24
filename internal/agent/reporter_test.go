@@ -663,3 +663,61 @@ func TestNewReporter(t *testing.T) {
 		})
 	}
 }
+
+func Test_defaultReporter_sendMetric(t *testing.T) {
+	type fields struct {
+		context  context.Context
+		client   *resty.Client
+		reported repository.Storage
+	}
+	type args struct {
+		metric model.Metric
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		assertion assert.ErrorAssertionFunc
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &defaultReporter{
+				context:  tt.fields.context,
+				client:   tt.fields.client,
+				reported: tt.fields.reported,
+			}
+			tt.assertion(t, r.sendMetric(tt.args.metric))
+		})
+	}
+}
+
+func Test_defaultReporter_getSendableMetric(t *testing.T) {
+	type fields struct {
+		context  context.Context
+		client   *resty.Client
+		reported repository.Storage
+	}
+	type args struct {
+		metric model.Metric
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   model.Metric
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &defaultReporter{
+				context:  tt.fields.context,
+				client:   tt.fields.client,
+				reported: tt.fields.reported,
+			}
+			assert.Equal(t, tt.want, r.getSendableMetric(tt.args.metric))
+		})
+	}
+}

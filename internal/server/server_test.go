@@ -9,10 +9,9 @@ import (
 	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-
-	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 )
 
 type mockRouter struct {
@@ -213,6 +212,30 @@ func Test_server_Run(t *testing.T) {
 			assert.NoError(t, err)
 
 			tt.assertion(t, m, req, errCh)
+		})
+	}
+}
+
+func Test_listenerFactory_Create(t *testing.T) {
+	type args struct {
+		ctx  context.Context
+		addr string
+	}
+	tests := []struct {
+		name      string
+		f         *listenerFactory
+		args      args
+		want      net.Listener
+		assertion assert.ErrorAssertionFunc
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := &listenerFactory{}
+			got, err := f.Create(tt.args.ctx, tt.args.addr)
+			tt.assertion(t, err)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
