@@ -1,0 +1,40 @@
+package handler
+
+import (
+	"bytes"
+	"net/http"
+	"strconv"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/service"
+)
+
+type readHandler struct {
+	metrics service.Metrics
+}
+
+// ServeHTTP implements http.Handler for /value endpoint
+func (h *readHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	metrics, err := h.metrics.RetrieveAll()
+	if err != nil {
+		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("content-type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	for _, m := range metrics {
+		out := new(bytes.Buffer)
+		out.WriteString(m.ID)
+		out.WriteByte(' ')
+		switch m.Type {
+		case model.MetricTypeCounter:
+			out.WriteString(strconv.FormatInt(*m.Delta, 10))
+		default:
+			out.WriteString(strconv.FormatFloat(*m.Value, 'g', 10, 64))
+		}
+		out.WriteByte('\n')
+		_, _ = w.Write(out.Bytes())
+	}
+}
