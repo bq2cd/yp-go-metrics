@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
+	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -119,7 +121,85 @@ func Test_parseArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
 			fs.SetOutput(io.Discard)
-			got, err := parseArgs(fs, tt.args.args)
+			got, err := parseArgs(fs, tt.args.args, envparser.NewParserWithOptions(env.Options{Environment: map[string]string{}}))
+			tt.assertion(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_parseArgs_withEnv(t *testing.T) {
+	type args struct {
+		args []string
+		env  map[string]string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      config.Config
+		assertion assert.ErrorAssertionFunc
+	}{
+		{
+			name: "env overrides address",
+			args: args{
+				args: []string{"-a=localhost:9090"},
+				env:  map[string]string{"ADDRESS": "localhost:3333"},
+			},
+			want: config.Config{ListenAddress: "localhost:3333", ShutdownTimeout: defaultShutdownTimeoutSec * time.Second},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "env overrides shutdown timeout",
+			args: args{
+				args: []string{"-a=localhost:9090"},
+				env:  map[string]string{"SHUTDOWN_TIMEOUT": "21"},
+			},
+			want: config.Config{ListenAddress: "localhost:9090", ShutdownTimeout: 21 * time.Second},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "env overrides shutdown timeout 2",
+			args: args{
+				args: []string{"-a=localhost:9090", "-t=13"},
+				env:  map[string]string{"SHUTDOWN_TIMEOUT": "21"},
+			},
+			want: config.Config{ListenAddress: "localhost:9090", ShutdownTimeout: 21 * time.Second},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "env invalid shutdown timeout",
+			args: args{
+				args: []string{"-a=localhost:9090"},
+				env:  map[string]string{"SHUTDOWN_TIMEOUT": "-5"},
+			},
+			want: config.Config{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+		{
+			name: "env invalid address",
+			args: args{
+				args: []string{"-a=localhost:9090"},
+				env:  map[string]string{"ADDRESS": "123:456:789"},
+			},
+			want: config.Config{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			got, err := parseArgs(fs, tt.args.args, envparser.NewParserWithOptions(env.Options{Environment: tt.args.env}))
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
