@@ -23,20 +23,26 @@ func NewRouter(metrics service.Metrics, mux http.Handler) *router {
 		}
 	}
 
-	rt := chi.NewRouter()
+	rt := &router{mux: chi.NewRouter(), metrics: metrics}
 
-	rt.Use(middleware.Logger)
+	rt.configureChiRouter()
 
-	rt.Handle("/*", &defaultHandler{})
+	return rt
+}
 
-	rt.Method(http.MethodGet, "/", &readHandler{metrics: metrics})
-	rt.Method(http.MethodPost, "/update/*", &updateHandler{metrics: metrics})
-	rt.Method(http.MethodGet, "/value/*", &valueHandler{metrics: metrics})
-
-	return &router{
-		mux:     rt,
-		metrics: metrics,
+func (rt *router) configureChiRouter() {
+	r, ok := rt.mux.(*chi.Mux)
+	if !ok {
+		return
 	}
+
+	r.Use(middleware.Logger)
+
+	r.Handle("/*", &defaultHandler{})
+
+	r.Method(http.MethodGet, "/", &readHandler{metrics: rt.metrics})
+	r.Method(http.MethodPost, "/update/*", &updateHandler{metrics: rt.metrics})
+	r.Method(http.MethodGet, "/value/*", &valueHandler{metrics: rt.metrics})
 }
 
 // ServeHTTP implements http.Handler interface
