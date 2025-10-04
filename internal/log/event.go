@@ -20,14 +20,12 @@ func (e *eventBuilder) With(fields ...Field) EventBuilder {
 	if len(e.fields)+len(fields) >= newCap {
 		newCap += len(fields) * 2
 	}
-
 	newFields := make(FieldSet, 0, newCap)
-	copy(newFields, e.fields)
 
 	return &eventBuilder{
-		logger: e.logger.clone(),
+		logger: e.logger,
 		level:  e.level,
-		fields: append(newFields, fields...),
+		fields: append(append(newFields, e.fields...), fields...),
 	}
 }
 

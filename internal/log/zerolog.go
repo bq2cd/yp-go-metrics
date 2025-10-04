@@ -105,6 +105,7 @@ func (l *zeroLogger) with(fields ...Field) loggerImpl {
 	return newLogger
 }
 
-func (l *zeroLogger) sync() {
-	// not supported
+func (l *zeroLogger) sync() error {
+	// not supported by zerolog
+	return nil
 }

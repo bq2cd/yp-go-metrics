@@ -82,6 +82,6 @@ func (l *zapLogger) with(fields ...Field) loggerImpl {
 	}
 }
 
-func (l *zapLogger) sync() {
-	l.logger.Sync()
+func (l *zapLogger) sync() error {
+	return l.logger.Sync()
 }

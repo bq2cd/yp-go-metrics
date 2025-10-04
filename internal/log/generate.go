@@ -13,6 +13,7 @@ import (
 )
 
 var targetTypes = []codeIdent{
+	{Ident: "Any", Type: "any"},
 	{Ident: "Bool", Type: "bool"},
 	{Ident: "Int", Type: "int"},
 	{Ident: "Float", Type: "float64"},

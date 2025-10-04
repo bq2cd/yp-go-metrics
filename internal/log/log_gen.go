@@ -10,6 +10,7 @@ import (
 // Field type constants
 const (
 	_ FieldType = iota
+	FieldTypeAny
 	FieldTypeBool
 	FieldTypeInt
 	FieldTypeFloat
@@ -20,6 +21,9 @@ const (
 )
 
 // Field constructors
+func Any(key string, value any) Field {
+	return Field{Key: key, Type: FieldTypeAny, Value: value}
+}
 func Bool(key string, value bool) Field {
 	return Field{Key: key, Type: FieldTypeBool, Value: value}
 }
@@ -44,6 +48,7 @@ func Time(key string, value time.Time) Field {
 
 // EventBuilder interface
 type EventBuilder interface {
+	Any(key string, value any) EventBuilder
 	Bool(key string, value bool) EventBuilder
 	Int(key string, value int) EventBuilder
 	Float(key string, value float64) EventBuilder
@@ -57,6 +62,11 @@ type EventBuilder interface {
 }
 
 // eventBuilder methods
+
+func (e *eventBuilder) Any(key string, value any) EventBuilder {
+	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeAny, Value: value})
+	return e
+}
 
 func (e *eventBuilder) Bool(key string, value bool) EventBuilder {
 	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeBool, Value: value})

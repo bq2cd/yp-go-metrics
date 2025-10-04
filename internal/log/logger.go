@@ -19,7 +19,7 @@ type Logger interface {
 	Debug() EventBuilder
 
 	With(fields ...Field) Logger
-	Sync()
+	Sync() error
 }
 
 // loggerImpl is an internal abstraction over logging implementation
@@ -27,7 +27,7 @@ type loggerImpl interface {
 	clone() loggerImpl
 	log(lvl Level, msg string, fields ...Field)
 	with(fields ...Field) loggerImpl
-	sync()
+	sync() error
 }
 
 type baseLogger struct {
@@ -56,6 +56,6 @@ func (l *baseLogger) With(fields ...Field) Logger {
 	}
 }
 
-func (l *baseLogger) Sync() {
-	l.impl.sync()
+func (l *baseLogger) Sync() error {
+	return l.impl.sync()
 }
