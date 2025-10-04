@@ -47,44 +47,6 @@ func (m *mockLoggerImpl) sync() error {
 	return nil
 }
 
-type mockLogger struct {
-	mock.Mock
-}
-
-func (m *mockLogger) Fatal() EventBuilder {
-	m.Called()
-	return newEventBuilder(&mockLoggerImpl{}, LevelFatal)
-}
-
-func (m *mockLogger) Error() EventBuilder {
-	m.Called()
-	return newEventBuilder(&mockLoggerImpl{}, LevelError)
-}
-
-func (m *mockLogger) Info() EventBuilder {
-	m.Called()
-	return newEventBuilder(&mockLoggerImpl{}, LevelInfo)
-}
-
-func (m *mockLogger) Debug() EventBuilder {
-	m.Called()
-	return newEventBuilder(&mockLoggerImpl{}, LevelDebug)
-}
-
-func (m *mockLogger) With(fields ...Field) Logger {
-	args := make([]any, len(fields))
-	for i, f := range fields {
-		args[i] = f
-	}
-	m.Called(args...)
-	return m
-}
-
-func (m *mockLogger) Sync() error {
-	m.Called()
-	return nil
-}
-
 func Test_baseLogger_Fatal(t *testing.T) {
 	type fields struct {
 		impl *mockLoggerImpl

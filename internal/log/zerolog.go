@@ -5,6 +5,7 @@ import (
 	"maps"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -70,27 +71,38 @@ func convertFieldToZeroEvent(evt *zerolog.Event, field Field) *zerolog.Event {
 }
 
 type zeroLogger struct {
+	mu          sync.RWMutex
 	logger      zerolog.Logger
 	fieldsByKey map[string]Field
 }
 
 func (l *zeroLogger) addFields(fields ...Field) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	for _, f := range fields {
 		l.fieldsByKey[f.Key] = f
 	}
 }
 
 func (l *zeroLogger) log(lvl Level, msg string, fields ...Field) {
-	l.addFields(fields...)
+	l.mu.RLock()
+	mergedFields := make(map[string]Field, len(l.fieldsByKey)+len(fields))
+	maps.Copy(mergedFields, l.fieldsByKey)
+	l.mu.RUnlock()
+	for _, f := range fields {
+		mergedFields[f.Key] = f
+	}
 	zlvl := convertLevelToZero(lvl)
 	evt := l.logger.WithLevel(zlvl).Timestamp().Caller()
-	for _, f := range l.fieldsByKey {
+	for _, f := range mergedFields {
 		evt = convertFieldToZeroEvent(evt, f)
 	}
 	evt.Msg(msg)
 }
 
 func (l *zeroLogger) clone() loggerImpl {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 	newLogger := &zeroLogger{
 		logger:      l.logger.With().Logger(),
 		fieldsByKey: make(map[string]Field, len(l.fieldsByKey)*2),

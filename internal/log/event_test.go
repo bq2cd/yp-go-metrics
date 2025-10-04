@@ -281,3 +281,53 @@ func Test_eventBuilder_Send(t *testing.T) {
 		})
 	}
 }
+
+func Test_eventBuilder_addField(t *testing.T) {
+	type fields struct {
+		fields FieldSet
+	}
+	type args struct {
+		field Field
+	}
+	type want struct {
+		fields FieldSet
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   want
+	}{
+		// TODO: Add test cases.
+		{
+			name:   "empty fields",
+			fields: fields{fields: FieldSet{}},
+			args:   args{field: Int("i1", 123)},
+			want: want{fields: FieldSet{
+				Int("i1", 123),
+			}},
+		},
+		{
+			name: "pre-existing fields",
+			fields: fields{fields: FieldSet{
+				Int("i1", 89),
+				Str("s1", "not yet"),
+			}},
+			args: args{field: Int("i1", 123)},
+			want: want{fields: FieldSet{
+				Int("i1", 89),
+				Str("s1", "not yet"),
+				Int("i1", 123),
+			}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &eventBuilder{
+				fields: tt.fields.fields,
+			}
+			e.addField(tt.args.field)
+			assert.ElementsMatch(t, tt.want.fields, e.fields)
+		})
+	}
+}

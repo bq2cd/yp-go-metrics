@@ -70,7 +70,7 @@ type EventBuilder interface {
 {{- range .Types }}
 
 func (e *eventBuilder) {{.Ident}}(key string, value {{.Type}}) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldType{{.Ident}}, Value: value})
+	e.addField(Field{Key: key, Type: FieldType{{.Ident}}, Value: value})
 	return e
 }
 

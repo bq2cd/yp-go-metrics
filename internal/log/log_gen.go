@@ -64,41 +64,41 @@ type EventBuilder interface {
 // eventBuilder methods
 
 func (e *eventBuilder) Any(key string, value any) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeAny, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeAny, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Bool(key string, value bool) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeBool, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeBool, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Int(key string, value int) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeInt, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeInt, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Float(key string, value float64) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeFloat, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeFloat, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Str(key string, value string) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeStr, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeStr, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Err(key string, value error) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeErr, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeErr, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Dur(key string, value time.Duration) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeDur, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeDur, Value: value})
 	return e
 }
 
 func (e *eventBuilder) Time(key string, value time.Time) EventBuilder {
-	e.fields = append(e.fields, Field{Key: key, Type: FieldTypeTime, Value: value})
+	e.addField(Field{Key: key, Type: FieldTypeTime, Value: value})
 	return e
 }

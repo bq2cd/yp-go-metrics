@@ -254,7 +254,9 @@ func Test_zeroLogger_log(t *testing.T) {
 		name   string
 		fields fields
 		args   args
+		args2  args
 		want   want
+		want2  want
 	}{
 		{
 			name: "debug level logs debug msg",
@@ -375,6 +377,41 @@ func Test_zeroLogger_log(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "multiple fields 2-phase",
+			fields: fields{
+				level:       zerolog.InfoLevel,
+				fieldsByKey: map[string]Field{},
+			},
+			args: args{
+				lvl:    LevelInfo,
+				msg:    "a message",
+				fields: FieldSet{Int("i1", 123), Dur("d1", 5*time.Second), Bool("b1", true)},
+			},
+			want: want{
+				logEntry: map[string]any{
+					"level": "info",
+					"msg":   "a message",
+					"i1":    float64(123),
+					"d1":    float64(5000),
+					"b1":    true,
+				},
+			},
+			args2: args{
+				lvl:    LevelInfo,
+				msg:    "a message 2",
+				fields: FieldSet{Int("i2", 123456), Dur("d2", 15*time.Second), Bool("b2", false)},
+			},
+			want2: want{
+				logEntry: map[string]any{
+					"level": "info",
+					"msg":   "a message 2",
+					"i2":    float64(123456),
+					"d2":    float64(15000),
+					"b2":    false,
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -391,12 +428,26 @@ func Test_zeroLogger_log(t *testing.T) {
 				return
 			}
 
-			var got map[string]any
+			got := map[string]any{}
 			err := json.Unmarshal(buf.Bytes(), &got)
 			assert.NoError(t, err)
 			delete(got, "caller")
 			delete(got, "ts")
 			assert.Equal(t, tt.want.logEntry, got)
+
+			if len(tt.args2.fields) == 0 && tt.args2.msg == "" {
+				return
+			}
+			buf.Reset()
+
+			l.log(tt.args2.lvl, tt.args2.msg, tt.args2.fields...)
+
+			got = map[string]any{}
+			err = json.Unmarshal(buf.Bytes(), &got)
+			assert.NoError(t, err)
+			delete(got, "caller")
+			delete(got, "ts")
+			assert.Equal(t, tt.want2.logEntry, got)
 		})
 	}
 }
