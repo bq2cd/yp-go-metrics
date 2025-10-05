@@ -1,12 +1,18 @@
 package log
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
+	"io"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -172,6 +178,51 @@ func Test_convertFieldToZap(t *testing.T) {
 			assert.Equal(t, tt.want, convertFieldToZap(tt.args.field))
 		})
 	}
+}
+
+func Test_zapLogger_logFatal_exit(t *testing.T) {
+	if os.Getenv("TEST_ZAP_LOGGER_LOG_FATAL") != "1" {
+		return
+	}
+
+	logger := zap.Must(
+		zap.Config{
+			Level:             zap.NewAtomicLevelAt(zap.FatalLevel),
+			DisableCaller:     true,
+			DisableStacktrace: true,
+			Encoding:          "json",
+			EncoderConfig:     zap.NewProductionEncoderConfig(),
+			OutputPaths:       []string{"stderr"},
+		}.Build(),
+	)
+
+	l := &zapLogger{
+		logger: logger,
+	}
+
+	l.log(LevelFatal, "oops!", Bool("crashed", true))
+}
+
+func Test_zapLogger_logFatal(t *testing.T) {
+	var buf bytes.Buffer
+
+	cmd := exec.Command(os.Args[0], "-test.run=Test_zapLogger_logFatal_exit")
+	cmd.Env = append(os.Environ(), "TEST_ZAP_LOGGER_LOG_FATAL=1")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &buf
+
+	err := cmd.Run()
+
+	require.IsType(t, &exec.ExitError{}, err)
+	status := err.(*exec.ExitError)
+
+	assert.Equal(t, 1, status.ExitCode())
+
+	var got map[string]any
+	err = json.Unmarshal(buf.Bytes(), &got)
+	assert.NoError(t, err)
+	delete(got, "ts")
+	assert.Equal(t, map[string]any{"level": "fatal", "msg": "oops!", "crashed": true}, got)
 }
 
 func Test_zapLogger_log(t *testing.T) {

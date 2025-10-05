@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewZeroLogger(t *testing.T) {
@@ -234,6 +237,42 @@ func Test_zeroLogger_addFields(t *testing.T) {
 			assert.Equal(t, tt.want.fieldsByKey, l.fieldsByKey)
 		})
 	}
+}
+
+func Test_zeroLogger_logFatal_exit(t *testing.T) {
+	if os.Getenv("TEST_ZERO_LOGGER_LOG_FATAL") != "1" {
+		return
+	}
+
+	l := &zeroLogger{
+		logger:      zerolog.New(os.Stderr).Level(zerolog.FatalLevel),
+		fieldsByKey: map[string]Field{},
+	}
+
+	l.log(LevelFatal, "oops!", Bool("crashed", true))
+}
+
+func Test_zeroLogger_logFatal(t *testing.T) {
+	var buf bytes.Buffer
+
+	cmd := exec.Command(os.Args[0], "-test.run=Test_zeroLogger_logFatal_exit")
+	cmd.Env = append(os.Environ(), "TEST_ZERO_LOGGER_LOG_FATAL=1")
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &buf
+
+	err := cmd.Run()
+
+	require.IsType(t, &exec.ExitError{}, err)
+	status := err.(*exec.ExitError)
+
+	assert.Equal(t, 1, status.ExitCode())
+
+	var got map[string]any
+	err = json.Unmarshal(buf.Bytes(), &got)
+	assert.NoError(t, err)
+	delete(got, "caller")
+	delete(got, "ts")
+	assert.Equal(t, map[string]any{"level": "fatal", "msg": "oops!", "crashed": true}, got)
 }
 
 func Test_zeroLogger_log(t *testing.T) {

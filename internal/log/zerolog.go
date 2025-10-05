@@ -93,7 +93,14 @@ func (l *zeroLogger) log(lvl Level, msg string, fields ...Field) {
 		mergedFields[f.Key] = f
 	}
 	zlvl := convertLevelToZero(lvl)
-	evt := l.logger.WithLevel(zlvl).Timestamp().Caller()
+	var evt *zerolog.Event
+	if lvl == LevelFatal {
+		// we have to use `Fatal()` method as `WithLevel()` will not call `os.Exit` by design
+		evt = l.logger.Fatal()
+	} else {
+		evt = l.logger.WithLevel(zlvl)
+	}
+	evt = evt.Timestamp().Caller()
 	for _, f := range mergedFields {
 		evt = convertFieldToZeroEvent(evt, f)
 	}
