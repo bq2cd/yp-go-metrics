@@ -46,8 +46,8 @@ func Time(key string, value time.Time) Field {
 	return Field{Key: key, Type: FieldTypeTime, Value: value}
 }
 
-// EventBuilder interface
-type EventBuilder interface {
+// EventFieldAdder interface for adding fields to EventBuilder
+type EventFieldAdder interface {
 	Any(key string, value any) EventBuilder
 	Bool(key string, value bool) EventBuilder
 	Int(key string, value int) EventBuilder
@@ -56,12 +56,9 @@ type EventBuilder interface {
 	Err(key string, value error) EventBuilder
 	Dur(key string, value time.Duration) EventBuilder
 	Time(key string, value time.Time) EventBuilder
-	With(fields ...Field) EventBuilder
-	Msg(msg string)
-	Send()
 }
 
-// eventBuilder methods
+// eventBuilder methods to implement EventFieldAdder
 
 func (e *eventBuilder) Any(key string, value any) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeAny, Value: value})

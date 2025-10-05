@@ -2,6 +2,14 @@ package log
 
 import "sync"
 
+type EventBuilder interface {
+	EventFieldAdder
+
+	With(fields ...Field) EventBuilder
+	Msg(msg string)
+	Send()
+}
+
 type eventBuilder struct {
 	mu     sync.RWMutex
 	logger loggerImpl

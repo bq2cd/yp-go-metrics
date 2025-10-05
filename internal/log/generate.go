@@ -55,18 +55,15 @@ func {{.Ident}}(key string, value {{.Type}}) Field {
 {{- end }}
 
 
-// EventBuilder interface
-type EventBuilder interface {
+// EventFieldAdder interface for adding fields to EventBuilder
+type EventFieldAdder interface {
 	{{- range .Types }}
 	{{.Ident}}(key string, value {{.Type}}) EventBuilder
 	{{- end }}
-	With(fields ...Field) EventBuilder
-	Msg(msg string)
-	Send()
 }
 
 
-// eventBuilder methods
+// eventBuilder methods to implement EventFieldAdder
 {{- range .Types }}
 
 func (e *eventBuilder) {{.Ident}}(key string, value {{.Type}}) EventBuilder {
