@@ -5,12 +5,14 @@ import (
 	"sync"
 )
 
+type TestLogEventSet []TestLogEvent
+
 // TestLogger extends regular Logger interface with extra method:
 // `RecordedEvents()`.
 // Its primary purpose is to be used in tests to record logging events.
 type TestLogger interface {
 	Logger
-	RecordedEvents() []TestLogEvent
+	RecordedEvents() TestLogEventSet
 }
 
 // TestLogEvent represents a logging event with essential
@@ -21,6 +23,7 @@ type TestLogEvent interface {
 	Level() Level
 	Message() string
 	Fields() FieldSet
+	ContainsFields(subset ...Field) bool
 }
 
 // NewTestLogger returns an instance of a special logger with the purpose of being used in tests.
@@ -47,8 +50,18 @@ type testLogger struct {
 }
 
 // RecordedEvents returns a slice of the recorded log events.
-func (l *testLogger) RecordedEvents() []TestLogEvent {
+func (l *testLogger) RecordedEvents() TestLogEventSet {
 	return l.recorder.recordedEvents()
+}
+
+// With returns a new instance of TestLogger with provided fields.
+func (l *testLogger) With(fields ...Field) Logger {
+	return &testLogger{
+		baseLogger: &baseLogger{
+			impl: l.impl.with(fields...),
+		},
+		recorder: l.recorder,
+	}
 }
 
 type testLogEvent struct {
@@ -70,6 +83,12 @@ func (e testLogEvent) Message() string {
 // Fields returns a slice of extra fields of the event.
 func (e testLogEvent) Fields() FieldSet {
 	return e.fields
+}
+
+// ContainsFields returns true if all fields from the subset are
+// present in the current event's fields.
+func (e testLogEvent) ContainsFields(subset ...Field) bool {
+	return e.fields.containsSubset(subset)
 }
 
 type testLogEventRecorder struct {
@@ -141,4 +160,22 @@ func (l *testLoggerImpl) with(fields ...Field) loggerImpl {
 
 func (l *testLoggerImpl) sync() error {
 	return nil
+}
+
+// FindMatchingEvents returns a slice of the events that have matching level, message and
+// provided subset of fields.
+func (es TestLogEventSet) FindMatchingEvents(lvl Level, msg string, fields ...Field) TestLogEventSet {
+	found := make(TestLogEventSet, 0, len(es))
+	for _, e := range es {
+		if e.Level() != lvl {
+			continue
+		}
+		if e.Message() != msg {
+			continue
+		}
+		if e.ContainsFields(fields...) {
+			found = append(found, e)
+		}
+	}
+	return found
 }

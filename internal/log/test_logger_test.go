@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewTestLogger(t *testing.T) {
@@ -43,7 +44,7 @@ func Test_testLogger_RecordedEvents(t *testing.T) {
 	tests := []struct {
 		name   string
 		fields fields
-		want   []TestLogEvent
+		want   TestLogEventSet
 	}{
 		{
 			name: "no events",
@@ -1030,6 +1031,353 @@ func Test_testLoggerImpl_sync(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func Test_testLogger_With(t *testing.T) {
+	type fields struct {
+		baseLogger *baseLogger
+		recorder   *testLogEventRecorder
+	}
+	type args struct {
+		fields FieldSet
+	}
+	type want struct {
+		fields FieldSet
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		want      want
+		assertion func(*testing.T, fields, want, Logger)
+	}{
+		{
+			name: "default",
+			fields: fields{
+				baseLogger: &baseLogger{
+					impl: &testLoggerImpl{},
+				},
+				recorder: &testLogEventRecorder{},
+			},
+			args: args{
+				fields: FieldSet{Int("i1", 123)},
+			},
+			want: want{
+				fields: FieldSet{Int("i1", 123)},
+			},
+			assertion: func(t *testing.T, fields fields, want want, got Logger) {
+				require.IsType(t, &testLogger{}, got)
+				l := got.(*testLogger)
+				assert.NotEqual(t, fields.baseLogger, l.baseLogger)
+				assert.Equal(t, fields.recorder, l.recorder)
+				require.IsType(t, &testLoggerImpl{}, l.impl)
+				impl := l.impl.(*testLoggerImpl)
+				assert.Equal(t, want.fields.ToMap(), impl.fieldsByKey)
+				assert.Len(t, fields.baseLogger.impl.(*testLoggerImpl).fieldsByKey, 0)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := &testLogger{
+				baseLogger: tt.fields.baseLogger,
+				recorder:   tt.fields.recorder,
+			}
+			tt.assertion(t, tt.fields, tt.want, l.With(tt.args.fields...))
+		})
+	}
+}
+
+func Test_testLogEvent_ContainsFields(t *testing.T) {
+	type fields struct {
+		level   Level
+		message string
+		fields  FieldSet
+	}
+	type args struct {
+		subset []Field
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := testLogEvent{
+				level:   tt.fields.level,
+				message: tt.fields.message,
+				fields:  tt.fields.fields,
+			}
+			assert.Equal(t, tt.want, e.ContainsFields(tt.args.subset...))
+		})
+	}
+}
+
+func TestTestLogEventSet_FindMatchingEvents(t *testing.T) {
+	type args struct {
+		lvl    Level
+		msg    string
+		fields []Field
+	}
+	tests := []struct {
+		name string
+		es   TestLogEventSet
+		args args
+		want TestLogEventSet
+	}{
+		{
+			name: "empty set, no match",
+			es:   TestLogEventSet{},
+			args: args{
+				lvl:    LevelDebug,
+				msg:    "not found",
+				fields: FieldSet{},
+			},
+			want: TestLogEventSet{},
+		},
+		{
+			name: "no match",
+			es: TestLogEventSet{
+				testLogEvent{
+					level:   LevelError,
+					message: "msg error",
+					fields: FieldSet{
+						Int("i1", 123),
+						Float("f1", 1.23),
+					},
+				},
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+			},
+			args: args{
+				lvl:    LevelDebug,
+				msg:    "not found",
+				fields: FieldSet{},
+			},
+			want: TestLogEventSet{},
+		},
+		{
+			name: "no match 2",
+			es: TestLogEventSet{
+				testLogEvent{
+					level:   LevelError,
+					message: "msg error",
+					fields: FieldSet{
+						Int("i1", 123),
+						Float("f1", 1.23),
+					},
+				},
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+			},
+			args: args{
+				lvl: LevelInfo,
+				msg: "msg info",
+				fields: FieldSet{
+					Int("i1", 789),
+				},
+			},
+			want: TestLogEventSet{},
+		},
+		{
+			name: "no match 3",
+			es: TestLogEventSet{
+				testLogEvent{
+					level:   LevelError,
+					message: "msg error",
+					fields: FieldSet{
+						Int("i1", 123),
+						Float("f1", 1.23),
+					},
+				},
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+			},
+			args: args{
+				lvl: LevelInfo,
+				msg: "no way!",
+				fields: FieldSet{
+					Int("i1", 789),
+				},
+			},
+			want: TestLogEventSet{},
+		},
+		{
+			name: "full match",
+			es: TestLogEventSet{
+				testLogEvent{
+					level:   LevelError,
+					message: "msg error",
+					fields: FieldSet{
+						Int("i1", 123),
+						Float("f1", 1.23),
+					},
+				},
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+				testLogEvent{
+					level:   LevelDebug,
+					message: "msg debug",
+					fields: FieldSet{
+						Int("i1", 789),
+						Float("f1", -1.23),
+					},
+				},
+			},
+			args: args{
+				lvl: LevelInfo,
+				msg: "msg info",
+				fields: FieldSet{
+					Float("f1", 4.56),
+					Int("i1", 456),
+				},
+			},
+			want: TestLogEventSet{
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+			},
+		},
+		{
+			name: "partial match",
+			es: TestLogEventSet{
+				testLogEvent{
+					level:   LevelError,
+					message: "msg error",
+					fields: FieldSet{
+						Int("i1", 123),
+						Float("f1", 1.23),
+					},
+				},
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+				testLogEvent{
+					level:   LevelDebug,
+					message: "msg debug",
+					fields: FieldSet{
+						Int("i1", 789),
+						Float("f1", -1.23),
+						Str("x1", "a needle"),
+						Float("f3", 0.33),
+					},
+				},
+			},
+			args: args{
+				lvl: LevelDebug,
+				msg: "msg debug",
+				fields: FieldSet{
+					Str("x1", "a needle"),
+				},
+			},
+			want: TestLogEventSet{
+				testLogEvent{
+					level:   LevelDebug,
+					message: "msg debug",
+					fields: FieldSet{
+						Int("i1", 789),
+						Float("f1", -1.23),
+						Str("x1", "a needle"),
+						Float("f3", 0.33),
+					},
+				},
+			},
+		},
+		{
+			name: "partial match 2",
+			es: TestLogEventSet{
+				testLogEvent{
+					level:   LevelError,
+					message: "msg error",
+					fields: FieldSet{
+						Int("i1", 123),
+						Float("f1", 1.23),
+					},
+				},
+				testLogEvent{
+					level:   LevelInfo,
+					message: "msg info",
+					fields: FieldSet{
+						Int("i1", 456),
+						Float("f1", 4.56),
+					},
+				},
+				testLogEvent{
+					level:   LevelDebug,
+					message: "msg debug",
+					fields: FieldSet{
+						Int("i1", 789),
+						Float("f1", -1.23),
+						Str("x1", "a needle"),
+						Float("f3", 0.33),
+					},
+				},
+			},
+			args: args{
+				lvl: LevelDebug,
+				msg: "msg debug",
+				fields: FieldSet{
+					Str("x1", "a needle"),
+					Int("i1", 789),
+				},
+			},
+			want: TestLogEventSet{
+				testLogEvent{
+					level:   LevelDebug,
+					message: "msg debug",
+					fields: FieldSet{
+						Int("i1", 789),
+						Float("f1", -1.23),
+						Str("x1", "a needle"),
+						Float("f3", 0.33),
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.es.FindMatchingEvents(tt.args.lvl, tt.args.msg, tt.args.fields...))
 		})
 	}
 }
