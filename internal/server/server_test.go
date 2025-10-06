@@ -9,6 +9,7 @@ import (
 	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -48,6 +49,7 @@ func (l *faultyListener) Addr() net.Addr { return &net.TCPAddr{IP: net.IPv4zero,
 
 func TestNewServer(t *testing.T) {
 	type args struct {
+		logger log.Logger
 		ctx    context.Context
 		cfg    config.Config
 		router http.Handler
@@ -61,7 +63,20 @@ func TestNewServer(t *testing.T) {
 			name: "no args",
 			args: args{},
 			assertion: func(t assert.TestingT, args args, s *server) {
+				assert.NotNil(t, s.logger)
+				assert.Equal(t, log.NewNoopLogger(), s.logger)
 				assert.Nil(t, s.context)
+				assert.Equal(t, config.Config{}, s.config)
+				assert.Nil(t, s.router)
+				assert.NotNil(t, s.lnFactory)
+				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
+			},
+		},
+		{
+			name: "logger only",
+			args: args{logger: log.NewTestLogger()},
+			assertion: func(t assert.TestingT, args args, s *server) {
+				assert.Implements(t, (*log.TestLogger)(nil), s.logger)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
 				assert.NotNil(t, s.lnFactory)
@@ -93,7 +108,7 @@ func TestNewServer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewServer(tt.args.ctx, tt.args.cfg, tt.args.router))
+			tt.assertion(t, tt.args, NewServer(tt.args.logger, tt.args.ctx, tt.args.cfg, tt.args.router))
 		})
 	}
 }
@@ -193,6 +208,7 @@ func Test_server_Run(t *testing.T) {
 			defer cancel()
 
 			s := &server{
+				logger:    log.NewNoopLogger(),
 				context:   ctx,
 				config:    tt.fields.config,
 				router:    tt.fields.router,

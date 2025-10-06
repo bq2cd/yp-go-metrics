@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
@@ -19,6 +20,7 @@ import (
 
 func TestNewRouter(t *testing.T) {
 	type args struct {
+		logger  log.Logger
 		metrics service.Metrics
 		mux     http.Handler
 	}
@@ -34,7 +36,7 @@ func TestNewRouter(t *testing.T) {
 	}{
 		{
 			name: "new router with mux=nil",
-			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: nil},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetrics(repository.NewMemStorage()), mux: nil},
 			want: want{
 				routes: map[string]string{
 					"/":         "GET",
@@ -54,6 +56,7 @@ func TestNewRouter(t *testing.T) {
 				},
 			},
 			assertion: func(rt *router, want want) bool {
+				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*chi.Router)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
@@ -67,8 +70,9 @@ func TestNewRouter(t *testing.T) {
 		},
 		{
 			name: "new router with mux=NewServeMux()",
-			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: http.NewServeMux()},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetrics(repository.NewMemStorage()), mux: http.NewServeMux()},
 			assertion: func(rt *router, want want) bool {
+				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*http.Handler)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
@@ -78,8 +82,9 @@ func TestNewRouter(t *testing.T) {
 		},
 		{
 			name: "new router with mux=chi.NewRouter()",
-			args: args{metrics: service.NewMetrics(repository.NewMemStorage()), mux: chi.NewRouter()},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetrics(repository.NewMemStorage()), mux: chi.NewRouter()},
 			assertion: func(rt *router, want want) bool {
+				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*http.Handler)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
@@ -90,7 +95,7 @@ func TestNewRouter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.True(t, tt.assertion(NewRouter(tt.args.metrics, tt.args.mux), tt.want))
+			assert.True(t, tt.assertion(NewRouter(tt.args.logger, tt.args.metrics, tt.args.mux), tt.want))
 		})
 	}
 }
@@ -241,7 +246,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 			for _, m := range tt.args.metrics {
 				require.NoError(t, stor.Set(m))
 			}
-			rt := NewRouter(service.NewMetrics(stor), nil)
+			logger := log.NewTestLogger()
+			rt := NewRouter(logger, service.NewMetrics(stor), nil)
 			ts := httptest.NewServer(rt)
 			defer ts.Close()
 
@@ -258,7 +264,55 @@ func Test_router_ServeHTTP(t *testing.T) {
 			assert.Equal(t, tt.args.url, resp.Request.URL.Path)
 			assert.Equal(t, tt.want.code, resp.StatusCode)
 			tt.assertion(t, tt.want, string(body))
+
+			events := logger.RecordedEvents()
+			assert.GreaterOrEqual(t, len(events), 1)
+			t.Logf("log events: %v", events)
+			t.Logf("req url: %v, resp url: %v", req.URL, resp.Request.URL)
+			found := events.FindMatchingEvents(
+				log.LevelInfo, "processed request",
+				log.Str("uri", resp.Request.URL.Path),
+				log.Str("method", tt.args.method),
+				log.Int("status", resp.StatusCode),
+			)
+			require.Len(t, found, 1)
+			e := found[0]
+			assert.NotNil(t, e.Fields().GetFieldByKey("size"))
+			assert.NotNil(t, e.Fields().GetFieldByKey("duration"))
+			assert.NotNil(t, e.Fields().GetFieldByKey("request_id"))
 		})
 	}
 
+}
+
+func Test_router_configureChiRouter(t *testing.T) {
+	type fields struct {
+		logger  log.Logger
+		mux     http.Handler
+		metrics service.Metrics
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// other cases are covered by `TestNewRouter`
+		{
+			name: "ignore non-chi mux",
+			fields: fields{
+				logger:  log.NewNoopLogger(),
+				mux:     http.NewServeMux(),
+				metrics: service.NewMetrics(repository.NewMemStorage()),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := &router{
+				logger:  tt.fields.logger,
+				mux:     tt.fields.mux,
+				metrics: tt.fields.metrics,
+			}
+			rt.configureChiRouter()
+		})
+	}
 }

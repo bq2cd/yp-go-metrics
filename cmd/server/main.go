@@ -5,14 +5,16 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"log"
+	stdlog "log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	applogger "github.com/bq2cd/yp-go-metrics/internal/app/logger"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
+	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/server"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
@@ -28,12 +30,12 @@ type cliOptions struct {
 	ShutdownTimeout uint   `env:"SHUTDOWN_TIMEOUT"`
 }
 
-func runServer(ctx context.Context, cfg config.Config) error {
+func runServer(logger log.Logger, ctx context.Context, cfg config.Config) error {
 	storage := repository.NewMemStorage()
 	svc := service.NewMetrics(storage)
-	router := handler.NewRouter(svc, nil)
+	router := handler.NewRouter(logger, svc, nil)
 
-	srv := server.NewServer(ctx, cfg, router)
+	srv := server.NewServer(logger, ctx, cfg, router)
 
 	return srv.Run()
 }
@@ -76,10 +78,12 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 		return fmt.Errorf("failed to parse args: %w", err)
 	}
 
+	logger := applogger.NewProduction()
+
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	err = runServer(ctx, cfg)
+	err = runServer(logger, ctx, cfg)
 	<-ctx.Done()
 
 	return err
@@ -88,6 +92,6 @@ func run(ctx context.Context, args []string, stderr io.Writer) error {
 func main() {
 	err := run(context.Background(), os.Args[1:], os.Stderr)
 	if err != nil {
-		log.Fatalf("failed to start server: %v", err)
+		stdlog.Fatalf("failed to start server: %v", err)
 	}
 }

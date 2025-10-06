@@ -3,11 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/log"
 )
 
 // ListenerFactory abstracts a way to create a new listener.
@@ -29,6 +29,7 @@ func (f *listenerFactory) Create(ctx context.Context, addr string) (net.Listener
 }
 
 type server struct {
+	logger    log.Logger
 	context   context.Context
 	config    config.Config
 	router    http.Handler
@@ -36,14 +37,24 @@ type server struct {
 }
 
 // NewServer creates an instance of a server worker.
-func NewServer(ctx context.Context, cfg config.Config, router http.Handler) *server {
-	return &server{context: ctx, config: cfg, router: router, lnFactory: &listenerFactory{}}
+func NewServer(logger log.Logger, ctx context.Context, cfg config.Config, router http.Handler) *server {
+	l := logger
+	if l == nil {
+		l = log.NewNoopLogger()
+	}
+	return &server{
+		logger:    l.With(log.Str("subsystem", "server")),
+		context:   ctx,
+		config:    cfg,
+		router:    router,
+		lnFactory: &listenerFactory{},
+	}
 }
 
 // Run launches main loop of the server worker:
 // listening on provided address and serving incoming HTTP requests.
 func (s *server) Run() error {
-	log.Printf("listening on %v", s.config.ListenAddress)
+	s.logger.Info().Str("address", s.config.ListenAddress).Msg("listening for incoming connections")
 
 	ln, err := s.lnFactory.Create(s.context, s.config.ListenAddress)
 	if err != nil {
@@ -76,7 +87,7 @@ func (s *server) Run() error {
 	case err := <-errCh:
 		return err
 	case <-s.context.Done():
-		log.Printf("shutting down within %v", s.config.ShutdownTimeout)
+		s.logger.Info().Dur("timeout", s.config.ShutdownTimeout).Msg("shutting down gracefully")
 		ctx, cancel := context.WithTimeout(baseCtx, s.config.ShutdownTimeout)
 		defer cancel()
 		return srv.Shutdown(ctx)

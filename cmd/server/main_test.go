@@ -12,6 +12,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
@@ -221,7 +222,7 @@ func Test_runServer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, runServer(tt.args.ctx, tt.args.cfg))
+			tt.assertion(t, runServer(log.NewNoopLogger(), tt.args.ctx, tt.args.cfg))
 		})
 	}
 }

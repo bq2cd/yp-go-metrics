@@ -24,6 +24,7 @@ func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// ok
 		default:
 			http.Error(w, "", http.StatusBadRequest)
+			return
 		}
 	case urlpath.ErrMissingMetricID:
 		http.Error(w, "", http.StatusNotFound)
