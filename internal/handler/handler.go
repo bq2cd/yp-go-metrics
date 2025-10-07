@@ -26,3 +26,8 @@ func (c contentType) applyToResponse(w http.ResponseWriter) {
 	}
 	w.Header().Set(_contentTypeHeaderKey, string(c))
 }
+
+func (c contentType) matchesRequest(r *http.Request) bool {
+	target := contentType(r.Header.Get(_contentTypeHeaderKey))
+	return target == c
+}

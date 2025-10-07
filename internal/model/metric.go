@@ -1,6 +1,8 @@
 package model
 
 const (
+	_metricTypeEmpty = MetricType("")
+
 	// MetricTypeCounter defines a counter type
 	MetricTypeCounter = MetricType("counter")
 
@@ -27,6 +29,17 @@ type MetricKey struct {
 // NewMetricKey is a convenience function to create a MetricKey struct instance.
 func NewMetricKey(mType MetricType, mID string) MetricKey {
 	return MetricKey{Type: mType, ID: mID}
+}
+
+// Empty returns true if either type or id or both are missing
+func (k MetricKey) Empty() bool {
+	if k.Type == _metricTypeEmpty {
+		return true
+	}
+	if k.ID == "" {
+		return true
+	}
+	return false
 }
 
 // Metric defines a basic data structure to store metric values and metadata.

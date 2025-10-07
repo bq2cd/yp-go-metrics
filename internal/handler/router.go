@@ -51,10 +51,10 @@ func (rt *router) configureChiRouter() {
 
 	r.Method(http.MethodGet, "/", &readHandler{metrics: rt.metrics})
 
-	r.Method(http.MethodPost, "/update", &updateJSONHandler{metrics: rt.metrics})
+	r.Method(http.MethodPost, "/update", &updateJSONHandler{logger: rt.logger, metrics: rt.metrics})
 	r.Method(http.MethodPost, "/update/*", &updateHandler{metrics: rt.metrics})
 
-	r.Method(http.MethodPost, "/value", &valueJSONHandler{metrics: rt.metrics})
+	r.Method(http.MethodPost, "/value", &valueJSONHandler{logger: rt.logger, metrics: rt.metrics})
 	r.Method(http.MethodGet, "/value/*", &valueHandler{metrics: rt.metrics})
 }
 
