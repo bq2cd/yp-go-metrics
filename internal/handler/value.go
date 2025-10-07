@@ -16,7 +16,7 @@ type valueHandler struct {
 	metrics service.Metrics
 }
 
-// ServeHTTP implements http.Handler for /value endpoint
+// ServeHTTP implements http.Handler for /value/* endpoint with plain-text requests/responses.
 func (h *valueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricOp := urlpath.NewOperationFromURLPath(r.URL.Path)
 	needle, err := metricOp.ToMetric()

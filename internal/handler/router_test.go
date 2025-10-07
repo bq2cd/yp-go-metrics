@@ -40,7 +40,9 @@ func TestNewRouter(t *testing.T) {
 			want: want{
 				routes: map[string]string{
 					"/":         "GET",
+					"/update":   "POST",
 					"/update/*": "POST",
+					"/value":    "POST",
 					"/value/*":  "GET",
 				},
 				walkFn: func(want map[string]string, seen map[string]string) chi.WalkFunc {
@@ -112,9 +114,10 @@ func (m *MockServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func Test_router_ServeHTTP(t *testing.T) {
 	type args struct {
-		method  string
-		url     string
-		metrics []model.Metric
+		method   string
+		url      string
+		bodyData testBodyData
+		metrics  []model.Metric
 	}
 	type want struct {
 		code int
@@ -135,42 +138,49 @@ func Test_router_ServeHTTP(t *testing.T) {
 					model.NewGaugeMetric("id3", 0.01),
 				},
 			},
-			want: want{code: http.StatusOK, body: "id1 123\nid2 -1.23\nid3 0.01\n"},
+			want: want{code: http.StatusOK, body: "id1 123\nid2 -1.23\nid3 0.01"},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.ElementsMatch(t, strings.Split(want.body, "\n"), strings.Split(body, "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/bla"},
-			want: want{code: http.StatusMethodNotAllowed, body: "\n"},
+			want: want{code: http.StatusMethodNotAllowed, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/update"},
-			want: want{code: http.StatusMethodNotAllowed, body: "\n"},
+			want: want{code: http.StatusMethodNotAllowed, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value"},
-			want: want{code: http.StatusMethodNotAllowed, body: "\n"},
+			want: want{code: http.StatusMethodNotAllowed, body: ""},
+			assertion: func(t assert.TestingT, want want, body string) {
+				assert.Equal(t, want.body, body)
+			},
+		},
+		{
+			args: args{method: http.MethodPost, url: "/update"},
+			want: want{code: http.StatusUnprocessableEntity, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodPost, url: "/update/"},
-			want: want{code: http.StatusBadRequest, body: "\n"},
+			want: want{code: http.StatusBadRequest, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodPost, url: "/update/counter"},
-			want: want{code: http.StatusNotFound, body: "\n"},
+			want: want{code: http.StatusNotFound, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
@@ -184,28 +194,28 @@ func Test_router_ServeHTTP(t *testing.T) {
 		},
 		{
 			args: args{method: http.MethodPost, url: "/update/counter/id1/123/none"},
-			want: want{code: http.StatusBadRequest, body: "\n"},
+			want: want{code: http.StatusBadRequest, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter"},
-			want: want{code: http.StatusNotFound, body: "\n"},
+			want: want{code: http.StatusNotFound, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/"},
-			want: want{code: http.StatusNotFound, body: "\n"},
+			want: want{code: http.StatusNotFound, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/id1"},
-			want: want{code: http.StatusNotFound, body: "\n"},
+			want: want{code: http.StatusNotFound, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
@@ -234,7 +244,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/id1/123"},
-			want: want{code: http.StatusBadRequest, body: "\n"},
+			want: want{code: http.StatusBadRequest, body: ""},
 			assertion: func(t assert.TestingT, want want, body string) {
 				assert.Equal(t, want.body, body)
 			},
@@ -251,7 +261,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 			ts := httptest.NewServer(rt)
 			defer ts.Close()
 
-			req, err := http.NewRequest(tt.args.method, ts.URL+tt.args.url, http.NoBody)
+			req, err := tt.args.bodyData.toRequest(tt.args.method, ts.URL+tt.args.url)
 			require.NoError(t, err)
 
 			resp, err := ts.Client().Do(req)
@@ -263,12 +273,10 @@ func Test_router_ServeHTTP(t *testing.T) {
 
 			assert.Equal(t, tt.args.url, resp.Request.URL.Path)
 			assert.Equal(t, tt.want.code, resp.StatusCode)
-			tt.assertion(t, tt.want, string(body))
+			tt.assertion(t, tt.want, strings.TrimRight(string(body), "\n"))
 
 			events := logger.RecordedEvents()
 			assert.GreaterOrEqual(t, len(events), 1)
-			t.Logf("log events: %v", events)
-			t.Logf("req url: %v, resp url: %v", req.URL, resp.Request.URL)
 			found := events.FindMatchingEvents(
 				log.LevelInfo, "processed request",
 				log.Str("uri", resp.Request.URL.Path),
@@ -277,7 +285,9 @@ func Test_router_ServeHTTP(t *testing.T) {
 			)
 			require.Len(t, found, 1)
 			e := found[0]
-			assert.NotNil(t, e.Fields().GetFieldByKey("size"))
+			fsize := e.Fields().GetFieldByKey("size")
+			require.NotNil(t, fsize)
+			assert.Equal(t, len(body), fsize.Value)
 			assert.NotNil(t, e.Fields().GetFieldByKey("duration"))
 			assert.NotNil(t, e.Fields().GetFieldByKey("request_id"))
 		})

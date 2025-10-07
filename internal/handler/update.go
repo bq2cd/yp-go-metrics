@@ -12,7 +12,7 @@ type updateHandler struct {
 	metrics service.Metrics
 }
 
-// ServeHTTP implements http.Handler for /update endpoint
+// ServeHTTP implements http.Handler for /update/* endpoint with plain-text requests/responses.
 func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metric, err := urlpath.NewOperationFromURLPath(r.URL.Path).ToMetric()
 	switch err {

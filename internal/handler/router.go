@@ -50,7 +50,11 @@ func (rt *router) configureChiRouter() {
 	r.Handle("/*", &defaultHandler{})
 
 	r.Method(http.MethodGet, "/", &readHandler{metrics: rt.metrics})
+
+	r.Method(http.MethodPost, "/update", &updateJSONHandler{metrics: rt.metrics})
 	r.Method(http.MethodPost, "/update/*", &updateHandler{metrics: rt.metrics})
+
+	r.Method(http.MethodPost, "/value", &valueJSONHandler{metrics: rt.metrics})
 	r.Method(http.MethodGet, "/value/*", &valueHandler{metrics: rt.metrics})
 }
 
