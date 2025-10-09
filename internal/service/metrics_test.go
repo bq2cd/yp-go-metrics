@@ -1,83 +1,13 @@
 package service
 
 import (
-	"errors"
-	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 )
-
-const (
-	faultyStorageErrorTrigger = "faultyStorageErrorTrigger"
-)
-
-var (
-	errFaultyStorage = errors.New("faulty storage")
-)
-
-type mockStorage struct {
-	mu        sync.RWMutex
-	data      map[model.MetricKey]model.Metric
-	isFaulty  bool
-	triggerID string
-}
-
-func newMockStorage(isFaulty bool, metrics ...model.Metric) *mockStorage {
-	data := make(map[model.MetricKey]model.Metric, len(metrics))
-	for _, m := range metrics {
-		data[m.Key()] = m
-	}
-	return &mockStorage{
-		data:      data,
-		isFaulty:  isFaulty,
-		triggerID: faultyStorageErrorTrigger,
-	}
-}
-
-func (s *mockStorage) Get(k model.MetricKey) (model.Metric, error) {
-	if s.isFaulty && k.ID == s.triggerID {
-		return model.Metric{}, fmt.Errorf("get error: %w", errFaultyStorage)
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	m, ok := s.data[k]
-	if !ok {
-		return model.Metric{}, repository.ErrMetricNotFound
-	}
-	return m, nil
-}
-
-func (s *mockStorage) GetAll() ([]model.Metric, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make([]model.Metric, 0, len(s.data))
-	for k := range s.data {
-		m, err := s.Get(k)
-		switch {
-		case err == nil:
-			out = append(out, m)
-		case errors.Is(err, errFaultyStorage):
-			return nil, err
-		default:
-			continue
-		}
-	}
-	return out, nil
-}
-
-func (s *mockStorage) Set(m model.Metric) error {
-	if s.isFaulty && m.ID == faultyStorageErrorTrigger {
-		return fmt.Errorf("set error: %w", errFaultyStorage)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.data[m.Key()] = m
-	return nil
-}
 
 func TestNewMetrics(t *testing.T) {
 	type args struct {
@@ -90,8 +20,8 @@ func TestNewMetrics(t *testing.T) {
 	}{
 		{
 			name: "new service",
-			args: args{storage: newMockStorage(false)},
-			want: &metricService{storage: newMockStorage(false)},
+			args: args{storage: storagetest.NewMockStorage()},
+			want: &metricService{storage: storagetest.NewMockStorage()},
 		},
 	}
 	for _, tt := range tests {
@@ -121,7 +51,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 	}{
 		{
 			name:   "empty storage",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{metric: model.NewCounterMetric("id1", 10)},
 			want:   want{metric: model.NewCounterMetric("id1", 10)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -135,7 +65,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "empty counter",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{metric: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
 			want:   want{metric: model.Metric{}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -149,7 +79,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "empty counter 2",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
 			args:   args{metric: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
 			want:   want{metric: model.NewCounterMetric("id1", 5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -163,7 +93,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "empty counter in storage",
-			fields: fields{storage: newMockStorage(false, model.Metric{ID: "id1", Type: model.MetricTypeCounter})},
+			fields: fields{storage: storagetest.NewMockStorage(model.Metric{ID: "id1", Type: model.MetricTypeCounter})},
 			args:   args{metric: model.NewCounterMetric("id2", 10)},
 			want:   want{metric: model.NewCounterMetric("id2", 10)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -177,7 +107,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "new counter",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
 			args:   args{metric: model.NewCounterMetric("id2", 10)},
 			want:   want{metric: model.NewCounterMetric("id2", 10)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -191,7 +121,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "existing counter",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
 			args:   args{metric: model.NewCounterMetric("id1", 10)},
 			want:   want{metric: model.NewCounterMetric("id1", 15)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -205,7 +135,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "new gauge",
-			fields: fields{storage: newMockStorage(false, model.NewGaugeMetric("id1", 1.5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewGaugeMetric("id1", 1.5))},
 			args:   args{metric: model.NewGaugeMetric("id2", 5.1)},
 			want:   want{metric: model.NewGaugeMetric("id2", 5.1)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -219,7 +149,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "existing gauge",
-			fields: fields{storage: newMockStorage(false, model.NewGaugeMetric("id1", 1.5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewGaugeMetric("id1", 1.5))},
 			args:   args{metric: model.NewGaugeMetric("id1", -1.5)},
 			want:   want{metric: model.NewGaugeMetric("id1", -1.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -233,15 +163,15 @@ func Test_metricService_StoreSingle(t *testing.T) {
 		},
 		{
 			name:   "faulty storage",
-			fields: fields{storage: newMockStorage(true, model.NewCounterMetric(faultyStorageErrorTrigger, 10))},
-			args:   args{metric: model.NewCounterMetric(faultyStorageErrorTrigger, 5)},
-			want:   want{metric: model.NewCounterMetric(faultyStorageErrorTrigger, 10)},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 10)).MakeFaulty()},
+			args:   args{metric: model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 5)},
+			want:   want{metric: model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 10)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.ErrorIs(t, err, errFaultyStorage)
+				return assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 			},
 			assertStoredMetric: func(t assert.TestingT, s repository.Storage, want want) {
-				got, err := s.(*mockStorage).Get(want.metric.Key())
-				assert.ErrorIs(t, err, errFaultyStorage)
+				got, err := s.(*storagetest.MockStorage).Get(want.metric.Key())
+				assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 				assert.Equal(t, model.Metric{}, got)
 			},
 		},
@@ -276,7 +206,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 	}{
 		{
 			name:   "empty counter metric",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args: args{metrics: []model.Metric{
 				func() model.Metric {
 					return model.Metric{ID: "id1", Type: model.MetricTypeCounter}
@@ -289,7 +219,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 		},
 		{
 			name:   "empty gauge metric",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args: args{metrics: []model.Metric{
 				func() model.Metric {
 					var value int64 = 5
@@ -303,7 +233,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 		},
 		{
 			name:   "single metric",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -312,7 +242,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 		},
 		{
 			name:   "multiple metrics",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -321,7 +251,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 		},
 		{
 			name:   "multiple metrics, some empty",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), {}, {ID: "id5", Type: model.MetricTypeCounter}, {ID: "id6", Type: model.MetricTypeGauge}}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -330,7 +260,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 		},
 		{
 			name:   "multiple counters with same id",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewCounterMetric("id1", -5)}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 10)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -339,11 +269,11 @@ func Test_metricService_StoreBatch(t *testing.T) {
 		},
 		{
 			name:   "faulty storage",
-			fields: fields{storage: newMockStorage(true)},
-			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(faultyStorageErrorTrigger, 0)}},
+			fields: fields{storage: storagetest.NewMockStorage().MakeFaulty()},
+			args:   args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 0)}},
 			want:   want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)}},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.ErrorIs(t, err, errFaultyStorage)
+				return assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 			},
 		},
 	}
@@ -383,7 +313,7 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 	}{
 		{
 			name:   "missing metric",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -393,7 +323,7 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 		},
 		{
 			name:   "single metric",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want:   model.NewCounterMetric("id1", 5),
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -402,7 +332,7 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 		},
 		{
 			name:   "multiple counters with same id",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 15))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 15))},
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want:   model.NewCounterMetric("id1", 15),
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -411,7 +341,7 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 		},
 		{
 			name:   "empty metric in storage",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5), model.Metric{ID: "id2", Type: model.MetricTypeCounter})},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.Metric{ID: "id2", Type: model.MetricTypeCounter})},
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id2")},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -420,11 +350,11 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 		},
 		{
 			name:   "faulty storage",
-			fields: fields{storage: newMockStorage(true, model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(faultyStorageErrorTrigger, 0))},
-			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, faultyStorageErrorTrigger)},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 0)).MakeFaulty()},
+			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, storagetest.FaultyStorageErrorTrigger)},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.ErrorIs(t, err, errFaultyStorage)
+				return assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 			},
 		},
 	}
@@ -456,7 +386,7 @@ func Test_metricService_RetrieveBatch(t *testing.T) {
 	}{
 		{
 			name:   "missing metric",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			args:   args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1")}},
 			want:   []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -465,7 +395,7 @@ func Test_metricService_RetrieveBatch(t *testing.T) {
 		},
 		{
 			name:   "single metric",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
 			args:   args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1")}},
 			want:   []model.Metric{model.NewCounterMetric("id1", 5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -474,7 +404,7 @@ func Test_metricService_RetrieveBatch(t *testing.T) {
 		},
 		{
 			name:   "multiple metrics",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5))},
 			args:   args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2")}},
 			want:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -483,11 +413,11 @@ func Test_metricService_RetrieveBatch(t *testing.T) {
 		},
 		{
 			name:   "faulty storage",
-			fields: fields{storage: newMockStorage(true, model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(faultyStorageErrorTrigger, 0))},
-			args:   args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2"), model.NewMetricKey(model.MetricTypeCounter, faultyStorageErrorTrigger)}},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5), model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 0)).MakeFaulty()},
+			args:   args{keys: []model.MetricKey{model.NewMetricKey(model.MetricTypeCounter, "id1"), model.NewMetricKey(model.MetricTypeGauge, "id2"), model.NewMetricKey(model.MetricTypeCounter, storagetest.FaultyStorageErrorTrigger)}},
 			want:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.ErrorIs(t, err, errFaultyStorage)
+				return assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 			},
 		},
 	}
@@ -515,7 +445,7 @@ func Test_metricService_RetrieveAll(t *testing.T) {
 	}{
 		{
 			name:   "empty storage",
-			fields: fields{storage: newMockStorage(false)},
+			fields: fields{storage: storagetest.NewMockStorage()},
 			want:   []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -523,15 +453,15 @@ func Test_metricService_RetrieveAll(t *testing.T) {
 		},
 		{
 			name:   "faulty storage",
-			fields: fields{storage: newMockStorage(true, model.NewCounterMetric("id1", 5), model.NewCounterMetric(faultyStorageErrorTrigger, -2))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, -2)).MakeFaulty()},
 			want:   []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.ErrorIs(t, err, errFaultyStorage)
+				return assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 			},
 		},
 		{
 			name:   "multiple metrics",
-			fields: fields{storage: newMockStorage(false, model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5))},
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5))},
 			want:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 3.5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
