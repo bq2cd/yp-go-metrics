@@ -9,7 +9,28 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Router implements HTTP routing for the server part.
+// route maps a slice of patterns to a single http handler
+type route struct {
+	patterns []string
+	handler  http.Handler
+}
+
+func newRoute(handler http.Handler, patterns ...string) route {
+	seen := make(map[string]bool, len(patterns))
+	filtered := make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		if !seen[p] {
+			seen[p] = true
+			filtered = append(filtered, p)
+		}
+	}
+	return route{
+		patterns: filtered,
+		handler:  handler,
+	}
+}
+
+// router implements HTTP routing for the server part.
 type router struct {
 	logger  log.Logger
 	mux     http.Handler
@@ -47,22 +68,22 @@ func (rt *router) configureChiRouter() {
 	)
 
 	// routes
-	r.Handle("/*", &defaultHandler{})
+	for _, rr := range rt.getRoutes() {
+		for _, p := range rr.patterns {
+			r.Handle(p, rr.handler)
+		}
+	}
+}
 
-	r.Method(http.MethodGet, "/",
-		&readHandler{metrics: rt.metrics})
-
-	r.Method(http.MethodPost, "/update",
-		&updateJSONHandler{logger: rt.logger, metrics: rt.metrics, responder: &defaultMetricJSONResponder{}})
-
-	r.Method(http.MethodPost, "/update/*",
-		&updateHandler{metrics: rt.metrics})
-
-	r.Method(http.MethodPost, "/value",
-		&valueJSONHandler{logger: rt.logger, metrics: rt.metrics, responder: &defaultMetricJSONResponder{}})
-
-	r.Method(http.MethodGet, "/value/*",
-		&valueHandler{metrics: rt.metrics})
+func (rt *router) getRoutes() []route {
+	return []route{
+		newRoute(&defaultHandler{}, "/*"),
+		newRoute(&readHandler{metrics: rt.metrics}, "GET /"),
+		newRoute(&updateJSONHandler{logger: rt.logger, metrics: rt.metrics, responder: &defaultMetricJSONResponder{}}, "POST /update", "POST /update/"),
+		newRoute(&updateHandler{metrics: rt.metrics}, "POST /update/*"),
+		newRoute(&valueJSONHandler{logger: rt.logger, metrics: rt.metrics, responder: &defaultMetricJSONResponder{}}, "POST /value", "POST /value/"),
+		newRoute(&valueHandler{metrics: rt.metrics}, "GET /value/*"),
+	}
 }
 
 // ServeHTTP implements http.Handler interface
