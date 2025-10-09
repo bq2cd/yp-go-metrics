@@ -395,3 +395,45 @@ func TestMetric_Copy(t *testing.T) {
 		})
 	}
 }
+
+func TestMetricKey_Empty(t *testing.T) {
+	type fields struct {
+		Type MetricType
+		ID   string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   bool
+	}{
+		{
+			name:   "no id, no type",
+			fields: fields{},
+			want:   true,
+		},
+		{
+			name:   "no id",
+			fields: fields{Type: MetricTypeCounter},
+			want:   true,
+		},
+		{
+			name:   "no type",
+			fields: fields{ID: "id1"},
+			want:   true,
+		},
+		{
+			name:   "have id and type",
+			fields: fields{ID: "id1", Type: MetricTypeCounter},
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k := MetricKey{
+				Type: tt.fields.Type,
+				ID:   tt.fields.ID,
+			}
+			assert.Equal(t, tt.want, k.Empty())
+		})
+	}
+}

@@ -29,6 +29,9 @@ func NewMetrics(storage repository.Storage) *metricService {
 
 // StoreSingle updates or replaces a single metric.
 func (s *metricService) StoreSingle(metric model.Metric) error {
+	if metric.Empty() {
+		return nil
+	}
 	switch metric.Type {
 	case model.MetricTypeCounter:
 		prev, err := s.storage.Get(metric.Key())
@@ -62,7 +65,14 @@ func (s *metricService) StoreBatch(metrics []model.Metric) error {
 // RetrieveSingle obtains a metric from the underlying storage by given key
 // or returns error if metric is not found or storage has failed.
 func (s *metricService) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
-	return s.storage.Get(key)
+	m, err := s.storage.Get(key)
+	if err == nil && m.Empty() {
+		// avoid returning empty metrics from underlying storage as
+		// the storage should not store such metrics in the first place,
+		// but in case it did, we will intercept such cases here.
+		return model.Metric{}, repository.ErrMetricNotFound
+	}
+	return m, err
 }
 
 // RetrieveBatch obtains a slice of metrics from the underlying storage by given keys
