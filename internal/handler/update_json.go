@@ -11,8 +11,9 @@ import (
 )
 
 type updateJSONHandler struct {
-	logger  log.Logger
-	metrics service.Metrics
+	logger    log.Logger
+	metrics   service.Metrics
+	responder metricJSONResponder
 }
 
 // ServeHTTP implements http.Handler for /update endpoint with JSON requests/responses.
@@ -29,7 +30,7 @@ func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if m.Empty() {
+	if m.Key().Empty() {
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
@@ -39,9 +40,13 @@ func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	contentTypeApplicationJSON.applyToResponse(w)
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(m); err != nil {
+	m, err = h.metrics.RetrieveSingle(m.Key())
+	if err != nil {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+
+	if err := h.responder.WriteResponse(w, m); err != nil {
 		h.logger.Error().Err("error", err).Any("metric", m).Msg("json encoder failed")
 	}
 }

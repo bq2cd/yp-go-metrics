@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,6 +16,26 @@ import (
 type testBodyData struct {
 	data        []byte
 	contentType contentType
+}
+
+func newTestBodyDataFromMetric(t *testing.T, m model.Metric) testBodyData {
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(m)
+	require.NoError(t, err)
+	return testBodyData{
+		data:        buf.Bytes(),
+		contentType: contentTypeApplicationJSON,
+	}
+}
+
+func newTestBodyDataFromMetricKey(t *testing.T, k model.MetricKey) testBodyData {
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(k)
+	require.NoError(t, err)
+	return testBodyData{
+		data:        buf.Bytes(),
+		contentType: contentTypeApplicationJSON,
+	}
 }
 
 func (b *testBodyData) toRequest(method, url string) (*http.Request, error) {
@@ -27,6 +49,15 @@ func (b *testBodyData) toRequest(method, url string) (*http.Request, error) {
 	}
 	b.contentType.applyToRequest(req)
 	return req, nil
+}
+
+type faultyMetricJSONResponder struct{}
+
+func (r *faultyMetricJSONResponder) WriteResponse(w http.ResponseWriter, m model.Metric) error {
+	contentTypeApplicationJSON.applyToResponse(w)
+	w.WriteHeader(http.StatusOK)
+	var invalid chan struct{}
+	return json.NewEncoder(w).Encode(invalid)
 }
 
 func dummyHTTPRequest(t *testing.T) *http.Request {
@@ -160,6 +191,117 @@ func Test_contentType_applyToResponse(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.c.applyToResponse(tt.args.w)
+		})
+	}
+}
+
+func Test_contentType_matchesRequest(t *testing.T) {
+	type args struct {
+		r *http.Request
+	}
+	tests := []struct {
+		name string
+		c    contentType
+		args args
+		want bool
+	}{
+		{
+			name: "no content-type",
+			c:    contentTypeTextPlain,
+			args: args{r: func() *http.Request {
+				r := dummyHTTPRequest(t)
+				return r
+			}()},
+			want: false,
+		},
+		{
+			name: "different content-type",
+			c:    contentTypeTextPlain,
+			args: args{r: func() *http.Request {
+				r := dummyHTTPRequest(t)
+				r.Header.Set(_contentTypeHeaderKey, string(contentTypeApplicationJSON))
+				return r
+			}()},
+			want: false,
+		},
+		{
+			name: "same content-type",
+			c:    contentTypeApplicationJSON,
+			args: args{r: func() *http.Request {
+				r := dummyHTTPRequest(t)
+				r.Header.Set(_contentTypeHeaderKey, string(contentTypeApplicationJSON))
+				return r
+			}()},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.c.matchesRequest(tt.args.r))
+		})
+	}
+}
+
+func Test_defaultMetricJSONResponder_WriteResponse(t *testing.T) {
+	type args struct {
+		w *httptest.ResponseRecorder
+		m model.Metric
+	}
+	type want struct {
+		data []byte
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      want
+		assertion func(*testing.T, want, []byte, error)
+	}{
+		{
+			name: "empty metric",
+			args: args{w: httptest.NewRecorder(), m: model.Metric{}},
+			want: want{data: []byte(`{"id": "", "type": ""}`)},
+			assertion: func(t *testing.T, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+		{
+			name: "empty counter value",
+			args: args{w: httptest.NewRecorder(), m: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
+			want: want{data: []byte(`{"id": "id1", "type": "counter"}`)},
+			assertion: func(t *testing.T, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+		{
+			name: "some counter",
+			args: args{w: httptest.NewRecorder(), m: model.NewCounterMetric("id1", -5)},
+			want: want{data: []byte(`{"id": "id1", "type": "counter", "delta": -5}`)},
+			assertion: func(t *testing.T, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+		{
+			name: "some gauge",
+			args: args{w: httptest.NewRecorder(), m: model.NewGaugeMetric("id1", -2.5)},
+			want: want{data: []byte(`{"id": "id1", "type": "gauge", "value": -2.5}`)},
+			assertion: func(t *testing.T, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &defaultMetricJSONResponder{}
+			errSend := r.WriteResponse(tt.args.w, tt.args.m)
+			resp := tt.args.w.Result()
+			defer func() { _ = resp.Body.Close() }()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			tt.assertion(t, tt.want, body, errSend)
 		})
 	}
 }

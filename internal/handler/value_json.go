@@ -12,8 +12,9 @@ import (
 )
 
 type valueJSONHandler struct {
-	logger  log.Logger
-	metrics service.Metrics
+	logger    log.Logger
+	metrics   service.Metrics
+	responder metricJSONResponder
 }
 
 // ServeHTTP implements http.Handler for /value endpoint with JSON requests/responses.
@@ -38,9 +39,7 @@ func (h *valueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m, err := h.metrics.RetrieveSingle(needle.Key())
 	switch err {
 	case nil:
-		contentTypeApplicationJSON.applyToResponse(w)
-		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(m); err != nil {
+		if err := h.responder.WriteResponse(w, m); err != nil {
 			h.logger.Error().Err("error", err).Any("metric", m).Msg("json encoder failed")
 		}
 	case repository.ErrMetricNotFound:
