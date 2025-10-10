@@ -5,6 +5,7 @@ import (
 
 	"github.com/goccy/go-json"
 
+	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
@@ -18,7 +19,7 @@ type updateJSONHandler struct {
 
 // ServeHTTP implements http.Handler for /update endpoint with JSON requests/responses.
 func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !contentTypeApplicationJSON.matchesRequest(r) {
+	if !contenttype.ApplicationJSON.MatchesRequest(r) {
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}
