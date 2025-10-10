@@ -36,22 +36,22 @@ func TestContentType_ApplyToRequest(t *testing.T) {
 		{
 			name: "empty content type not applied",
 			args: args{r: dummyHTTPRequest(t)},
-			want: contentTypeEmpty,
+			want: Empty,
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Empty(t, r.Header.Values(contentTypeHeaderKey))
+				assert.Empty(t, r.Header.Values(HeaderKey))
 			},
 		},
 		{
 			name: "empty content type does not override existing",
 			args: args{r: func() *http.Request {
 				r := dummyHTTPRequest(t)
-				r.Header.Set(contentTypeHeaderKey, "already/exists")
+				r.Header.Set(HeaderKey, "already/exists")
 				return r
 			}()},
 			want: ContentType("already/exists"),
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Len(t, r.Header.Values(contentTypeHeaderKey), 1)
-				assert.Equal(t, want, ContentType(r.Header.Get(contentTypeHeaderKey)))
+				assert.Len(t, r.Header.Values(HeaderKey), 1)
+				assert.Equal(t, want, ContentType(r.Header.Get(HeaderKey)))
 			},
 		},
 		{
@@ -60,22 +60,22 @@ func TestContentType_ApplyToRequest(t *testing.T) {
 			c:    TextPlain,
 			want: TextPlain,
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Len(t, r.Header.Values(contentTypeHeaderKey), 1)
-				assert.Equal(t, want, ContentType(r.Header.Get(contentTypeHeaderKey)))
+				assert.Len(t, r.Header.Values(HeaderKey), 1)
+				assert.Equal(t, want, ContentType(r.Header.Get(HeaderKey)))
 			},
 		},
 		{
 			name: "new content type overrides existing",
 			args: args{r: func() *http.Request {
 				r := dummyHTTPRequest(t)
-				r.Header.Set(contentTypeHeaderKey, "already/exists")
+				r.Header.Set(HeaderKey, "already/exists")
 				return r
 			}()},
 			c:    ApplicationJSON,
 			want: ApplicationJSON,
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Len(t, r.Header.Values(contentTypeHeaderKey), 1)
-				assert.Equal(t, want, ContentType(r.Header.Get(contentTypeHeaderKey)))
+				assert.Len(t, r.Header.Values(HeaderKey), 1)
+				assert.Equal(t, want, ContentType(r.Header.Get(HeaderKey)))
 			},
 		},
 	}
@@ -101,22 +101,22 @@ func TestContentType_ApplyToResponse(t *testing.T) {
 		{
 			name: "empty content type not applied",
 			args: args{w: httptest.NewRecorder()},
-			want: contentTypeEmpty,
+			want: Empty,
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Empty(t, r.Header.Values(contentTypeHeaderKey))
+				assert.Empty(t, r.Header.Values(HeaderKey))
 			},
 		},
 		{
 			name: "empty content type does not override existing",
 			args: args{w: func() http.ResponseWriter {
 				w := httptest.NewRecorder()
-				w.Header().Set(contentTypeHeaderKey, "already/exists")
+				w.Header().Set(HeaderKey, "already/exists")
 				return w
 			}()},
 			want: ContentType("already/exists"),
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Len(t, r.Header.Values(contentTypeHeaderKey), 1)
-				assert.Equal(t, want, ContentType(r.Header.Get(contentTypeHeaderKey)))
+				assert.Len(t, r.Header.Values(HeaderKey), 1)
+				assert.Equal(t, want, ContentType(r.Header.Get(HeaderKey)))
 			},
 		},
 		{
@@ -125,22 +125,22 @@ func TestContentType_ApplyToResponse(t *testing.T) {
 			c:    TextPlain,
 			want: TextPlain,
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Len(t, r.Header.Values(contentTypeHeaderKey), 1)
-				assert.Equal(t, want, ContentType(r.Header.Get(contentTypeHeaderKey)))
+				assert.Len(t, r.Header.Values(HeaderKey), 1)
+				assert.Equal(t, want, ContentType(r.Header.Get(HeaderKey)))
 			},
 		},
 		{
 			name: "new content type overrides existing",
 			args: args{w: func() http.ResponseWriter {
 				w := httptest.NewRecorder()
-				w.Header().Set(contentTypeHeaderKey, "already/exists")
+				w.Header().Set(HeaderKey, "already/exists")
 				return w
 			}()},
 			c:    ApplicationJSON,
 			want: ApplicationJSON,
 			assertion: func(t *testing.T, want ContentType, r *http.Request) {
-				assert.Len(t, r.Header.Values(contentTypeHeaderKey), 1)
-				assert.Equal(t, want, ContentType(r.Header.Get(contentTypeHeaderKey)))
+				assert.Len(t, r.Header.Values(HeaderKey), 1)
+				assert.Equal(t, want, ContentType(r.Header.Get(HeaderKey)))
 			},
 		},
 	}
@@ -175,7 +175,7 @@ func TestContentType_MatchesRequest(t *testing.T) {
 			c:    TextPlain,
 			args: args{r: func() *http.Request {
 				r := dummyHTTPRequest(t)
-				r.Header.Set(contentTypeHeaderKey, string(ApplicationJSON))
+				r.Header.Set(HeaderKey, string(ApplicationJSON))
 				return r
 			}()},
 			want: false,
@@ -185,7 +185,7 @@ func TestContentType_MatchesRequest(t *testing.T) {
 			c:    ApplicationJSON,
 			args: args{r: func() *http.Request {
 				r := dummyHTTPRequest(t)
-				r.Header.Set(contentTypeHeaderKey, string(ApplicationJSON))
+				r.Header.Set(HeaderKey, string(ApplicationJSON))
 				return r
 			}()},
 			want: true,
@@ -222,7 +222,7 @@ func TestContentType_MatchesResponse(t *testing.T) {
 			c:    TextPlain,
 			args: args{r: func() *http.Response {
 				r := dummyHTTPResponse(t)
-				r.Header.Set(contentTypeHeaderKey, string(ApplicationJSON))
+				r.Header.Set(HeaderKey, string(ApplicationJSON))
 				return r
 			}},
 			want: false,
@@ -232,7 +232,7 @@ func TestContentType_MatchesResponse(t *testing.T) {
 			c:    ApplicationJSON,
 			args: args{r: func() *http.Response {
 				r := dummyHTTPResponse(t)
-				r.Header.Set(contentTypeHeaderKey, string(ApplicationJSON))
+				r.Header.Set(HeaderKey, string(ApplicationJSON))
 				return r
 			}},
 			want: true,
@@ -243,6 +243,40 @@ func TestContentType_MatchesResponse(t *testing.T) {
 			r := tt.args.r()
 			defer func() { _ = r.Body.Close() }()
 			assert.Equal(t, tt.want, tt.c.MatchesResponse(r))
+		})
+	}
+}
+
+func TestContentType_String(t *testing.T) {
+	tests := []struct {
+		name string
+		c    ContentType
+		want string
+	}{
+		{
+			name: "empty",
+			c:    Empty,
+			want: "",
+		},
+		{
+			name: "text",
+			c:    TextPlain,
+			want: "text/plain",
+		},
+		{
+			name: "json",
+			c:    ApplicationJSON,
+			want: "application/json",
+		},
+		{
+			name: "custom",
+			c:    ContentType("application/x.vnd-custom"),
+			want: "application/x.vnd-custom",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.c.String())
 		})
 	}
 }
