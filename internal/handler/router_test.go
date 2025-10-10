@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
@@ -224,7 +224,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 	type want struct {
 		code        int
 		body        string
-		contentType contenttype.ContentType
+		contentType httpheaders.ContentType
 	}
 	type innerTest struct {
 		name      string
@@ -366,7 +366,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": 1 }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
 			want: want{code: http.StatusUnprocessableEntity, body: ""},
@@ -380,7 +380,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "counter" }`),
-					contentType: contenttype.TextPlain,
+					contentType: httpheaders.ContentTypeTextPlain,
 				},
 			},
 			want: want{code: http.StatusBadRequest, body: ""},
@@ -394,13 +394,13 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "counter", "delta": -35 }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
-			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "counter", "delta": -35 }`, contentType: contenttype.ApplicationJSON},
+			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "counter", "delta": -35 }`, contentType: httpheaders.ContentTypeApplicationJSON},
 			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
 				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.MatchesResponse(resp))
+				assert.True(t, want.contentType.Matches(resp.Header))
 			},
 		},
 		{
@@ -409,13 +409,13 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "gauge", "value": -0.325 }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
-			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "gauge", "value": -0.325 }`, contentType: contenttype.ApplicationJSON},
+			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "gauge", "value": -0.325 }`, contentType: httpheaders.ContentTypeApplicationJSON},
 			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
 				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.MatchesResponse(resp))
+				assert.True(t, want.contentType.Matches(resp.Header))
 			},
 		},
 	}
@@ -480,7 +480,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": 1 }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
 			want: want{code: http.StatusUnprocessableEntity, body: ""},
@@ -494,7 +494,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "counter" }`),
-					contentType: contenttype.TextPlain,
+					contentType: httpheaders.ContentTypeTextPlain,
 				},
 			},
 			want: want{code: http.StatusBadRequest, body: ""},
@@ -508,7 +508,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "counter" }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
 			want: want{code: http.StatusNotFound, body: ""},
@@ -522,17 +522,17 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "counter" }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 				metrics: []model.Metric{
 					model.NewCounterMetric("id1", -33),
 					model.NewGaugeMetric("id1", -0.33),
 				},
 			},
-			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "counter", "delta": -33 }`, contentType: contenttype.ApplicationJSON},
+			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "counter", "delta": -33 }`, contentType: httpheaders.ContentTypeApplicationJSON},
 			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
 				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.MatchesResponse(resp))
+				assert.True(t, want.contentType.Matches(resp.Header))
 			},
 		},
 		{
@@ -541,7 +541,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "gauge" }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
 			want: want{code: http.StatusNotFound, body: ""},
@@ -555,17 +555,17 @@ func Test_router_ServeHTTP(t *testing.T) {
 				method: http.MethodPost,
 				bodyData: testBodyData{
 					data:        []byte(`{ "id": "id1", "type": "gauge" }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 				metrics: []model.Metric{
 					model.NewCounterMetric("id1", -33),
 					model.NewGaugeMetric("id1", -0.33),
 				},
 			},
-			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "gauge", "value": -0.33 }`, contentType: contenttype.ApplicationJSON},
+			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "gauge", "value": -0.33 }`, contentType: httpheaders.ContentTypeApplicationJSON},
 			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
 				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.MatchesResponse(resp))
+				assert.True(t, want.contentType.Matches(resp.Header))
 			},
 		},
 	}

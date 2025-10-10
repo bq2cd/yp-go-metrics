@@ -5,7 +5,7 @@ import (
 
 	"github.com/goccy/go-json"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
@@ -20,7 +20,7 @@ type valueJSONHandler struct {
 
 // ServeHTTP implements http.Handler for /value endpoint with JSON requests/responses.
 func (h *valueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !contenttype.ApplicationJSON.MatchesRequest(r) {
+	if !httpheaders.ContentTypeApplicationJSON.Matches(r.Header) {
 		http.Error(w, "", http.StatusBadRequest)
 		return
 	}

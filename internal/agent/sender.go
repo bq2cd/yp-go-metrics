@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/go-resty/resty/v2"
@@ -75,7 +75,7 @@ func (s *senderJSON) Send(metric model.Metric) error {
 		return fmt.Errorf("json encoder failed: %w", err)
 	}
 
-	req := s.client.R().SetContext(s.context).SetBody(buf.Bytes()).SetHeader(contenttype.HeaderKey, contenttype.ApplicationJSON.String())
+	req := s.client.R().SetContext(s.context).SetBody(buf.Bytes()).SetHeader(httpheaders.HeaderKeyContentType, httpheaders.ContentTypeApplicationJSON.String())
 
 	resp, err := req.Post("/update/")
 	if err != nil {

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
@@ -15,7 +15,7 @@ type metricJSONResponder interface {
 type defaultMetricJSONResponder struct{}
 
 func (r *defaultMetricJSONResponder) WriteResponse(w http.ResponseWriter, m model.Metric) error {
-	contenttype.ApplicationJSON.ApplyToResponse(w)
+	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
 	w.WriteHeader(http.StatusOK)
 	return json.NewEncoder(w).Encode(m)
 }

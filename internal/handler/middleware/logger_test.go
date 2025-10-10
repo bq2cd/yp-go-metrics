@@ -60,7 +60,7 @@ func TestLogger(t *testing.T) {
 	}
 }
 
-func Test_loggerResponseWrapper_Header(t *testing.T) {
+func Test_loggerResponseWriter_Header(t *testing.T) {
 	type fields struct {
 		w *mockResponseWriter
 	}
@@ -79,7 +79,7 @@ func Test_loggerResponseWrapper_Header(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lw := &loggerResponseWrapper{
+			lw := &loggerResponseWriter{
 				w: tt.fields.w,
 			}
 			tt.fields.w.On("Header").Return(tt.want).Once()
@@ -91,7 +91,7 @@ func Test_loggerResponseWrapper_Header(t *testing.T) {
 	}
 }
 
-func Test_loggerResponseWrapper_Write(t *testing.T) {
+func Test_loggerResponseWriter_Write(t *testing.T) {
 	type fields struct {
 		w    *mockResponseWriter
 		size int
@@ -147,7 +147,7 @@ func Test_loggerResponseWrapper_Write(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lw := &loggerResponseWrapper{
+			lw := &loggerResponseWriter{
 				w:    tt.fields.w,
 				size: tt.fields.size,
 			}
@@ -163,7 +163,7 @@ func Test_loggerResponseWrapper_Write(t *testing.T) {
 	}
 }
 
-func Test_loggerResponseWrapper_WriteHeader(t *testing.T) {
+func Test_loggerResponseWriter_WriteHeader(t *testing.T) {
 	type fields struct {
 		w      *mockResponseWriter
 		status int
@@ -197,7 +197,7 @@ func Test_loggerResponseWrapper_WriteHeader(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lw := &loggerResponseWrapper{
+			lw := &loggerResponseWriter{
 				w:      tt.fields.w,
 				status: tt.fields.status,
 			}

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
@@ -27,7 +27,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 	type want struct {
 		code        int
 		body        string
-		contentType contenttype.ContentType
+		contentType httpheaders.ContentType
 		invalidJSON bool
 	}
 	tests := []struct {
@@ -49,7 +49,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			want: want{
 				code:        http.StatusNotFound,
 				body:        ``,
-				contentType: contenttype.TextPlainUTF8,
+				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
@@ -67,7 +67,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			want: want{
 				code:        http.StatusBadRequest,
 				body:        ``,
-				contentType: contenttype.TextPlainUTF8,
+				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
@@ -82,14 +82,14 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			args: args{
 				bodyData: func() testBodyData {
 					bd := newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id1"))
-					bd.contentType = contenttype.TextPlain
+					bd.contentType = httpheaders.ContentTypeTextPlain
 					return bd
 				}(),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
 				body:        ``,
-				contentType: contenttype.TextPlainUTF8,
+				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
@@ -104,13 +104,13 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			args: args{
 				bodyData: testBodyData{
 					data:        []byte(`{ id: 1 }`),
-					contentType: contenttype.ApplicationJSON,
+					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
 				body:        ``,
-				contentType: contenttype.TextPlainUTF8,
+				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
@@ -128,7 +128,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			want: want{
 				code:        http.StatusNotFound,
 				body:        ``,
-				contentType: contenttype.TextPlainUTF8,
+				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
@@ -146,7 +146,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			want: want{
 				code:        http.StatusInternalServerError,
 				body:        ``,
-				contentType: contenttype.TextPlainUTF8,
+				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
@@ -164,7 +164,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			want: want{
 				code:        http.StatusOK,
 				body:        `{ "id": "id2", "type": "gauge", "value": -3.7 }`,
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 			},
 		},
 		{
@@ -182,7 +182,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			want: want{
 				code:        http.StatusOK,
 				body:        ``,
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 				invalidJSON: true,
 			},
 			assertLogEvents: func(t *testing.T, events log.TestLogEventSet) {
@@ -214,8 +214,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.want.code, resp.StatusCode)
-			assert.True(t, tt.want.contentType.MatchesResponse(resp))
-			if tt.want.contentType == contenttype.ApplicationJSON && !tt.want.invalidJSON {
+			assert.True(t, tt.want.contentType.Matches(resp.Header))
+			if tt.want.contentType == httpheaders.ContentTypeApplicationJSON && !tt.want.invalidJSON {
 				assert.JSONEq(t, tt.want.body, string(body))
 			} else {
 				assert.Equal(t, tt.want.body, strings.TrimRight(string(body), "\n"))

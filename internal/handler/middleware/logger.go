@@ -16,23 +16,23 @@ func Logger(l log.Logger) Middleware {
 	return createMiddleware(m)
 }
 
-type loggerResponseWrapper struct {
+type loggerResponseWriter struct {
 	w      http.ResponseWriter
 	status int
 	size   int
 }
 
-func (lw *loggerResponseWrapper) Header() http.Header {
+func (lw *loggerResponseWriter) Header() http.Header {
 	return lw.w.Header()
 }
 
-func (lw *loggerResponseWrapper) Write(data []byte) (int, error) {
+func (lw *loggerResponseWriter) Write(data []byte) (int, error) {
 	size, err := lw.w.Write(data)
 	lw.size += size
 	return size, err
 }
 
-func (lw *loggerResponseWrapper) WriteHeader(statusCode int) {
+func (lw *loggerResponseWriter) WriteHeader(statusCode int) {
 	lw.status = statusCode
 	lw.w.WriteHeader(statusCode)
 }
@@ -48,7 +48,7 @@ func (m *loggerMiddleware) Intercept(w http.ResponseWriter, r *http.Request, nex
 		log.Str("uri", r.URL.String()),
 		log.Str("method", r.Method),
 	)
-	lw := &loggerResponseWrapper{w: w}
+	lw := &loggerResponseWriter{w: w}
 
 	start := time.Now()
 	next.ServeHTTP(lw, r)

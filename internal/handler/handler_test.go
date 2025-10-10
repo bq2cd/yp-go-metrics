@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +16,7 @@ import (
 
 type testBodyData struct {
 	data        []byte
-	contentType contenttype.ContentType
+	contentType httpheaders.ContentType
 }
 
 func newTestBodyDataFromMetric(t *testing.T, m model.Metric) testBodyData {
@@ -25,7 +25,7 @@ func newTestBodyDataFromMetric(t *testing.T, m model.Metric) testBodyData {
 	require.NoError(t, err)
 	return testBodyData{
 		data:        buf.Bytes(),
-		contentType: contenttype.ApplicationJSON,
+		contentType: httpheaders.ContentTypeApplicationJSON,
 	}
 }
 
@@ -35,7 +35,7 @@ func newTestBodyDataFromMetricKey(t *testing.T, k model.MetricKey) testBodyData 
 	require.NoError(t, err)
 	return testBodyData{
 		data:        buf.Bytes(),
-		contentType: contenttype.ApplicationJSON,
+		contentType: httpheaders.ContentTypeApplicationJSON,
 	}
 }
 
@@ -48,14 +48,14 @@ func (b *testBodyData) toRequest(method, url string) (*http.Request, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.contentType.ApplyToRequest(req)
+	b.contentType.Apply(req.Header)
 	return req, nil
 }
 
 type faultyMetricJSONResponder struct{}
 
 func (r *faultyMetricJSONResponder) WriteResponse(w http.ResponseWriter, m model.Metric) error {
-	contenttype.ApplicationJSON.ApplyToResponse(w)
+	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
 	w.WriteHeader(http.StatusOK)
 	var invalid chan struct{}
 	return json.NewEncoder(w).Encode(invalid)

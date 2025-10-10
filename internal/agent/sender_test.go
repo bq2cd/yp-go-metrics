@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/contenttype"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/go-resty/resty/v2"
@@ -38,7 +38,7 @@ func Test_senderPlain_Send(t *testing.T) {
 		deadline time.Duration
 	}
 	type responder struct {
-		contentType contenttype.ContentType
+		contentType httpheaders.ContentType
 		status      int
 		timeout     time.Duration
 	}
@@ -65,7 +65,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -84,7 +84,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -103,7 +103,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -123,7 +123,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -143,7 +143,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusBadGateway,
 			},
 			args: args{
@@ -163,7 +163,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 				timeout:     75 * time.Millisecond,
 			},
@@ -184,7 +184,7 @@ func Test_senderPlain_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 				timeout:     500 * time.Millisecond,
 			},
@@ -211,7 +211,7 @@ func Test_senderPlain_Send(t *testing.T) {
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			defer httpmock.Reset()
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
-				require.True(t, tt.responder.contentType.MatchesRequest(r))
+				require.True(t, tt.responder.contentType.Matches(r.Header))
 				time.Sleep(tt.responder.timeout)
 				return httpmock.NewStringResponse(tt.responder.status, ""), nil
 			})
@@ -292,7 +292,7 @@ func Test_senderJSON_Send(t *testing.T) {
 		deadline time.Duration
 	}
 	type responder struct {
-		contentType contenttype.ContentType
+		contentType httpheaders.ContentType
 		status      int
 		data        any
 		timeout     time.Duration
@@ -321,7 +321,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -340,7 +340,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.TextPlain,
+				contentType: httpheaders.ContentTypeTextPlain,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -359,7 +359,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -380,7 +380,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 				status:      http.StatusOK,
 			},
 			args: args{
@@ -401,7 +401,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 				status:      http.StatusBadGateway,
 			},
 			args: args{
@@ -422,7 +422,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 				status:      http.StatusBadGateway,
 				timeout:     75 * time.Millisecond,
 			},
@@ -444,7 +444,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				deadline: 100 * time.Millisecond,
 			},
 			responder: responder{
-				contentType: contenttype.ApplicationJSON,
+				contentType: httpheaders.ContentTypeApplicationJSON,
 				status:      http.StatusBadGateway,
 				timeout:     500 * time.Millisecond,
 			},
@@ -474,7 +474,7 @@ func Test_senderJSON_Send(t *testing.T) {
 
 			var rbody bytes.Buffer
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
-				require.True(t, tt.responder.contentType.MatchesRequest(r))
+				require.True(t, tt.responder.contentType.Matches(r.Header))
 				_, err := io.Copy(&rbody, r.Body)
 				require.NoError(t, err)
 				time.Sleep(tt.responder.timeout)
