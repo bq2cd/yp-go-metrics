@@ -27,10 +27,11 @@ func (c ContentType) Matches(header http.Header) bool {
 	return c == ContentType(header.Get(HeaderKeyContentType))
 }
 
-func (c ContentType) Apply(header http.Header) {
+func (c ContentType) Apply(header http.Header) ContentType {
 	if c == ContentTypeEmpty {
 		header.Del(HeaderKeyContentType)
-		return
+	} else {
+		header.Set(HeaderKeyContentType, string(c))
 	}
-	header.Set(HeaderKeyContentType, string(c))
+	return c
 }

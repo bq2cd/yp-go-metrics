@@ -38,7 +38,7 @@ func (c ContentEncoding) Accepted(header http.Header) bool {
 	return slices.Contains(AcceptedContentEncodings(header), c)
 }
 
-func (c ContentEncoding) MakeAccepted(header http.Header) {
+func (c ContentEncoding) MakeAccepted(header http.Header) ContentEncoding {
 	accepted := AcceptedContentEncodings(header)
 	if !slices.Contains(accepted, c) {
 		accepted = append(accepted, c)
@@ -54,12 +54,18 @@ func (c ContentEncoding) MakeAccepted(header http.Header) {
 		}
 	}
 	header.Set(HeaderKeyAcceptEncoding, buf.String())
+	return c
 }
 
 func (c ContentEncoding) Matches(header http.Header) bool {
 	return c == ContentEncoding(header.Get(HeaderKeyContentEncoding))
 }
 
-func (c ContentEncoding) Apply(header http.Header) {
-	header.Set(HeaderKeyContentEncoding, string(c))
+func (c ContentEncoding) Apply(header http.Header) ContentEncoding {
+	if c == ContentEncodingEmpty {
+		header.Del(HeaderKeyContentEncoding)
+	} else {
+		header.Set(HeaderKeyContentEncoding, string(c))
+	}
+	return c
 }

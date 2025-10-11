@@ -228,3 +228,59 @@ func TestContentEncoding_MakeAccepted(t *testing.T) {
 		})
 	}
 }
+
+func TestContentEncoding_Apply(t *testing.T) {
+	type args struct {
+		h http.Header
+	}
+	tests := []struct {
+		name      string
+		c         ContentEncoding
+		args      args
+		want      ContentEncoding
+		assertion func(*testing.T, ContentEncoding, http.Header)
+	}{
+		{
+			name: "empty encoding not applied",
+			args: args{h: buildHTTPHeader().Header()},
+			want: ContentEncodingEmpty,
+			assertion: func(t *testing.T, want ContentEncoding, h http.Header) {
+				assert.Empty(t, h.Values(HeaderKeyContentEncoding))
+			},
+		},
+		{
+			name: "empty encoding clears existing",
+			args: args{h: buildHTTPHeader().Set(HeaderKeyContentEncoding, "deflate").Header()},
+			want: ContentEncodingEmpty,
+			assertion: func(t *testing.T, want ContentEncoding, h http.Header) {
+				assert.Empty(t, h.Values(HeaderKeyContentEncoding))
+			},
+		},
+		{
+			name: "new encoding applied",
+			args: args{h: buildHTTPHeader().Header()},
+			c:    ContentEncodingGzip,
+			want: ContentEncodingGzip,
+			assertion: func(t *testing.T, want ContentEncoding, h http.Header) {
+				assert.Len(t, h.Values(HeaderKeyContentEncoding), 1)
+				assert.Equal(t, want, ContentEncoding(h.Get(HeaderKeyContentEncoding)))
+			},
+		},
+		{
+			name: "new encoding overrides existing",
+			args: args{h: buildHTTPHeader().Set(HeaderKeyContentEncoding, "deflate").Header()},
+			c:    ContentEncodingGzip,
+			want: ContentEncodingGzip,
+			assertion: func(t *testing.T, want ContentEncoding, h http.Header) {
+				assert.Len(t, h.Values(HeaderKeyContentEncoding), 1)
+				assert.Equal(t, want, ContentEncoding(h.Get(HeaderKeyContentEncoding)))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.c.Apply(tt.args.h)
+			tt.assertion(t, tt.want, tt.args.h)
+		})
+	}
+}
