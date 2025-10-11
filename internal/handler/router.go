@@ -61,17 +61,24 @@ func (rt *router) configureChiRouter() {
 	}
 
 	// middlewares
-	r.Use(
-		middleware.RequestID(),
-		middleware.Logger(rt.logger),
-		middleware.Recoverer(rt.logger),
-	)
+	for _, m := range rt.getMiddlewares() {
+		r.Use(m)
+	}
 
 	// routes
 	for _, rr := range rt.getRoutes() {
 		for _, p := range rr.patterns {
 			r.Handle(p, rr.handler)
 		}
+	}
+}
+
+func (rt *router) getMiddlewares() []middleware.Middleware {
+	return []middleware.Middleware{
+		middleware.RequestID(),
+		middleware.Compressor(rt.logger),
+		middleware.Logger(rt.logger),
+		middleware.Recoverer(rt.logger),
 	}
 }
 

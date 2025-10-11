@@ -22,7 +22,8 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		responder metricJSONResponder
 	}
 	type args struct {
-		bodyData testBodyData
+		bodyData       testBodyData
+		shouldCompress bool
 	}
 	type want struct {
 		code        int
@@ -270,7 +271,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			ts := httptest.NewServer(h)
 			defer ts.Close()
 
-			req, err := tt.args.bodyData.toRequest(http.MethodPost, ts.URL+"/update")
+			req, err := tt.args.bodyData.toRequest(http.MethodPost, ts.URL+"/update", tt.args.shouldCompress)
 			require.NoError(t, err)
 
 			resp, err := ts.Client().Do(req)

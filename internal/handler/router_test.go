@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/middleware"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
@@ -216,21 +219,23 @@ func Test_router_getRoutes(t *testing.T) {
 
 func Test_router_ServeHTTP(t *testing.T) {
 	type args struct {
-		method   string
-		url      string
-		bodyData testBodyData
-		metrics  []model.Metric
+		method         string
+		url            string
+		bodyData       testBodyData
+		shouldCompress bool
+		metrics        []model.Metric
 	}
 	type want struct {
-		code        int
-		body        string
-		contentType httpheaders.ContentType
+		code            int
+		body            string
+		contentType     httpheaders.ContentType
+		contentEncoding httpheaders.ContentEncoding
 	}
 	type innerTest struct {
 		name      string
 		args      args
 		want      want
-		assertion func(assert.TestingT, want, string, *http.Response)
+		assertion func(*testing.T, want, []byte, http.Header)
 	}
 
 	runInnerTest := func(t *testing.T, url string, tt innerTest) {
@@ -240,19 +245,30 @@ func Test_router_ServeHTTP(t *testing.T) {
 		ts := httptest.NewServer(rt)
 		defer ts.Close()
 
-		req, err := tt.args.bodyData.toRequest(tt.args.method, ts.URL+url)
+		req, err := tt.args.bodyData.toRequest(tt.args.method, ts.URL+url, tt.args.shouldCompress)
 		require.NoError(t, err)
+		tt.want.contentEncoding.MakeAccepted(req.Header)
 
 		resp, err := ts.Client().Do(req)
 		require.NoError(t, err)
+
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		err = resp.Body.Close()
 		require.NoError(t, err)
+		if tt.want.contentEncoding == httpheaders.ContentEncodingGzip {
+			r := bytes.NewReader(body)
+			rgz, err := gzip.NewReader(r)
+			require.NoError(t, err)
+			body, err = io.ReadAll(rgz)
+			require.NoError(t, err)
+			err = rgz.Close()
+			require.NoError(t, err)
+		}
 
 		assert.Equal(t, url, resp.Request.URL.Path)
 		assert.Equal(t, tt.want.code, resp.StatusCode)
-		tt.assertion(t, tt.want, strings.TrimRight(string(body), "\n"), resp)
+		tt.assertion(t, tt.want, body, resp.Header)
 
 		events := logger.RecordedEvents()
 		assert.GreaterOrEqual(t, len(events), 1)
@@ -275,29 +291,29 @@ func Test_router_ServeHTTP(t *testing.T) {
 		{
 			args: args{method: http.MethodGet},
 			want: want{code: http.StatusMethodNotAllowed, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodPost},
 			want: want{code: http.StatusBadRequest, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodPut},
 			want: want{code: http.StatusMethodNotAllowed, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodDelete},
 			want: want{code: http.StatusMethodNotAllowed, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 	}
@@ -313,8 +329,9 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusOK, body: "id1 123\nid2 -1.23\nid3 0.01"},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.ElementsMatch(t, strings.Split(want.body, "\n"), strings.Split(body, "\n"))
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				content := strings.TrimRight(string(body), "\n")
+				assert.ElementsMatch(t, strings.Split(want.body, "\n"), strings.Split(content, "\n"))
 			},
 		},
 	}
@@ -323,22 +340,22 @@ func Test_router_ServeHTTP(t *testing.T) {
 		{
 			args: args{method: http.MethodPost, url: "/update/counter"},
 			want: want{code: http.StatusNotFound, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodPost, url: "/update/counter/id1/123"},
 			want: want{code: http.StatusOK, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodPost, url: "/update/counter/id1/123/none"},
 			want: want{code: http.StatusBadRequest, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 	}
@@ -348,16 +365,16 @@ func Test_router_ServeHTTP(t *testing.T) {
 			name: "GET not allowed",
 			args: args{method: http.MethodGet},
 			want: want{code: http.StatusMethodNotAllowed, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			name: "empty body, missing content-type",
 			args: args{method: http.MethodPost},
 			want: want{code: http.StatusBadRequest, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -370,8 +387,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusUnprocessableEntity, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -384,8 +401,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusBadRequest, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -398,9 +415,9 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "counter", "delta": -35 }`, contentType: httpheaders.ContentTypeApplicationJSON},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.Matches(resp.Header))
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
 			},
 		},
 		{
@@ -413,9 +430,53 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "gauge", "value": -0.325 }`, contentType: httpheaders.ContentTypeApplicationJSON},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.Matches(resp.Header))
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
+			},
+		},
+		{
+			name: "new counter, gzip compression",
+			args: args{
+				method: http.MethodPost,
+				bodyData: testBodyData{
+					data:        []byte(`{ "id": "id1", "type": "counter", "delta": -35 }`),
+					contentType: httpheaders.ContentTypeApplicationJSON,
+				},
+				shouldCompress: true,
+			},
+			want: want{
+				code:            http.StatusOK,
+				body:            `{ "id": "id1", "type": "counter", "delta": -35 }`,
+				contentType:     httpheaders.ContentTypeApplicationJSON,
+				contentEncoding: httpheaders.ContentEncodingGzip,
+			},
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
+				assert.True(t, want.contentEncoding.Matches(h))
+			},
+		},
+		{
+			name: "new gauge, gzip compression, response only",
+			args: args{
+				method: http.MethodPost,
+				bodyData: testBodyData{
+					data:        []byte(`{ "id": "id1", "type": "gauge", "value": -0.325 }`),
+					contentType: httpheaders.ContentTypeApplicationJSON,
+				},
+				shouldCompress: true,
+			},
+			want: want{
+				code:            http.StatusOK,
+				body:            `{ "id": "id1", "type": "gauge", "value": -0.325 }`,
+				contentType:     httpheaders.ContentTypeApplicationJSON,
+				contentEncoding: httpheaders.ContentEncodingGzip,
+			},
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
+				assert.True(t, want.contentEncoding.Matches(h))
 			},
 		},
 	}
@@ -424,22 +485,22 @@ func Test_router_ServeHTTP(t *testing.T) {
 		{
 			args: args{method: http.MethodGet, url: "/value/counter"},
 			want: want{code: http.StatusNotFound, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/"},
 			want: want{code: http.StatusNotFound, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/id1"},
 			want: want{code: http.StatusNotFound, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -449,8 +510,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				metrics: []model.Metric{model.NewCounterMetric("id1", 456)},
 			},
 			want: want{code: http.StatusOK, body: "456"},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -460,15 +521,15 @@ func Test_router_ServeHTTP(t *testing.T) {
 				metrics: []model.Metric{model.NewGaugeMetric("id1", -4.56)},
 			},
 			want: want{code: http.StatusOK, body: "-4.56"},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/id1/123"},
 			want: want{code: http.StatusBadRequest, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 	}
@@ -484,8 +545,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusUnprocessableEntity, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -498,8 +559,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusBadRequest, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -512,8 +573,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusNotFound, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -530,9 +591,9 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "counter", "delta": -33 }`, contentType: httpheaders.ContentTypeApplicationJSON},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.Matches(resp.Header))
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
 			},
 		},
 		{
@@ -545,8 +606,8 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusNotFound, body: ""},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.Equal(t, want.body, body)
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
@@ -563,9 +624,60 @@ func Test_router_ServeHTTP(t *testing.T) {
 				},
 			},
 			want: want{code: http.StatusOK, body: `{ "id": "id1", "type": "gauge", "value": -0.33 }`, contentType: httpheaders.ContentTypeApplicationJSON},
-			assertion: func(t assert.TestingT, want want, body string, resp *http.Response) {
-				assert.JSONEq(t, want.body, body)
-				assert.True(t, want.contentType.Matches(resp.Header))
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
+			},
+		},
+		{
+			name: "existing counter, gzip compression",
+			args: args{
+				method: http.MethodPost,
+				bodyData: testBodyData{
+					data:        []byte(`{ "id": "id1", "type": "counter" }`),
+					contentType: httpheaders.ContentTypeApplicationJSON,
+				},
+				shouldCompress: true,
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", -33),
+					model.NewGaugeMetric("id1", -0.33),
+				},
+			},
+			want: want{
+				code:            http.StatusOK,
+				body:            `{ "id": "id1", "type": "counter", "delta": -33 }`,
+				contentType:     httpheaders.ContentTypeApplicationJSON,
+				contentEncoding: httpheaders.ContentEncodingGzip,
+			},
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
+				assert.True(t, want.contentEncoding.Matches(h))
+			},
+		},
+		{
+			name: "existing gauge, gzip compression, response only",
+			args: args{
+				method: http.MethodPost,
+				bodyData: testBodyData{
+					data:        []byte(`{ "id": "id1", "type": "gauge" }`),
+					contentType: httpheaders.ContentTypeApplicationJSON,
+				},
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", -33),
+					model.NewGaugeMetric("id1", -0.33),
+				},
+			},
+			want: want{
+				code:            http.StatusOK,
+				body:            `{ "id": "id1", "type": "gauge", "value": -0.33 }`,
+				contentType:     httpheaders.ContentTypeApplicationJSON,
+				contentEncoding: httpheaders.ContentEncodingGzip,
+			},
+			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
+				assert.JSONEq(t, want.body, string(body))
+				assert.True(t, want.contentType.Matches(h))
+				assert.True(t, want.contentEncoding.Matches(h))
 			},
 		},
 	}
@@ -627,6 +739,31 @@ func Test_router_ServeHTTP(t *testing.T) {
 					runInnerTest(t, url, inner)
 				})
 			}
+		})
+	}
+}
+
+func Test_router_getMiddlewares(t *testing.T) {
+	type fields struct {
+		logger  log.Logger
+		mux     http.Handler
+		metrics service.Metrics
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []middleware.Middleware
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := &router{
+				logger:  tt.fields.logger,
+				mux:     tt.fields.mux,
+				metrics: tt.fields.metrics,
+			}
+			assert.Equal(t, tt.want, rt.getMiddlewares())
 		})
 	}
 }
