@@ -328,10 +328,15 @@ func Test_router_ServeHTTP(t *testing.T) {
 					model.NewGaugeMetric("id3", 0.01),
 				},
 			},
-			want: want{code: http.StatusOK, body: "id1 123\nid2 -1.23\nid3 0.01"},
+			want: want{
+				code:        http.StatusOK,
+				body:        "id1 123\nid2 -1.23\nid3 0.01",
+				contentType: httpheaders.ContentTypeTextHTML,
+			},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				content := strings.TrimRight(string(body), "\n")
 				assert.ElementsMatch(t, strings.Split(want.body, "\n"), strings.Split(content, "\n"))
+				assert.True(t, want.contentType.Matches(h))
 			},
 		},
 	}
