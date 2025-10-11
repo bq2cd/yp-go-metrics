@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"io"
 	"net/http"
@@ -292,10 +293,11 @@ func Test_senderJSON_Send(t *testing.T) {
 		deadline time.Duration
 	}
 	type responder struct {
-		contentType httpheaders.ContentType
-		status      int
-		data        any
-		timeout     time.Duration
+		contentType     httpheaders.ContentType
+		contentEncoding httpheaders.ContentEncoding
+		status          int
+		data            any
+		timeout         time.Duration
 	}
 	type args struct {
 		method    string
@@ -459,15 +461,61 @@ func Test_senderJSON_Send(t *testing.T) {
 				checkErr:    func(t *testing.T, err error) { assert.Errorf(t, err, "context deadline exceeded") },
 			},
 		},
+		{
+			name: "send counter with gzip compression",
+			fields: fields{
+				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
+				deadline: 100 * time.Millisecond,
+			},
+			responder: responder{
+				contentEncoding: httpheaders.ContentEncodingGzip,
+				contentType:     httpheaders.ContentTypeApplicationJSON,
+				status:          http.StatusOK,
+			},
+			args: args{
+				method:    http.MethodPost,
+				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/?$"),
+				metric:    model.NewCounterMetric("id1", 5),
+			},
+			want: want{
+				httpCall:    "POST http://localhost:1234/update/",
+				requestBody: `{ "id": "id1", "type": "counter", "delta": 5}`,
+				checkErr:    func(t *testing.T, err error) { assert.NoError(t, err) },
+			},
+		},
+		{
+			name: "send gauge with gzip compression",
+			fields: fields{
+				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
+				deadline: 100 * time.Millisecond,
+			},
+			responder: responder{
+				contentEncoding: httpheaders.ContentEncodingGzip,
+				contentType:     httpheaders.ContentTypeApplicationJSON,
+				status:          http.StatusOK,
+			},
+			args: args{
+				method:    http.MethodPost,
+				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/?$"),
+				metric:    model.NewGaugeMetric("id1", -5.5),
+			},
+			want: want{
+				httpCall:    "POST http://localhost:1234/update/",
+				requestBody: `{ "id": "id1", "type": "gauge", "value": -5.5}`,
+				checkErr:    func(t *testing.T, err error) { assert.NoError(t, err) },
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
 
+			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
 			s := &senderJSON{
-				context: ctx,
-				client:  tt.fields.client,
+				context:        ctx,
+				client:         tt.fields.client,
+				shouldCompress: shouldCompress,
 			}
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			defer httpmock.Reset()
@@ -475,6 +523,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			var rbody bytes.Buffer
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
+				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
 				_, err := io.Copy(&rbody, r.Body)
 				require.NoError(t, err)
 				time.Sleep(tt.responder.timeout)
@@ -495,9 +544,50 @@ func Test_senderJSON_Send(t *testing.T) {
 				assert.Equal(t, 1, calls[tt.want.httpCall])
 			}
 			tt.want.checkErr(t, err)
-			if tt.want.requestBody != "" {
-				assert.JSONEq(t, tt.want.requestBody, rbody.String())
+			if tt.want.requestBody == "" {
+				return
 			}
+			var body string
+			if shouldCompress {
+				rgz, err := gzip.NewReader(&rbody)
+				require.NoError(t, err)
+				b, err := io.ReadAll(rgz)
+				require.NoError(t, err)
+				body = string(b)
+			} else {
+				body = rbody.String()
+			}
+			assert.JSONEq(t, tt.want.requestBody, body)
+		})
+	}
+}
+
+func Test_senderJSON_setBody(t *testing.T) {
+	type fields struct {
+		context        context.Context
+		client         *resty.Client
+		shouldCompress bool
+	}
+	type args struct {
+		req *resty.Request
+		r   io.Reader
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		assertion assert.ErrorAssertionFunc
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &senderJSON{
+				context:        tt.fields.context,
+				client:         tt.fields.client,
+				shouldCompress: tt.fields.shouldCompress,
+			}
+			tt.assertion(t, s.setBody(tt.args.req, tt.args.r))
 		})
 	}
 }

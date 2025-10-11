@@ -2,9 +2,11 @@ package agent
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
@@ -57,12 +59,36 @@ func (s *senderPlain) Send(metric model.Metric) error {
 
 // NewSenderJSON creates an instance of a sender that reports metrics encoded in JSON.
 func NewSenderJSON(ctx context.Context, client *resty.Client) *senderJSON {
-	return &senderJSON{context: ctx, client: client}
+	return &senderJSON{context: ctx, client: client, shouldCompress: true}
 }
 
 type senderJSON struct {
-	context context.Context
-	client  *resty.Client
+	context        context.Context
+	client         *resty.Client
+	shouldCompress bool
+}
+
+func (s *senderJSON) setBody(req *resty.Request, r io.Reader) error {
+	if !s.shouldCompress {
+		req.SetBody(r)
+		return nil
+	}
+	var buf bytes.Buffer
+	wgz, err := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(wgz, r)
+	if err != nil {
+		return err
+	}
+	err = wgz.Close()
+	if err != nil {
+		return err
+	}
+	req.SetHeader(httpheaders.HeaderKeyContentEncoding, httpheaders.ContentEncodingGzip.String())
+	req.SetBody(&buf)
+	return nil
 }
 
 func (s *senderJSON) Send(metric model.Metric) error {
@@ -75,7 +101,11 @@ func (s *senderJSON) Send(metric model.Metric) error {
 		return fmt.Errorf("json encoder failed: %w", err)
 	}
 
-	req := s.client.R().SetContext(s.context).SetBody(buf.Bytes()).SetHeader(httpheaders.HeaderKeyContentType, httpheaders.ContentTypeApplicationJSON.String())
+	req := s.client.R().SetContext(s.context).SetHeader(httpheaders.HeaderKeyContentType, httpheaders.ContentTypeApplicationJSON.String())
+
+	if err := s.setBody(req, &buf); err != nil {
+		return fmt.Errorf("compression failed: %w", err)
+	}
 
 	resp, err := req.Post("/update/")
 	if err != nil {
