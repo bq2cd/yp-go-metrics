@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
@@ -51,9 +53,7 @@ func NewServer(logger log.Logger, ctx context.Context, cfg config.Config, router
 	}
 }
 
-// Run launches main loop of the server worker:
-// listening on provided address and serving incoming HTTP requests.
-func (s *server) Run() error {
+func (s *server) listenAndServe() error {
 	s.logger.Info().Str("address", s.config.ListenAddress).Msg("listening for incoming connections")
 
 	ln, err := s.lnFactory.Create(s.context, s.config.ListenAddress)
@@ -92,4 +92,31 @@ func (s *server) Run() error {
 		defer cancel()
 		return srv.Shutdown(ctx)
 	}
+}
+
+// Run launches main loop of the server focused on two things:
+// (1) listening on provided address and serving incoming HTTP requests;
+// (2) periodically dumping received metrics to disk;
+func (s *server) Run() error {
+	var wg sync.WaitGroup
+
+	errCh := make(chan error, 1)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errCh <- s.listenAndServe()
+	}()
+
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	var errFinal error
+	for err := range errCh {
+		errFinal = errors.Join(errFinal, err)
+	}
+
+	return errFinal
 }
