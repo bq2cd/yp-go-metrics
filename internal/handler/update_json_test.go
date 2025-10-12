@@ -18,7 +18,7 @@ import (
 
 func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 	type fields struct {
-		metrics   service.Metrics
+		metrics   service.MetricStorer
 		responder metricJSONResponder
 	}
 	type args struct {
@@ -41,7 +41,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				metrics:   service.NewMetrics(storagetest.NewMockStorage()),
+				metrics:   service.NewMetricStorer(storagetest.NewMockStorage()),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
@@ -56,7 +56,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "add new counter",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
@@ -73,7 +73,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "update existing counter",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 					model.NewCounterMetric("id1", 10),
 				)),
@@ -91,7 +91,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "add new gauge",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id4", 77),
 					model.NewGaugeMetric("id5", 8.8),
 				)),
@@ -109,7 +109,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "update existing gauge",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id4", 77),
 					model.NewGaugeMetric("id5", 8.8),
 					model.NewGaugeMetric("id1", 0.8),
@@ -128,7 +128,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "skip empty metric",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
@@ -145,7 +145,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "skip empty metric, return existing",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 					model.NewCounterMetric("id1", -33),
 				)),
@@ -163,7 +163,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "invalid content-type",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
@@ -184,7 +184,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "invalid json",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
@@ -204,7 +204,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "empty metric key",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
@@ -221,7 +221,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "faulty storage",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				).MakeFaulty()),
 				responder: &defaultMetricJSONResponder{},
@@ -238,7 +238,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "json encoder error",
 			fields: fields{
-				metrics: service.NewMetrics(storagetest.NewMockStorage(
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),

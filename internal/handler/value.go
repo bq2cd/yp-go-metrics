@@ -13,7 +13,7 @@ import (
 )
 
 type valueHandler struct {
-	metrics service.Metrics
+	metrics service.MetricStorer
 }
 
 // ServeHTTP implements http.Handler for /value/* endpoint with plain-text requests/responses.

@@ -26,7 +26,7 @@ import (
 func TestNewRouter(t *testing.T) {
 	type args struct {
 		logger  log.Logger
-		metrics service.Metrics
+		metrics service.MetricStorer
 		mux     http.Handler
 	}
 	type want struct {
@@ -41,7 +41,7 @@ func TestNewRouter(t *testing.T) {
 	}{
 		{
 			name: "new router with mux=nil",
-			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetrics(repository.NewMemStorage()), mux: nil},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(repository.NewMemStorage()), mux: nil},
 			want: want{
 				routes: map[string]string{
 					"/":         "GET",
@@ -69,7 +69,7 @@ func TestNewRouter(t *testing.T) {
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*chi.Router)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
-				assert.Implements(t, (*service.Metrics)(nil), rt.metrics)
+				assert.Implements(t, (*service.MetricStorer)(nil), rt.metrics)
 				seen := make(map[string]string)
 				err := chi.Walk(rt.mux.(chi.Router), want.walkFn(want.routes, seen))
 				assert.NoError(t, err)
@@ -79,25 +79,25 @@ func TestNewRouter(t *testing.T) {
 		},
 		{
 			name: "new router with mux=NewServeMux()",
-			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetrics(repository.NewMemStorage()), mux: http.NewServeMux()},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(repository.NewMemStorage()), mux: http.NewServeMux()},
 			assertion: func(rt *router, want want) bool {
 				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*http.Handler)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
-				assert.Implements(t, (*service.Metrics)(nil), rt.metrics)
+				assert.Implements(t, (*service.MetricStorer)(nil), rt.metrics)
 				return true
 			},
 		},
 		{
 			name: "new router with mux=chi.NewRouter()",
-			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetrics(repository.NewMemStorage()), mux: chi.NewRouter()},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(repository.NewMemStorage()), mux: chi.NewRouter()},
 			assertion: func(rt *router, want want) bool {
 				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
 				assert.Implements(t, (*http.Handler)(nil), rt.mux)
 				assert.NotNil(t, rt.metrics)
-				assert.Implements(t, (*service.Metrics)(nil), rt.metrics)
+				assert.Implements(t, (*service.MetricStorer)(nil), rt.metrics)
 				return true
 			},
 		},
@@ -113,7 +113,7 @@ func Test_router_configureChiRouter(t *testing.T) {
 	type fields struct {
 		logger  log.Logger
 		mux     http.Handler
-		metrics service.Metrics
+		metrics service.MetricStorer
 	}
 	tests := []struct {
 		name   string
@@ -125,7 +125,7 @@ func Test_router_configureChiRouter(t *testing.T) {
 			fields: fields{
 				logger:  log.NewNoopLogger(),
 				mux:     http.NewServeMux(),
-				metrics: service.NewMetrics(repository.NewMemStorage()),
+				metrics: service.NewMetricStorer(repository.NewMemStorage()),
 			},
 		},
 	}
@@ -241,7 +241,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 	runInnerTest := func(t *testing.T, url string, tt innerTest) {
 		storage := storagetest.NewMockStorage(tt.args.metrics...)
 		logger := log.NewTestLogger()
-		rt := NewRouter(logger, service.NewMetrics(storage), nil)
+		rt := NewRouter(logger, service.NewMetricStorer(storage), nil)
 		ts := httptest.NewServer(rt)
 		defer ts.Close()
 
@@ -752,7 +752,7 @@ func Test_router_getMiddlewares(t *testing.T) {
 	type fields struct {
 		logger  log.Logger
 		mux     http.Handler
-		metrics service.Metrics
+		metrics service.MetricStorer
 	}
 	tests := []struct {
 		name   string

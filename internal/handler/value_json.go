@@ -14,7 +14,7 @@ import (
 
 type valueJSONHandler struct {
 	logger    log.Logger
-	metrics   service.Metrics
+	metrics   service.MetricStorer
 	responder metricJSONResponder
 }
 

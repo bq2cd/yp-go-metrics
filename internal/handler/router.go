@@ -34,11 +34,11 @@ func newRoute(handler http.Handler, patterns ...string) route {
 type router struct {
 	logger  log.Logger
 	mux     http.Handler
-	metrics service.Metrics
+	metrics service.MetricStorer
 }
 
 // NewRouter instantiates a router with necessary dependencies.
-func NewRouter(logger log.Logger, metrics service.Metrics, mux http.Handler) *router {
+func NewRouter(logger log.Logger, metrics service.MetricStorer, mux http.Handler) *router {
 	if mux != nil {
 		return &router{
 			logger:  logger.With(log.Str("subsystem", "router")),

@@ -9,29 +9,29 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewMetrics(t *testing.T) {
+func TestNewMetricStorer(t *testing.T) {
 	type args struct {
 		storage repository.Storage
 	}
 	tests := []struct {
 		name string
 		args args
-		want *metricService
+		want *metricStorer
 	}{
 		{
 			name: "new service",
 			args: args{storage: storagetest.NewMockStorage()},
-			want: &metricService{storage: storagetest.NewMockStorage()},
+			want: &metricStorer{storage: storagetest.NewMockStorage()},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, NewMetrics(tt.args.storage))
+			assert.Equal(t, tt.want, NewMetricStorer(tt.args.storage))
 		})
 	}
 }
 
-func Test_metricService_StoreSingle(t *testing.T) {
+func Test_metricStorer_StoreSingle(t *testing.T) {
 	type fields struct {
 		storage repository.Storage
 	}
@@ -178,7 +178,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &metricService{
+			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
 			tt.assertion(t, s.StoreSingle(tt.args.metric))
@@ -187,7 +187,7 @@ func Test_metricService_StoreSingle(t *testing.T) {
 	}
 }
 
-func Test_metricService_StoreBatch(t *testing.T) {
+func Test_metricStorer_StoreBatch(t *testing.T) {
 	type fields struct {
 		storage repository.Storage
 	}
@@ -279,7 +279,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &metricService{
+			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
 			metrics := make([]model.Metric, 0, len(tt.args.metrics))
@@ -297,7 +297,7 @@ func Test_metricService_StoreBatch(t *testing.T) {
 	}
 }
 
-func Test_metricService_RetrieveSingle(t *testing.T) {
+func Test_metricStorer_RetrieveSingle(t *testing.T) {
 	type fields struct {
 		storage repository.Storage
 	}
@@ -360,7 +360,7 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &metricService{
+			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
 			got, err := s.RetrieveSingle(tt.args.key)
@@ -370,7 +370,7 @@ func Test_metricService_RetrieveSingle(t *testing.T) {
 	}
 }
 
-func Test_metricService_RetrieveBatch(t *testing.T) {
+func Test_metricStorer_RetrieveBatch(t *testing.T) {
 	type fields struct {
 		storage repository.Storage
 	}
@@ -423,7 +423,7 @@ func Test_metricService_RetrieveBatch(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &metricService{
+			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
 			got, err := s.RetrieveBatch(tt.args.keys)
@@ -433,7 +433,7 @@ func Test_metricService_RetrieveBatch(t *testing.T) {
 	}
 }
 
-func Test_metricService_RetrieveAll(t *testing.T) {
+func Test_metricStorer_RetrieveAll(t *testing.T) {
 	type fields struct {
 		storage repository.Storage
 	}
@@ -470,7 +470,7 @@ func Test_metricService_RetrieveAll(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &metricService{
+			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
 			got, err := s.RetrieveAll()

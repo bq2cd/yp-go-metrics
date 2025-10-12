@@ -16,7 +16,7 @@ import (
 
 func Test_valueHandler_ServeHTTP(t *testing.T) {
 	type fields struct {
-		metrics service.Metrics
+		metrics service.MetricStorer
 	}
 	type args struct {
 		method      string
@@ -45,27 +45,27 @@ func Test_valueHandler_ServeHTTP(t *testing.T) {
 		// Not Found
 		{
 			name:   "GET %s NOT_FOUND",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			fields: fields{metrics: service.NewMetricStorer(repository.NewMemStorage())},
 			args:   args{method: http.MethodGet, url: "/value/badType", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name:   "GET %s NOT_FOUND",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			fields: fields{metrics: service.NewMetricStorer(repository.NewMemStorage())},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// Bad Request
 		{
 			name:   "GET %s BAD_REQUEST",
-			fields: fields{metrics: service.NewMetrics(repository.NewMemStorage())},
+			fields: fields{metrics: service.NewMetricStorer(repository.NewMemStorage())},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1/123", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// OK
 		{
 			name: "GET %s OK",
-			fields: fields{metrics: service.NewMetrics(
+			fields: fields{metrics: service.NewMetricStorer(
 				func() repository.Storage {
 					s := repository.NewMemStorage()
 					err := s.Set(model.NewCounterMetric("id1", 123))
@@ -78,7 +78,7 @@ func Test_valueHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "GET %s OK",
-			fields: fields{metrics: service.NewMetrics(
+			fields: fields{metrics: service.NewMetricStorer(
 				func() repository.Storage {
 					s := repository.NewMemStorage()
 					err := s.Set(model.NewCounterMetric("id1", 123))
@@ -91,7 +91,7 @@ func Test_valueHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "GET %s OK",
-			fields: fields{metrics: service.NewMetrics(
+			fields: fields{metrics: service.NewMetricStorer(
 				func() repository.Storage {
 					s := repository.NewMemStorage()
 					err := s.Set(model.NewGaugeMetric("id1", -1.23))

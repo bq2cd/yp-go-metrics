@@ -9,7 +9,7 @@ import (
 )
 
 type updateHandler struct {
-	metrics service.Metrics
+	metrics service.MetricStorer
 }
 
 // ServeHTTP implements http.Handler for /update/* endpoint with plain-text requests/responses.

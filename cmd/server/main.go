@@ -32,7 +32,7 @@ type cliOptions struct {
 
 func runServer(logger log.Logger, ctx context.Context, cfg config.Config) error {
 	storage := repository.NewMemStorage()
-	svc := service.NewMetrics(storage)
+	svc := service.NewMetricStorer(storage)
 	router := handler.NewRouter(logger, svc, nil)
 
 	srv := server.NewServer(logger, ctx, cfg, router)

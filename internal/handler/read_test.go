@@ -19,7 +19,7 @@ import (
 
 func Test_readHandler_ServeHTTP(t *testing.T) {
 	type fields struct {
-		metrics service.Metrics
+		metrics service.MetricStorer
 	}
 	type args struct {
 		method      string
@@ -52,7 +52,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		// OK
 		{
 			name:   "GET %s OK (no metrics)",
-			fields: fields{metrics: service.NewMetrics(storagetest.NewMockStorage())},
+			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage())},
 			args:   args{method: http.MethodGet, url: "/", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: httpheaders.ContentTypeTextHTML},
 			assertion: func(t *testing.T, want want, body string) {
@@ -62,7 +62,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name:   "GET %s OK (single metric)",
-			fields: fields{metrics: service.NewMetrics(storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
+			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
 			args:   args{method: http.MethodGet, url: "/", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "id1 123", contentType: httpheaders.ContentTypeTextHTML},
 			assertion: func(t *testing.T, want want, body string) {
@@ -71,7 +71,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "GET %s OK (multiple metrics)",
-			fields: fields{metrics: service.NewMetrics(
+			fields: fields{metrics: service.NewMetricStorer(
 				func() repository.Storage {
 					s := repository.NewMemStorage()
 					for _, m := range []model.Metric{

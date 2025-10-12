@@ -13,7 +13,7 @@ import (
 
 type updateJSONHandler struct {
 	logger    log.Logger
-	metrics   service.Metrics
+	metrics   service.MetricStorer
 	responder metricJSONResponder
 }
 
