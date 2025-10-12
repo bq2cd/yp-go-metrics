@@ -272,7 +272,7 @@ func Test_agent_doReport(t *testing.T) {
 	}
 }
 
-func TestRunPeriodicTask(t *testing.T) {
+func Test_runPeriodicTask(t *testing.T) {
 	type args struct {
 		interval     time.Duration
 		mockTask     *mockPeriodicTask
@@ -412,7 +412,7 @@ func TestRunPeriodicTask(t *testing.T) {
 
 			tt.args.mockTask.On("doWork").Return(mock.Anything)
 
-			tt.assertion(t, tt.args.mockTask, RunPeriodicTask(ctx, tt.args.interval, tt.args.mockTask.doWork, tt.args.initialDelay))
+			tt.assertion(t, tt.args.mockTask, runPeriodicTask(ctx, tt.args.interval, tt.args.mockTask.doWork, tt.args.initialDelay))
 		})
 	}
 }
