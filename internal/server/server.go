@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/internal/periodictask"
+	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
 // ListenerFactory abstracts a way to create a new listener.
@@ -31,25 +34,27 @@ func (f *listenerFactory) Create(ctx context.Context, addr string) (net.Listener
 }
 
 type server struct {
-	logger    log.Logger
-	context   context.Context
-	config    config.Config
-	router    http.Handler
-	lnFactory ListenerFactory
+	logger      log.Logger
+	context     context.Context
+	config      config.Config
+	router      http.Handler
+	snapshotter service.MetricSnapshotter
+	lnFactory   ListenerFactory
 }
 
 // NewServer creates an instance of a server worker.
-func NewServer(logger log.Logger, ctx context.Context, cfg config.Config, router http.Handler) *server {
+func NewServer(logger log.Logger, ctx context.Context, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter) *server {
 	l := logger
 	if l == nil {
 		l = log.NewNoopLogger()
 	}
 	return &server{
-		logger:    l.With(log.Str("subsystem", "server")),
-		context:   ctx,
-		config:    cfg,
-		router:    router,
-		lnFactory: &listenerFactory{},
+		logger:      l.With(log.Str("subsystem", "server")),
+		context:     ctx,
+		config:      cfg,
+		router:      router,
+		snapshotter: snapshotter,
+		lnFactory:   &listenerFactory{},
 	}
 }
 
@@ -94,18 +99,69 @@ func (s *server) listenAndServe() error {
 	}
 }
 
+func (s *server) loadMetrics() error {
+	if !s.config.MetricStoreLoadOnStartup {
+		return nil
+	}
+	if s.config.MetricStoreFilePath == "" {
+		return nil
+	}
+	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_RDONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	// snapshotter will close the reader
+	return s.snapshotter.LoadClose(f)
+}
+
+func (s *server) dumpMetrics() error {
+	if s.config.MetricStoreFilePath == "" {
+		return nil
+	}
+	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	// snapshotter will close the writer
+	return s.snapshotter.DumpClose(f)
+
+}
+
+func (s *server) createPeriodicTask(f func() error) periodictask.Task {
+	var t periodictask.Task
+	if s.config.MetricStoreInterval == 0 {
+		taskFn := func(_ context.Context, _ struct{}) error { return f() }
+		t = periodictask.NewChanTask(s.context, s.snapshotter.C(), taskFn)
+	} else {
+		taskFn := func(_ context.Context) error { return f() }
+		t = periodictask.NewTimerTask(s.context, s.config.MetricStoreInterval, taskFn, s.config.MetricStoreInterval)
+	}
+	return t
+}
+
 // Run launches main loop of the server focused on two things:
 // (1) listening on provided address and serving incoming HTTP requests;
 // (2) periodically dumping received metrics to disk;
 func (s *server) Run() error {
+	if err := s.loadMetrics(); err != nil {
+		return fmt.Errorf("failed to load metrics: %w", err)
+	}
 	var wg sync.WaitGroup
 
 	errCh := make(chan error, 1)
 
+	// launch http server
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		errCh <- s.listenAndServe()
+	}()
+
+	// launch metric dumper
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errCh <- s.createPeriodicTask(s.dumpMetrics).Run()
 	}()
 
 	go func() {
