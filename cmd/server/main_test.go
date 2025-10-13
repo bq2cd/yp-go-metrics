@@ -593,11 +593,12 @@ func Test_main(t *testing.T) {
 		exitCode int
 	}
 	tests := []struct {
-		name      string
-		args      []string
-		env       map[string]string
-		want      want
-		assertion func(*testing.T, string, map[string]string)
+		name          string
+		args          []string
+		env           map[string]string
+		want          want
+		assertRunning func(*testing.T, string)
+		assertStopped func(*testing.T, map[string]string)
 	}{
 		{
 			name: "address via args",
@@ -606,11 +607,13 @@ func Test_main(t *testing.T) {
 			want: want{
 				exitCode: 0,
 			},
-			assertion: func(t *testing.T, addr string, env map[string]string) {
+			assertRunning: func(t *testing.T, addr string) {
 				req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/", addr), http.NoBody)
 				require.NoError(t, err)
 				err = servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
 				assert.NoError(t, err)
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
 			},
 		},
 		{
@@ -622,11 +625,13 @@ func Test_main(t *testing.T) {
 			want: want{
 				exitCode: 0,
 			},
-			assertion: func(t *testing.T, addr string, env map[string]string) {
+			assertRunning: func(t *testing.T, addr string) {
 				req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/", addr), http.NoBody)
 				require.NoError(t, err)
 				err = servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
 				assert.NoError(t, err)
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
 			},
 		},
 		{
@@ -639,12 +644,14 @@ func Test_main(t *testing.T) {
 			want: want{
 				exitCode: 0,
 			},
-			assertion: func(t *testing.T, addr string, env map[string]string) {
+			assertRunning: func(t *testing.T, addr string) {
 				req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/update/", addr), bytes.NewReader([]byte(`{"id": "id1", "type": "counter", "delta": 78}`)))
 				require.NoError(t, err)
 				httpheaders.ContentTypeApplicationJSON.Apply(req.Header)
 				err = servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
 				assert.NoError(t, err)
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
 				dump, err := os.ReadFile(env["FILE_STORAGE_PATH"])
 				require.NoError(t, err)
 				t.Logf("dumped metrics (%s): %s", env["FILE_STORAGE_PATH"], string(dump))
@@ -666,7 +673,7 @@ func Test_main(t *testing.T) {
 			want: want{
 				exitCode: 0,
 			},
-			assertion: func(t *testing.T, addr string, env map[string]string) {
+			assertRunning: func(t *testing.T, addr string) {
 				req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://%s/value/", addr), bytes.NewBufferString(`{"id": "id1", "type": "counter"}`))
 				require.NoError(t, err)
 				httpheaders.ContentTypeApplicationJSON.Apply(req.Header)
@@ -676,6 +683,8 @@ func Test_main(t *testing.T) {
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				assert.JSONEq(t, `{"id": "id1", "type": "counter", "delta": 78}`, string(body))
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
 			},
 		},
 	}
@@ -701,9 +710,11 @@ func Test_main(t *testing.T) {
 			}()
 
 			time.Sleep(100 * time.Millisecond)
-			tt.assertion(t, addrFactory.Get(tid), tt.env)
+			tt.assertRunning(t, addrFactory.Get(tid))
 
 			_ = cmd.Wait()
+
+			tt.assertStopped(t, tt.env)
 
 			t.Logf("subprocess stdout:\n%s\n", stdout.String())
 			t.Logf("subprocess stderr:\n%s\n", stderr.String())
