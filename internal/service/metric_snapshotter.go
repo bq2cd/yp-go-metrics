@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -68,6 +69,9 @@ func (p *metricSnapshotter) StoreSingle(m model.Metric) error {
 // StoreSingle wraps corresponding [MetricStorer.StoreBatch] method
 // to record a fact of new writes.
 func (p *metricSnapshotter) StoreBatch(metrics []model.Metric) error {
+	if len(metrics) == 0 {
+		return nil
+	}
 	p.mu.Lock()
 	err := p.MetricStorer.StoreBatch(metrics)
 	p.mu.Unlock()
@@ -80,39 +84,49 @@ func (p *metricSnapshotter) StoreBatch(metrics []model.Metric) error {
 
 // DumpClose creates a snapshot of all metrics in the underlying [MetricStorer] instance
 // by encoding them with [MetricEncoder] and writing to provided [io.WriteCloser] writer.
-// After successful write, it closes the writer.
-func (p *metricSnapshotter) DumpClose(w io.WriteCloser) error {
+// It closes the writer upon completion regardless of underlying errors.
+func (p *metricSnapshotter) DumpClose(w io.WriteCloser) (errFinal error) {
+	defer func() {
+		errFinal = errors.Join(errFinal, w.Close())
+	}()
 	dirtyWrites := p.dirtyWrites.Load()
 	if dirtyWrites == 0 {
-		return nil
+		return
 	}
 	p.mu.RLock()
 	metrics, err := p.RetrieveAll()
 	p.mu.RUnlock()
 	if err != nil {
-		return fmt.Errorf("failed to retrieve all metrics: %w", err)
+		errFinal = fmt.Errorf("failed to retrieve all metrics: %w", err)
+		return
 	}
 	err = p.encoder.EncodeBatch(w, metrics)
 	if err != nil {
-		return fmt.Errorf("failed to encode metrics: %w", err)
+		errFinal = fmt.Errorf("failed to encode metrics: %w", err)
+		return
 	}
 	p.dirtyWrites.CompareAndSwap(dirtyWrites, 0)
-	return w.Close()
+	return
 }
 
 // DumpClose reads encoded metrics from [io.ReadCloser] reader, decodes them with [MetricDecoder]
 // and stores them into in the underlying [MetricStorer] instance.
-// After successful operation, it closes the reader.
-func (p *metricSnapshotter) LoadClose(r io.ReadCloser) error {
+// It closes the reader upon completion regardless of underlying errors.
+func (p *metricSnapshotter) LoadClose(r io.ReadCloser) (errFinal error) {
+	defer func() {
+		errFinal = errors.Join(errFinal, r.Close())
+	}()
 	metrics, err := p.decoder.DecodeBatch(r)
 	if err != nil {
-		return fmt.Errorf("failed to decode metrics: %w", err)
+		errFinal = fmt.Errorf("failed to decode metrics: %w", err)
+		return
 	}
 	err = p.MetricStorer.StoreBatch(metrics)
 	if err != nil {
-		return fmt.Errorf("failed to store metrics: %w", err)
+		errFinal = fmt.Errorf("failed to store metrics: %w", err)
+		return
 	}
-	return r.Close()
+	return
 }
 
 // C returns a channel with capacity of 1 for notifications on writes.

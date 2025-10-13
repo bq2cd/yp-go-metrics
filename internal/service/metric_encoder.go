@@ -21,5 +21,8 @@ func NewMetricJSONEncoder() *metricJSONEncoder {
 
 // EncodeBatch encodes the provided metrics into JSON and writes the result into the provided writer.
 func (d *metricJSONEncoder) EncodeBatch(w io.Writer, metrics []model.Metric) error {
+	if metrics == nil {
+		metrics = []model.Metric{}
+	}
 	return json.NewEncoder(w).Encode(metrics)
 }

@@ -7,7 +7,35 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
+
+type mockMetricStorer struct {
+	mock.Mock
+	metrics []model.Metric
+	err     error
+}
+
+func (m *mockMetricStorer) StoreSingle(metric model.Metric) error {
+	m.Called(metric)
+	return m.err
+}
+func (m *mockMetricStorer) StoreBatch(metrics []model.Metric) error {
+	m.Called(metrics)
+	return m.err
+}
+func (m *mockMetricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
+	m.Called(key)
+	return model.Metric{}, m.err
+}
+func (m *mockMetricStorer) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
+	m.Called(keys)
+	return m.metrics, m.err
+}
+func (m *mockMetricStorer) RetrieveAll() ([]model.Metric, error) {
+	m.Called()
+	return m.metrics, m.err
+}
 
 func TestNewMetricStorer(t *testing.T) {
 	type args struct {
