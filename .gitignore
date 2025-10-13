@@ -27,4 +27,5 @@ vendor/
 # Extra
 /.act/
 /toolkit.nu
+/metrics.json
 

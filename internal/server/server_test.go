@@ -229,17 +229,17 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.NoError(t, err)
-
 						m.AssertExpectations(t)
 						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
 						assert.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("C").Return(mock.AnythingOfType("chan"))
+						m.On("C").Return(mock.AnythingOfType("chan")).Once()
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
+						m.AssertNotCalled(t, "DumpClose")
+						m.AssertNotCalled(t, "LoadClose")
 					},
 				},
 				{
@@ -255,13 +255,11 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.Error(t, err)
-
 						m.AssertNotCalled(t, "ServeHTTP")
-
 						assert.Error(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("C").Return(mock.AnythingOfType("chan"))
+						m.On("C").Return(mock.AnythingOfType("chan")).Once()
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
@@ -282,17 +280,14 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.NoError(t, err)
-
 						err = servertest.MakeRequestDiscardResponse(nil, req)
 						assert.Error(t, err)
-
 						m.AssertExpectations(t)
 						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
 						assert.Error(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("C").Return(mock.AnythingOfType("chan"))
+						m.On("C").Return(mock.AnythingOfType("chan")).Once()
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
@@ -313,13 +308,11 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.Error(t, err)
-
 						m.AssertNotCalled(t, "ServeHTTP")
-
 						assert.Error(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("C").Return(mock.AnythingOfType("chan"))
+						m.On("C").Return(mock.AnythingOfType("chan")).Once()
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
@@ -347,10 +340,8 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.NoError(t, err)
-
 						m.AssertExpectations(t)
 						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
 						assert.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
@@ -377,19 +368,87 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.NoError(t, err)
-
 						m.AssertExpectations(t)
 						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
 						assert.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.On("DumpClose", mock.Anything).Return(nil).Times(8)
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
+						m.AssertExpectations(t)
 						m.AssertNotCalled(t, "C")
 						m.AssertNotCalled(t, "LoadClose")
+					},
+				},
+			},
+		},
+		{
+			name: "metric snapshotter runs on each update",
+			cases: []innerTest{
+				{
+					name: "store path is empty",
+					fields: fields{
+						config: config.Config{
+							ListenAddress:       servertest.GetRandomListenAddress(t),
+							ShutdownTimeout:     100 * time.Millisecond,
+							MetricStoreInterval: 0,
+						},
+						router:      &mockRouter{},
+						snapshotter: newMockMetricSnapshotter(),
+						lnFactory:   &listenerFactory{},
+					},
+					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
+						err := servertest.MakeRequestDiscardResponse(nil, req)
+						assert.NoError(t, err)
 						m.AssertExpectations(t)
+						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
+						assert.NoError(t, <-errCh)
+					},
+					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
+						m.On("C").Return(mock.AnythingOfType("chan")).Once()
+					},
+					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
+						m.AssertExpectations(t)
+						m.AssertNotCalled(t, "DumpClose")
+						m.AssertNotCalled(t, "LoadClose")
+					},
+				},
+				{
+					name: "store path defined",
+					fields: fields{
+						config: config.Config{
+							ListenAddress:       servertest.GetRandomListenAddress(t),
+							ShutdownTimeout:     100 * time.Millisecond,
+							MetricStoreInterval: 0,
+							MetricStoreFilePath: createTempFile(t, "test-metric-store-*"),
+						},
+						router: &mockRouter{},
+						snapshotter: func() *mockMetricSnapshotter {
+							m := newMockMetricSnapshotter()
+							go func() {
+								for range 8 {
+									m.notifyCh <- struct{}{}
+								}
+							}()
+							return m
+						}(),
+						lnFactory: &listenerFactory{},
+					},
+					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
+						err := servertest.MakeRequestDiscardResponse(nil, req)
+						assert.NoError(t, err)
+						m.AssertExpectations(t)
+						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
+						assert.NoError(t, <-errCh)
+					},
+					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
+						m.On("C").Return(mock.AnythingOfType("chan")).Once()
+						m.On("DumpClose", mock.Anything).Return(nil).Times(8)
+					},
+					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
+						m.AssertExpectations(t)
+						m.AssertNotCalled(t, "LoadClose")
 					},
 				},
 			},
@@ -412,10 +471,8 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.NoError(t, err)
-
 						m.AssertExpectations(t)
 						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
 						assert.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
@@ -443,10 +500,8 @@ func Test_server_Run(t *testing.T) {
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
 						assert.NoError(t, err)
-
 						m.AssertExpectations(t)
 						m.AssertNumberOfCalls(t, "ServeHTTP", 1)
-
 						assert.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {

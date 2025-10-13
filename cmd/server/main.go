@@ -21,13 +21,19 @@ import (
 )
 
 const (
-	defaultAddress            = "localhost:8080"
-	defaultShutdownTimeoutSec = 1
+	defaultAddress                  = "localhost:8080"
+	defaultShutdownTimeoutSec       = 1
+	defaultMetricStoreIntervalSec   = 300
+	defaultMetricStoreFilePath      = "metrics.json"
+	defaultMetricStoreLoadOnStartup = false
 )
 
 type cliOptions struct {
-	ListenAddress   string `env:"ADDRESS"`
-	ShutdownTimeout uint   `env:"SHUTDOWN_TIMEOUT"`
+	ListenAddress            string `env:"ADDRESS"`
+	ShutdownTimeout          uint   `env:"SHUTDOWN_TIMEOUT"`
+	MetricStoreInterval      uint   `env:"STORE_INTERVAL"`
+	MetricStoreFilePath      string `env:"FILE_STORAGE_PATH"`
+	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
 }
 
 func runServer(logger log.Logger, ctx context.Context, cfg config.Config) error {
@@ -46,6 +52,9 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 
 	fs.StringVar(&opts.ListenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
 	fs.UintVar(&opts.ShutdownTimeout, "t", defaultShutdownTimeoutSec, "graceful shutdown timeout in seconds")
+	fs.UintVar(&opts.MetricStoreInterval, "i", defaultMetricStoreIntervalSec, "dump metrics on disk each interval (in seconds)")
+	fs.StringVar(&opts.MetricStoreFilePath, "f", defaultMetricStoreFilePath, "path to file for dumping metrics")
+	fs.BoolVar(&opts.MetricStoreLoadOnStartup, "r", defaultMetricStoreLoadOnStartup, "restore metrics from file on startup")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
@@ -58,6 +67,9 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	cfg, err := config.New(
 		config.ListenAddress(opts.ListenAddress),
 		config.ShutdownTimeout(opts.ShutdownTimeout),
+		config.MetricStoreInterval(opts.MetricStoreInterval),
+		config.MetricStoreFilePath(opts.MetricStoreFilePath),
+		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

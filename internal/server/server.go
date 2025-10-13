@@ -106,25 +106,34 @@ func (s *server) loadMetrics() error {
 	if s.config.MetricStoreFilePath == "" {
 		return nil
 	}
+	s.logger.Info().Str("path", s.config.MetricStoreFilePath).Msg("loading metrics from disk")
 	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_RDONLY|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
 	// snapshotter will close the reader
-	return s.snapshotter.LoadClose(f)
+	err = s.snapshotter.LoadClose(f)
+	if err != nil {
+		s.logger.Error().Err("error", err).Msg("failed to load metrics")
+	}
+	return err
 }
 
 func (s *server) dumpMetrics() error {
 	if s.config.MetricStoreFilePath == "" {
 		return nil
 	}
+	s.logger.Info().Str("path", s.config.MetricStoreFilePath).Msg("dumping metrics to disk")
 	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
 	// snapshotter will close the writer
-	return s.snapshotter.DumpClose(f)
-
+	err = s.snapshotter.DumpClose(f)
+	if err != nil {
+		s.logger.Error().Err("error", err).Msg("failed to dump metrics")
+	}
+	return err
 }
 
 func (s *server) createPeriodicTask(f func() error) periodictask.Task {
@@ -143,11 +152,13 @@ func (s *server) createPeriodicTask(f func() error) periodictask.Task {
 // (1) listening on provided address and serving incoming HTTP requests;
 // (2) periodically dumping received metrics to disk;
 func (s *server) Run() error {
+	s.logger.Info().Any("config", s.config).Msg("starting with config")
+
 	if err := s.loadMetrics(); err != nil {
 		return fmt.Errorf("failed to load metrics: %w", err)
 	}
-	var wg sync.WaitGroup
 
+	var wg sync.WaitGroup
 	errCh := make(chan error, 1)
 
 	// launch http server
