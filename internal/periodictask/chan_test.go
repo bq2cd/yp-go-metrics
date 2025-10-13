@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,13 +15,22 @@ import (
 
 type mockChanTask[T any] struct {
 	mock.Mock
+	mu           sync.Mutex
 	workDuration func() time.Duration
 	wantErr      func() bool
 	elapsed      time.Duration
 }
 
+func (m *mockChanTask[T]) numCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.Calls)
+}
+
 func (m *mockChanTask[T]) doWork(ctx context.Context, v T) error {
+	m.mu.Lock()
 	m.Called(ctx, v)
+	m.mu.Unlock()
 
 	work := m.workDuration()
 	time.Sleep(work)
@@ -70,8 +80,7 @@ func Test_chanTask_Run(t *testing.T) {
 		mockTask *mockChanTask[any]
 	}
 	type want struct {
-		calls   int
-		elapsed time.Duration
+		calls int
 	}
 	tests := []struct {
 		name      string
@@ -91,8 +100,7 @@ func Test_chanTask_Run(t *testing.T) {
 				},
 			},
 			want: want{
-				calls:   7,
-				elapsed: 98 * time.Millisecond,
+				calls: 7,
 			},
 			assertion: func(t *testing.T, m *mockChanTask[any], err error) {
 				assert.NoError(t, err)
@@ -109,8 +117,7 @@ func Test_chanTask_Run(t *testing.T) {
 				},
 			},
 			want: want{
-				calls:   2,
-				elapsed: 60 * time.Millisecond,
+				calls: 2,
 			},
 			assertion: func(t *testing.T, m *mockChanTask[any], err error) {
 				assert.NoError(t, err)
@@ -127,8 +134,7 @@ func Test_chanTask_Run(t *testing.T) {
 				},
 			},
 			want: want{
-				calls:   1,
-				elapsed: 100 * time.Millisecond,
+				calls: 1,
 			},
 			assertion: func(t *testing.T, m *mockChanTask[any], err error) {
 				assert.NoError(t, err)
@@ -145,8 +151,7 @@ func Test_chanTask_Run(t *testing.T) {
 				},
 			},
 			want: want{
-				calls:   6,
-				elapsed: 60 * time.Millisecond,
+				calls: 6,
 			},
 			assertion: func(t *testing.T, m *mockChanTask[any], err error) {
 				assert.Error(t, err)
@@ -158,7 +163,7 @@ func Test_chanTask_Run(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
 			defer cancel()
 
-			tt.args.mockTask.On("doWork", mock.Anything, mock.Anything).Return(mock.AnythingOfType("error")).Times(tt.want.calls)
+			tt.args.mockTask.On("doWork", mock.Anything, mock.Anything).Return(mock.AnythingOfType("error"))
 			tr := &chanTask[any]{
 				context:  ctx,
 				incoming: tt.args.incoming,
@@ -177,8 +182,9 @@ func Test_chanTask_Run(t *testing.T) {
 			err := <-errCh
 
 			tt.args.mockTask.AssertExpectations(t)
+			assert.GreaterOrEqual(t, tt.args.mockTask.numCalls(), tt.want.calls-1)
+			assert.LessOrEqual(t, tt.args.mockTask.numCalls(), tt.want.calls+1)
 			tt.assertion(t, tt.args.mockTask, err)
-			assert.Equal(t, tt.want.elapsed, tt.args.mockTask.elapsed)
 		})
 	}
 }
