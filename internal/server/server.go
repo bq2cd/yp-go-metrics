@@ -99,24 +99,26 @@ func (s *server) listenAndServe() error {
 	}
 }
 
-func (s *server) loadMetrics() error {
+func (s *server) tryLoadMetrics() {
 	if !s.config.MetricStoreLoadOnStartup {
-		return nil
+		return
 	}
 	if s.config.MetricStoreFilePath == "" {
-		return nil
+		return
 	}
-	s.logger.Info().Str("path", s.config.MetricStoreFilePath).Msg("loading metrics from disk")
+	l := s.logger.With(log.Str("path", s.config.MetricStoreFilePath), log.Str("component", "metric_loader"))
+
+	l.Info().Msg("loading metrics from disk")
 	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_RDONLY|os.O_CREATE, 0600)
 	if err != nil {
-		return err
+		l.Error().Err("error", err).Msg("failed to open file")
+		return
 	}
 	// snapshotter will close the reader
 	err = s.snapshotter.LoadClose(f)
 	if err != nil {
-		s.logger.Error().Err("error", err).Msg("failed to load metrics")
+		l.Error().Err("error", err).Msg("failed to load metrics")
 	}
-	return err
 }
 
 func (s *server) dumpMetrics() error {
@@ -124,16 +126,30 @@ func (s *server) dumpMetrics() error {
 		return nil
 	}
 	s.logger.Info().Str("path", s.config.MetricStoreFilePath).Msg("dumping metrics to disk")
-	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
+
+	tmpfname := s.config.MetricStoreFilePath + ".tmp"
+	tmpf, err := os.OpenFile(tmpfname, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open temporary file (%s): %w", tmpfname, err)
 	}
 	// snapshotter will close the writer
-	err = s.snapshotter.DumpClose(f)
+	err = s.snapshotter.DumpClose(tmpf)
 	if err != nil {
-		s.logger.Error().Err("error", err).Msg("failed to dump metrics")
+		return fmt.Errorf("failed to dump metrics: %w", err)
 	}
-	return err
+
+	stat, err := os.Stat(tmpfname)
+	if err != nil {
+		return fmt.Errorf("failed to stat temporary file: %w", err)
+	}
+	if stat.Size() == 0 {
+		// no metrics were dumped - there were probably no writes since the last dump
+		return nil
+	}
+	if err := os.Rename(tmpfname, s.config.MetricStoreFilePath); err != nil {
+		return fmt.Errorf("failed to rename temporary file (%s -> %s): %w", tmpfname, s.config.MetricStoreFilePath, err)
+	}
+	return nil
 }
 
 func (s *server) createPeriodicTask(f func() error) periodictask.Task {
@@ -154,9 +170,7 @@ func (s *server) createPeriodicTask(f func() error) periodictask.Task {
 func (s *server) Run() error {
 	s.logger.Info().Any("config", s.config).Msg("starting with config")
 
-	if err := s.loadMetrics(); err != nil {
-		return fmt.Errorf("failed to load metrics: %w", err)
-	}
+	s.tryLoadMetrics()
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1)
@@ -183,6 +197,12 @@ func (s *server) Run() error {
 	var errFinal error
 	for err := range errCh {
 		errFinal = errors.Join(errFinal, err)
+	}
+
+	// if metrics were not being dumped on every write,
+	// perform final dump (aka "flush") before shutdown.
+	if s.config.MetricStoreInterval > 0 {
+		errFinal = errors.Join(errFinal, s.dumpMetrics())
 	}
 
 	return errFinal

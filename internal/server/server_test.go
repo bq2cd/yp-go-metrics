@@ -373,7 +373,7 @@ func Test_server_Run(t *testing.T) {
 						assert.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("DumpClose", mock.Anything).Return(nil).Times(8)
+						m.On("DumpClose", mock.Anything).Return(nil).Times(9)
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
@@ -612,37 +612,6 @@ func Test_server_listenAndServe(t *testing.T) {
 	}
 }
 
-func Test_server_loadMetrics(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		context     context.Context
-		config      config.Config
-		router      http.Handler
-		snapshotter service.MetricSnapshotter
-		lnFactory   ListenerFactory
-	}
-	tests := []struct {
-		name      string
-		fields    fields
-		assertion assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &server{
-				logger:      tt.fields.logger,
-				context:     tt.fields.context,
-				config:      tt.fields.config,
-				router:      tt.fields.router,
-				snapshotter: tt.fields.snapshotter,
-				lnFactory:   tt.fields.lnFactory,
-			}
-			tt.assertion(t, s.loadMetrics())
-		})
-	}
-}
-
 func Test_server_dumpMetrics(t *testing.T) {
 	type fields struct {
 		logger      log.Logger
@@ -705,6 +674,36 @@ func Test_server_createPeriodicTask(t *testing.T) {
 				lnFactory:   tt.fields.lnFactory,
 			}
 			assert.Equal(t, tt.want, s.createPeriodicTask(tt.args.f))
+		})
+	}
+}
+
+func Test_server_tryLoadMetrics(t *testing.T) {
+	type fields struct {
+		logger      log.Logger
+		context     context.Context
+		config      config.Config
+		router      http.Handler
+		snapshotter service.MetricSnapshotter
+		lnFactory   ListenerFactory
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &server{
+				logger:      tt.fields.logger,
+				context:     tt.fields.context,
+				config:      tt.fields.config,
+				router:      tt.fields.router,
+				snapshotter: tt.fields.snapshotter,
+				lnFactory:   tt.fields.lnFactory,
+			}
+			s.tryLoadMetrics()
 		})
 	}
 }
