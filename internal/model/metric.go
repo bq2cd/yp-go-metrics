@@ -1,6 +1,8 @@
 package model
 
 const (
+	_metricTypeEmpty = MetricType("")
+
 	// MetricTypeCounter defines a counter type
 	MetricTypeCounter = MetricType("counter")
 
@@ -20,13 +22,24 @@ type (
 // This is different from metric hash as the hash can have a different
 // logic behind it.
 type MetricKey struct {
-	Type MetricType
-	ID   string
+	Type MetricType `json:"type"`
+	ID   string     `json:"id"`
 }
 
 // NewMetricKey is a convenience function to create a MetricKey struct instance.
 func NewMetricKey(mType MetricType, mID string) MetricKey {
 	return MetricKey{Type: mType, ID: mID}
+}
+
+// Empty returns true if either type or id or both are missing
+func (k MetricKey) Empty() bool {
+	if k.Type == _metricTypeEmpty {
+		return true
+	}
+	if k.ID == "" {
+		return true
+	}
+	return false
 }
 
 // Metric defines a basic data structure to store metric values and metadata.
@@ -114,4 +127,19 @@ func (m *Metric) Copy() Metric {
 		metric.Value = &tmp
 	}
 	return metric
+}
+
+// MetricSet represents a slice of metrics.
+type MetricSet []Metric
+
+// UniqueByKey converts a slice of metrics into a map with
+// `MetricKey` as a key and `Metric` as a value.
+// During conversion, duplicates are eliminated; last seen
+// metric in the slice wins.
+func (ms MetricSet) UniqueByKey() map[MetricKey]Metric {
+	unique := make(map[MetricKey]Metric, len(ms))
+	for _, m := range ms {
+		unique[m.Key()] = m
+	}
+	return unique
 }

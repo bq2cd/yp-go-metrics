@@ -1,52 +1,30 @@
 package agent
 
 import (
-	"context"
 	"errors"
-	"fmt"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/go-resty/resty/v2"
 )
 
-// Reporter abstracts a way to send metrics to an upstream.
+var (
+	ErrReporterEmptyMetric = errors.New("empty metric")
+)
+
+// Reporter abstracts a process of sending metrics to a central storage.
 type Reporter interface {
 	Report(metrics []model.Metric) error
 }
 
 type reporter struct {
-	context  context.Context
-	client   *resty.Client
+	sender   Sender
 	reported repository.Storage
 }
 
 // NewReporter creates an instance of the default reporter with
 // specified internal storage.
-func NewReporter(ctx context.Context, client *resty.Client, storage repository.Storage) *reporter {
-	return &reporter{context: ctx, client: client, reported: storage}
-}
-
-func (r *reporter) sendMetric(metric model.Metric) error {
-	metricOp := urlpath.NewOperationFromMetric(urlpath.OperationTypeUpdate, metric)
-	urlPath, err := metricOp.ToURLPath()
-	if err != nil {
-		return fmt.Errorf("cannot convert metric to url path: %w", err)
-	}
-
-	req := r.client.R().SetContext(r.context)
-
-	resp, err := req.SetHeader("content-type", "text/plain").Post(urlPath)
-	if err != nil {
-		return fmt.Errorf("http request error: %w", err)
-	}
-
-	if !resp.IsSuccess() {
-		return fmt.Errorf("expected success, got status %v", resp.Status())
-	}
-
-	return nil
+func NewReporter(sender Sender, storage repository.Storage) *reporter {
+	return &reporter{sender: sender, reported: storage}
 }
 
 func (r *reporter) getSendableMetric(metric model.Metric) model.Metric {
@@ -77,9 +55,12 @@ func (r *reporter) getSendableMetric(metric model.Metric) model.Metric {
 }
 
 func (r *reporter) reportSingle(metric model.Metric) error {
+	if metric.Empty() {
+		return ErrReporterEmptyMetric
+	}
 	sendable := r.getSendableMetric(metric)
 
-	err := r.sendMetric(sendable)
+	err := r.sender.Send(sendable)
 	if err != nil {
 		return err
 	}

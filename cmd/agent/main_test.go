@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -30,7 +32,7 @@ func Test_parseArgs(t *testing.T) {
 		{
 			name: "no args",
 			args: args{args: []string{}},
-			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:8080"}, PollInterval: defaultPollIntervalSec * time.Second, ReportInterval: defaultReportIntervalSec * time.Second},
+			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: defaultUpstreamURL}, PollInterval: defaultPollIntervalSec * time.Second, ReportInterval: defaultReportIntervalSec * time.Second},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
 			},
@@ -144,7 +146,85 @@ func Test_parseArgs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
 			fs.SetOutput(io.Discard)
-			got, err := parseArgs(fs, tt.args.args)
+			got, err := parseArgs(fs, tt.args.args, envparser.NewParserWithOptions(env.Options{Environment: map[string]string{}}))
+			tt.assertion(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func Test_parseArgs_withEnv(t *testing.T) {
+	type args struct {
+		args []string
+		env  map[string]string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      config.Config
+		assertion assert.ErrorAssertionFunc
+	}{
+		{
+			name: "env overrides address",
+			args: args{
+				args: []string{"-a=localhost:9090", "-r=20", "-p=5"},
+				env:  map[string]string{"ADDRESS": "localhost:3333"},
+			},
+			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:3333"}, PollInterval: 5 * time.Second, ReportInterval: 20 * time.Second},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "env overrides poll interval",
+			args: args{
+				args: []string{"-a=localhost:9090", "-r=20", "-p=5"},
+				env:  map[string]string{"POLL_INTERVAL": "19"},
+			},
+			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:9090"}, PollInterval: 19 * time.Second, ReportInterval: 20 * time.Second},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "env overrides report interval",
+			args: args{
+				args: []string{"-a=localhost:9090", "-r=20", "-p=5"},
+				env:  map[string]string{"REPORT_INTERVAL": "81"},
+			},
+			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:9090"}, PollInterval: 5 * time.Second, ReportInterval: 81 * time.Second},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "env invalid report interval",
+			args: args{
+				args: []string{"-a=localhost:9090", "-r=20", "-p=5"},
+				env:  map[string]string{"REPORT_INTERVAL": "-30"},
+			},
+			want: config.Config{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+		{
+			name: "env invalid poll interval",
+			args: args{
+				args: []string{"-a=localhost:9090", "-r=20", "-p=5"},
+				env:  map[string]string{"POLL_INTERVAL": "not a number"},
+			},
+			want: config.Config{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			got, err := parseArgs(fs, tt.args.args, envparser.NewParserWithOptions(env.Options{Environment: tt.args.env}))
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})

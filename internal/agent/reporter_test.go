@@ -1,19 +1,14 @@
 package agent
 
 import (
-	"context"
 	"errors"
-	"net/http"
-	"regexp"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/go-resty/resty/v2"
-	"github.com/jarcoal/httpmock"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -40,551 +35,218 @@ func (m *mockReporter) Report(metrics []model.Metric) error {
 	return nil
 }
 
-func Test_reporterreporterreporterReport(t *testing.T) {
-	type fields struct {
-		client   *resty.Client
-		reported repository.Storage
-	}
-	type args struct {
-		method    string
-		urlRegexp *regexp.Regexp
-		responder func(assert.TestingT) httpmock.Responder
-		metrics   []model.Metric
-	}
-	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		assertion assert.ErrorAssertionFunc
-	}{
-		{
-			name: "invalid metric",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234"),
-				reported: repository.NewMemStorage(),
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metrics: []model.Metric{{Type: model.MetricTypeCounter, ID: "id1"}},
-			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.NotContains(t, calls, key)
-				}
-				return assert.ErrorIs(t, err, urlpath.ErrMissingMetricValue)
-			},
-		},
-		{
-			name: "send single counter",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234"),
-				reported: repository.NewMemStorage(),
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
-			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				return assert.NoError(t, err)
-			},
-		},
-		{
-			name: "send multiple counters",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234"),
-				reported: repository.NewMemStorage(),
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10)},
-			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5", "POST http://localhost:1234/update/counter/id2/10"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				return assert.NoError(t, err)
-			},
-		},
-		{
-			name: "send multiple counters with the same id",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234"),
-				reported: repository.NewMemStorage(),
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -10), model.NewCounterMetric("id1", 7)},
-			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{
-					"POST http://localhost:1234/update/counter/id1/5",
-					"POST http://localhost:1234/update/counter/id1/-15",
-					"POST http://localhost:1234/update/counter/id1/17",
-				}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				return assert.NoError(t, err)
-			},
-		},
-		{
-			name: "send multiple metrics",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234"),
-				reported: repository.NewMemStorage(),
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
-			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{
-					"POST http://localhost:1234/update/counter/id1/5",
-					"POST http://localhost:1234/update/counter/id2/10",
-					"POST http://localhost:1234/update/gauge/id1/-5",
-					"POST http://localhost:1234/update/gauge/id2/-3.01",
-				}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				return assert.NoError(t, err)
-			},
-		},
-		{
-			name: "server error on single metric",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234"),
-				reported: repository.NewMemStorage(),
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						m, err := urlpath.NewOperationFromURLPath(r.URL.Path).ToMetric()
-						assert.NoError(t, err)
-						if m.Type == model.MetricTypeGauge && m.ID == "id1" {
-							return httpmock.NewStringResponse(http.StatusInternalServerError, ""), nil
-						}
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
-			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{
-					"POST http://localhost:1234/update/counter/id1/5",
-					"POST http://localhost:1234/update/counter/id2/10",
-					"POST http://localhost:1234/update/gauge/id1/-5",
-					"POST http://localhost:1234/update/gauge/id2/-3.01",
-				}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				return assert.Errorf(t, err, "expected success")
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &reporter{
-				context:  t.Context(),
-				client:   tt.fields.client,
-				reported: tt.fields.reported,
-			}
-			httpmock.ActivateNonDefault(r.client.GetClient())
-			defer httpmock.Reset()
-
-			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, tt.args.responder(t))
-
-			tt.assertion(t, r.Report(tt.args.metrics))
-		})
-	}
-}
-
 func Test_reporter_reportSingle(t *testing.T) {
 	type fields struct {
-		client   *resty.Client
-		reported repository.Storage
-		deadline time.Duration
+		sender   *mockSender
+		reported *storagetest.MockStorage
 	}
 	type args struct {
-		method    string
-		urlRegexp *regexp.Regexp
-		responder func(assert.TestingT) httpmock.Responder
-		metric    model.Metric
-	}
-	type want struct {
 		metric model.Metric
 	}
+	type want struct {
+		metricSent   model.Metric
+		metricStored model.Metric
+		checkErr     func(*testing.T, error)
+	}
 	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		want      want
-		assertion func(assert.TestingT, error, model.Metric, repository.Storage)
+		name   string
+		fields fields
+		args   args
+		want   want
 	}{
 		{
 			name: "send counter without value",
 			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: repository.NewMemStorage(),
-				deadline: 100 * time.Millisecond,
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
 				metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
 			},
 			want: want{
-				metric: model.Metric{},
-			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.NotContains(t, calls, key)
-				}
-				assert.Errorf(t, err, "empty counter")
-				got, err := reported.Get(want.Key())
-				assert.ErrorIs(t, err, repository.ErrMetricNotFound)
-				assert.Equal(t, want, got)
+				metricSent:   model.Metric{},
+				metricStored: model.Metric{},
+				checkErr: func(t *testing.T, err error) {
+					assert.ErrorIs(t, err, ErrReporterEmptyMetric)
+				},
 			},
 		},
 		{
 			name: "send counter without value 2",
 			fields: fields{
-				client: resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: func() repository.Storage {
-					s := repository.NewMemStorage()
-					err := s.Set(model.NewCounterMetric("id1", -5))
-					assert.NoError(t, err)
-					return s
-				}(),
-				deadline: 100 * time.Millisecond,
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
 				metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
 			},
 			want: want{
-				metric: model.NewCounterMetric("id1", -5),
+				metricSent:   model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
+				metricStored: model.NewCounterMetric("id1", -5),
+				checkErr: func(t *testing.T, err error) {
+					assert.ErrorIs(t, err, ErrReporterEmptyMetric)
+				},
 			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				for _, num := range calls {
-					assert.Zero(t, num)
-				}
-				assert.Errorf(t, err, "empty counter")
-				got, err := reported.Get(want.Key())
-				assert.NoError(t, err)
-				assert.Equal(t, want, got)
+		},
+		{
+			name: "send gauge without value",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metric: model.Metric{Type: model.MetricTypeGauge, ID: "id1"},
+			},
+			want: want{
+				metricSent:   model.Metric{},
+				metricStored: model.Metric{},
+				checkErr: func(t *testing.T, err error) {
+					assert.ErrorIs(t, err, ErrReporterEmptyMetric)
+				},
 			},
 		},
 		{
 			name: "send counter",
 			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: repository.NewMemStorage(),
-				deadline: 100 * time.Millisecond,
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
 				metric: model.NewCounterMetric("id1", 5),
 			},
 			want: want{
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				assert.NoError(t, err)
-				got, err := reported.Get(want.Key())
-				assert.NoError(t, err)
-				assert.Equal(t, want, got)
+				metricSent:   model.NewCounterMetric("id1", 5),
+				metricStored: model.NewCounterMetric("id1", 5),
+				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
 			},
 		},
 		{
 			name: "send counter 2",
 			fields: fields{
-				client: resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: func() repository.Storage {
-					s := repository.NewMemStorage()
-					err := s.Set(model.NewCounterMetric("id1", -5))
-					assert.NoError(t, err)
-					return s
-				}(),
-				deadline: 100 * time.Millisecond,
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
 				metric: model.NewCounterMetric("id1", 5),
 			},
 			want: want{
+				metricSent:   model.NewCounterMetric("id1", 10),
+				metricStored: model.NewCounterMetric("id1", 5),
+				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
+			},
+		},
+		{
+			name: "send counter 3",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5)),
+			},
+			args: args{
 				metric: model.NewCounterMetric("id1", 5),
 			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/10"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				assert.NoError(t, err)
-				got, err := reported.Get(want.Key())
-				assert.NoError(t, err)
-				assert.Equal(t, want, got)
+			want: want{
+				metricSent:   model.NewCounterMetric("id1", 0),
+				metricStored: model.NewCounterMetric("id1", 5),
+				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
 			},
 		},
 		{
 			name: "send gauge",
 			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: repository.NewMemStorage(),
-				deadline: 100 * time.Millisecond,
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
 				metric: model.NewGaugeMetric("id1", -5.5),
 			},
 			want: want{
+				metricSent:   model.NewGaugeMetric("id1", -5.5),
+				metricStored: model.NewGaugeMetric("id1", -5.5),
+				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
+			},
+		},
+		{
+			name: "send gauge 2",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(model.NewGaugeMetric("id1", 3.8)),
+			},
+			args: args{
 				metric: model.NewGaugeMetric("id1", -5.5),
 			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/gauge/id1/-5.5"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				assert.NoError(t, err)
-				got, err := reported.Get(want.Key())
-				assert.NoError(t, err)
-				assert.Equal(t, want, got)
+			want: want{
+				metricSent:   model.NewGaugeMetric("id1", -5.5),
+				metricStored: model.NewGaugeMetric("id1", -5.5),
+				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
 			},
 		},
 		{
-			name: "server error",
+			name: "sender error",
 			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: repository.NewMemStorage(),
-				deadline: 100 * time.Millisecond,
+				sender: &mockSender{
+					wantErr: func(m model.Metric) error { return errors.New("something went wrong") },
+				},
+				reported: storagetest.NewMockStorage(),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						return httpmock.NewStringResponse(http.StatusBadGateway, ""), nil
-					}
-				},
 				metric: model.NewCounterMetric("id1", 5),
 			},
 			want: want{
-				metric: model.Metric{},
-			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				assert.Error(t, err)
-				got, err := reported.Get(want.Key())
-				assert.ErrorIs(t, err, repository.ErrMetricNotFound)
-				assert.Equal(t, want, got)
+				metricSent:   model.NewCounterMetric("id1", 5),
+				metricStored: model.Metric{},
+				checkErr:     func(t *testing.T, err error) { assert.Errorf(t, err, "something went wrong") },
 			},
 		},
 		{
-			name: "server timeout",
+			name: "sender error 2",
 			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(50 * time.Millisecond),
-				reported: repository.NewMemStorage(),
-				deadline: 100 * time.Millisecond,
+				sender: &mockSender{
+					wantErr: func(m model.Metric) error { return errors.New("something went wrong") },
+				},
+				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 10)),
 			},
 			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						time.Sleep(75 * time.Millisecond)
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
 				metric: model.NewCounterMetric("id1", 5),
 			},
 			want: want{
-				metric: model.Metric{},
-			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				assert.Errorf(t, err, "request cancelled")
-				got, err := reported.Get(want.Key())
-				assert.ErrorIs(t, err, repository.ErrMetricNotFound)
-				assert.Equal(t, want, got)
-			},
-		},
-		{
-			name: "server deadline",
-			fields: fields{
-				client:   resty.New().SetBaseURL("http://localhost:1234").SetTimeout(200 * time.Millisecond),
-				reported: repository.NewMemStorage(),
-				deadline: 100 * time.Millisecond,
-			},
-			args: args{
-				method:    http.MethodPost,
-				urlRegexp: regexp.MustCompile("^http://localhost:1234/update/([^/]+)/([^/]+)/([^/]+)/?$"),
-				responder: func(t assert.TestingT) httpmock.Responder {
-					return func(r *http.Request) (*http.Response, error) {
-						assert.Equal(t, "text/plain", r.Header.Get("content-type"))
-						time.Sleep(1 * time.Second)
-						return httpmock.NewStringResponse(http.StatusOK, ""), nil
-					}
-				},
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			want: want{
-				metric: model.Metric{},
-			},
-			assertion: func(t assert.TestingT, err error, want model.Metric, reported repository.Storage) {
-				calls := httpmock.GetCallCountInfo()
-				keys := []string{"POST http://localhost:1234/update/counter/id1/5"}
-				for _, key := range keys {
-					assert.Contains(t, calls, key)
-					assert.Equal(t, 1, calls[key])
-				}
-				assert.Errorf(t, err, "context deadline exceeded")
-				got, err := reported.Get(want.Key())
-				assert.ErrorIs(t, err, repository.ErrMetricNotFound)
-				assert.Equal(t, want, got)
+				metricSent:   model.NewCounterMetric("id1", -5),
+				metricStored: model.NewCounterMetric("id1", 10),
+				checkErr:     func(t *testing.T, err error) { assert.Errorf(t, err, "something went wrong") },
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
-			defer cancel()
-
 			r := &reporter{
-				context:  ctx,
-				client:   tt.fields.client,
+				sender:   tt.fields.sender,
 				reported: tt.fields.reported,
 			}
-			httpmock.ActivateNonDefault(r.client.GetClient())
-			defer httpmock.Reset()
-
-			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, tt.args.responder(t))
-
+			tt.fields.sender.On("Send", tt.want.metricSent).Return(mock.AnythingOfType("error"))
 			metric := tt.args.metric.Copy()
-			tt.assertion(t, r.reportSingle(metric), tt.want.metric, r.reported)
-			assert.Equal(t, tt.args.metric, metric)
+
+			err := r.reportSingle(metric)
+
+			defer func() {
+				assert.Equal(t, tt.args.metric, metric)
+			}()
+			if tt.want.metricSent.Empty() {
+				tt.fields.sender.AssertNotCalled(t, "Send")
+			} else {
+				tt.fields.sender.AssertExpectations(t)
+			}
+			tt.want.checkErr(t, err)
+			if !tt.want.metricStored.Empty() {
+				got, err := tt.fields.reported.Get(tt.want.metricStored.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, tt.want.metricStored, got)
+			}
 		})
 	}
 }
 
 func TestNewReporter(t *testing.T) {
 	type args struct {
-		ctx     context.Context
-		client  *resty.Client
+		sender  Sender
 		storage repository.Storage
 	}
 	tests := []struct {
@@ -596,80 +258,37 @@ func TestNewReporter(t *testing.T) {
 			name: "emtpy",
 			args: args{},
 			assertion: func(t assert.TestingT, args args, r *reporter) {
-				assert.Nil(t, r.context)
-				assert.Nil(t, r.client)
+				assert.Nil(t, r.sender)
 				assert.Nil(t, r.reported)
 			},
 		},
 		{
-			name: "ctx only",
-			args: args{ctx: context.Background()},
+			name: "sender only",
+			args: args{sender: &mockSender{}},
 			assertion: func(t assert.TestingT, args args, r *reporter) {
-				assert.Equal(t, args.ctx, r.context)
-				assert.Nil(t, r.client)
+				assert.Equal(t, args.sender, r.sender)
 				assert.Nil(t, r.reported)
 			},
 		},
 		{
-			name: "ctx + client",
-			args: args{ctx: context.Background(), client: resty.New()},
+			name: "sender + storage",
+			args: args{sender: &mockSender{}, storage: storagetest.NewMockStorage()},
 			assertion: func(t assert.TestingT, args args, r *reporter) {
-				assert.Equal(t, args.ctx, r.context)
-				assert.Equal(t, args.client, r.client)
-				assert.Nil(t, r.reported)
-			},
-		},
-		{
-			name: "all in one",
-			args: args{ctx: context.Background(), client: resty.New(), storage: repository.NewMemStorage()},
-			assertion: func(t assert.TestingT, args args, r *reporter) {
-				assert.Equal(t, args.ctx, r.context)
-				assert.Equal(t, args.client, r.client)
+				assert.Equal(t, args.sender, r.sender)
 				assert.Equal(t, args.storage, r.reported)
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewReporter(tt.args.ctx, tt.args.client, tt.args.storage))
+			tt.assertion(t, tt.args, NewReporter(tt.args.sender, tt.args.storage))
 		})
 	}
 }
 
-func Test_reporter_sendMetric(t *testing.T) {
+func Test_reporter_getSendableMetric(t *testing.T) {
 	type fields struct {
-		context  context.Context
-		client   *resty.Client
-		reported repository.Storage
-	}
-	type args struct {
-		metric model.Metric
-	}
-	tests := []struct {
-		name      string
-		fields    fields
-		args      args
-		assertion assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &reporter{
-				context:  tt.fields.context,
-				client:   tt.fields.client,
-				reported: tt.fields.reported,
-			}
-			tt.assertion(t, r.sendMetric(tt.args.metric))
-		})
-	}
-}
-
-func Test_reporterdefaultReporter_getSendableMetric(t *testing.T) {
-	type fields struct {
-		context  context.Context
-		client   *resty.Client
-		reported repository.Storage
+		reported *storagetest.MockStorage
 	}
 	type args struct {
 		metric model.Metric
@@ -680,16 +299,213 @@ func Test_reporterdefaultReporter_getSendableMetric(t *testing.T) {
 		args   args
 		want   model.Metric
 	}{
-		// TODO: Add test cases.
+		{
+			name:   "empty metric, empty storage",
+			fields: fields{reported: storagetest.NewMockStorage()},
+			args:   args{metric: model.Metric{}},
+			want:   model.Metric{},
+		},
+		{
+			name:   "empty counter, empty storage",
+			fields: fields{reported: storagetest.NewMockStorage()},
+			args:   args{metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"}},
+			want:   model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
+		},
+		{
+			name:   "some counter, empty storage",
+			fields: fields{reported: storagetest.NewMockStorage()},
+			args:   args{metric: model.NewCounterMetric("id1", 5)},
+			want:   model.NewCounterMetric("id1", 5),
+		},
+		{
+			name:   "empty counter, non-empty storage",
+			fields: fields{reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
+			args:   args{metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"}},
+			want:   model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
+		},
+		{
+			name:   "some counter, non-empty storage",
+			fields: fields{reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
+			args:   args{metric: model.NewCounterMetric("id1", 10)},
+			want:   model.NewCounterMetric("id1", 5),
+		},
+		{
+			name:   "some counter, non-empty storage with nil delta",
+			fields: fields{reported: storagetest.NewMockStorage(model.Metric{Type: model.MetricTypeCounter, ID: "id1"})},
+			args:   args{metric: model.NewCounterMetric("id1", 10)},
+			want:   model.NewCounterMetric("id1", 10),
+		},
+		{
+			name:   "some counter, non-empty faulty storage",
+			fields: fields{reported: storagetest.NewMockStorage(model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 5)).MakeFaulty()},
+			args:   args{metric: model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 10)},
+			want:   model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 10),
+		},
+		{
+			name:   "some gauge, non-empty storage",
+			fields: fields{reported: storagetest.NewMockStorage(model.NewGaugeMetric("id2", 5.3))},
+			args:   args{metric: model.NewGaugeMetric("id2", 1.1)},
+			want:   model.NewGaugeMetric("id2", 1.1),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &reporter{
-				context:  tt.fields.context,
-				client:   tt.fields.client,
 				reported: tt.fields.reported,
 			}
 			assert.Equal(t, tt.want, r.getSendableMetric(tt.args.metric))
+		})
+	}
+}
+
+func Test_reporter_Report(t *testing.T) {
+	type fields struct {
+		sender   *mockSender
+		reported *storagetest.MockStorage
+	}
+	type args struct {
+		metrics []model.Metric
+	}
+	type want struct {
+		sentMetrics   []model.Metric
+		storedMetrics []model.Metric
+	}
+	tests := []struct {
+		name      string
+		fields    fields
+		args      args
+		want      want
+		assertion func(*testing.T, error)
+	}{
+		{
+			name: "invalid metric",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metrics: []model.Metric{{Type: model.MetricTypeCounter, ID: "id1"}},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{},
+				storedMetrics: []model.Metric{},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name: "send single counter",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple counters",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple counters with the same id",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -10), model.NewCounterMetric("id1", 7)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -15), model.NewCounterMetric("id1", 17)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 7)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple metrics",
+			fields: fields{
+				sender:   &mockSender{},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "sender error on single metric",
+			fields: fields{
+				sender: &mockSender{
+					wantErr: func(m model.Metric) error {
+						if m.Type == model.MetricTypeGauge && m.ID == "id1" {
+							return errors.New("no luck here")
+						}
+						return nil
+					},
+				},
+				reported: storagetest.NewMockStorage(),
+			},
+			args: args{
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id2", -3.01)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id2", -3.01)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.Errorf(t, err, "no luck here")
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &reporter{
+				sender:   tt.fields.sender,
+				reported: tt.fields.reported,
+			}
+			sender := tt.fields.sender.On("Send", mock.AnythingOfType("model.Metric")).Return(mock.AnythingOfType("error"))
+
+			err := r.Report(tt.args.metrics)
+
+			tt.assertion(t, err)
+			for _, m := range tt.want.sentMetrics {
+				sender.Parent.AssertCalled(t, "Send", m)
+			}
+			for _, m := range tt.want.storedMetrics {
+				got, err := tt.fields.reported.Get(m.Key())
+				assert.NoError(t, err)
+				assert.Equal(t, m, got)
+			}
 		})
 	}
 }

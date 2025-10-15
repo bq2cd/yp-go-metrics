@@ -395,3 +395,103 @@ func TestMetric_Copy(t *testing.T) {
 		})
 	}
 }
+
+func TestMetricKey_Empty(t *testing.T) {
+	type fields struct {
+		Type MetricType
+		ID   string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   bool
+	}{
+		{
+			name:   "no id, no type",
+			fields: fields{},
+			want:   true,
+		},
+		{
+			name:   "no id",
+			fields: fields{Type: MetricTypeCounter},
+			want:   true,
+		},
+		{
+			name:   "no type",
+			fields: fields{ID: "id1"},
+			want:   true,
+		},
+		{
+			name:   "have id and type",
+			fields: fields{ID: "id1", Type: MetricTypeCounter},
+			want:   false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			k := MetricKey{
+				Type: tt.fields.Type,
+				ID:   tt.fields.ID,
+			}
+			assert.Equal(t, tt.want, k.Empty())
+		})
+	}
+}
+
+func TestMetricSet_UniqueByKey(t *testing.T) {
+	tests := []struct {
+		name string
+		ms   MetricSet
+		want map[MetricKey]Metric
+	}{
+		{
+			name: "empty set",
+			ms:   MetricSet{},
+			want: map[MetricKey]Metric{},
+		},
+		{
+			name: "single metric",
+			ms:   MetricSet{NewCounterMetric("id1", 5)},
+			want: map[MetricKey]Metric{
+				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+			},
+		},
+		{
+			name: "multiple metrics",
+			ms: MetricSet{
+				NewCounterMetric("id1", 5),
+				NewCounterMetric("id2", -10),
+				NewGaugeMetric("id3", 2.4),
+				NewGaugeMetric("id4", -1.3),
+			},
+			want: map[MetricKey]Metric{
+				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+				NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+				NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+				NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+			},
+		},
+		{
+			name: "multiple metrics with duplicate ids",
+			ms: MetricSet{
+				NewCounterMetric("id1", 5),
+				NewCounterMetric("id2", -10),
+				NewCounterMetric("id1", 33),
+				NewGaugeMetric("id3", 2.4),
+				NewGaugeMetric("id4", -1.3),
+				NewGaugeMetric("id3", 0.85),
+			},
+			want: map[MetricKey]Metric{
+				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 33),
+				NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+				NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
+				NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.ms.UniqueByKey())
+		})
+	}
+}

@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
 type readHandler struct {
-	metrics service.Metrics
+	metrics service.MetricStorer
 }
 
 // ServeHTTP implements http.Handler for /value endpoint
@@ -21,7 +22,7 @@ func (h *readHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("content-type", "text/plain; charset=utf-8")
+	httpheaders.ContentTypeTextHTML.Apply(w.Header())
 	w.WriteHeader(http.StatusOK)
 
 	for _, m := range metrics {

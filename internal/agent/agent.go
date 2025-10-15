@@ -7,6 +7,7 @@ import (
 	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/periodictask"
 )
 
 type agent struct {
@@ -21,32 +22,16 @@ func NewAgent(ctx context.Context, cfg config.Config, collector Collector, repor
 	return &agent{context: ctx, config: cfg, collector: collector, reporter: reporter}
 }
 
-// RunPeriodicTask executes given task function at a given interval
+// runPeriodicTask executes given task function at a given interval
 // with optionally different initial delay before the first execution.
 // This is a blocking call and is typically used in a goroutine.
 // Supports cancellation via context.
-func RunPeriodicTask(ctx context.Context, interval time.Duration, taskFunc func() error, initialDelay time.Duration) error {
-	var (
-		errFinal error
-	)
-
-	start := time.Now()
-	timer := time.NewTimer(initialDelay)
-
-loop:
-	for {
-		select {
-		case <-timer.C:
-			errFinal = errors.Join(errFinal, taskFunc())
-			next := start.Add(interval * ((time.Since(start) / interval) + 1))
-			timer.Reset(time.Until(next))
-		case <-ctx.Done():
-			timer.Stop()
-			break loop
-		}
+func runPeriodicTask(ctx context.Context, interval time.Duration, taskFn func() error, initialDelay time.Duration) error {
+	taskFnWithContext := func(_ context.Context) error {
+		return taskFn()
 	}
-
-	return errFinal
+	t := periodictask.NewTimerTask(ctx, interval, taskFnWithContext, initialDelay)
+	return t.Run()
 }
 
 func (a *agent) doReport() error {
@@ -70,14 +55,14 @@ func (a *agent) Run() error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- RunPeriodicTask(a.context, a.config.PollInterval, a.collector.Collect, 0)
+		errCh <- runPeriodicTask(a.context, a.config.PollInterval, a.collector.Collect, 0)
 	}()
 
 	// launch reporter
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- RunPeriodicTask(a.context, a.config.ReportInterval, a.doReport, a.config.ReportInterval)
+		errCh <- runPeriodicTask(a.context, a.config.ReportInterval, a.doReport, a.config.ReportInterval)
 	}()
 
 	// wait for poller and reporter in a goroutine

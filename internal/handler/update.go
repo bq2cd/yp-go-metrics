@@ -9,10 +9,10 @@ import (
 )
 
 type updateHandler struct {
-	metrics service.Metrics
+	metrics service.MetricStorer
 }
 
-// ServeHTTP implements http.Handler for /update endpoint
+// ServeHTTP implements http.Handler for /update/* endpoint with plain-text requests/responses.
 func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metric, err := urlpath.NewOperationFromURLPath(r.URL.Path).ToMetric()
 	switch err {
@@ -24,6 +24,7 @@ func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// ok
 		default:
 			http.Error(w, "", http.StatusBadRequest)
+			return
 		}
 	case urlpath.ErrMissingMetricID:
 		http.Error(w, "", http.StatusNotFound)

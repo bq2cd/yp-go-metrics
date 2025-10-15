@@ -25,6 +25,8 @@ vendor/
 .vscode
 
 # Extra
+*.tmp
 /.act/
 /toolkit.nu
-
+/metrics.json
+/cmd/server/metrics.json

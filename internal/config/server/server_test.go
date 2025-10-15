@@ -1,10 +1,13 @@
 package server
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -211,8 +214,11 @@ func TestShutdownTimeout(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	type fields struct {
-		ListenAddress   string
-		ShutdownTimeout time.Duration
+		ListenAddress            string
+		ShutdownTimeout          time.Duration
+		MetricStoreInterval      time.Duration
+		MetricStoreFilePath      string
+		MetricStoreLoadOnStartup bool
 	}
 	tests := []struct {
 		name      string
@@ -236,10 +242,22 @@ func TestConfig_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "empty store path when loading at startup",
+			fields: fields{
+				ListenAddress:            ":0",
+				ShutdownTimeout:          1 * time.Second,
+				MetricStoreLoadOnStartup: true,
+			},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+		{
 			name: "all good",
 			fields: fields{
-				ListenAddress:   ":0",
-				ShutdownTimeout: 1 * time.Millisecond,
+				ListenAddress:       ":0",
+				ShutdownTimeout:     1 * time.Second,
+				MetricStoreFilePath: "test.json",
 			},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -249,10 +267,155 @@ func TestConfig_Validate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &Config{
-				ListenAddress:   tt.fields.ListenAddress,
-				ShutdownTimeout: tt.fields.ShutdownTimeout,
+				ListenAddress:            tt.fields.ListenAddress,
+				ShutdownTimeout:          tt.fields.ShutdownTimeout,
+				MetricStoreInterval:      tt.fields.MetricStoreInterval,
+				MetricStoreFilePath:      tt.fields.MetricStoreFilePath,
+				MetricStoreLoadOnStartup: tt.fields.MetricStoreLoadOnStartup,
 			}
 			tt.assertion(t, c.Validate())
+		})
+	}
+}
+
+func TestMetricStoreInterval(t *testing.T) {
+	type args struct {
+		intervalSec uint
+	}
+	type want struct {
+		interval time.Duration
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      want
+		config    Config
+		assertion func(assert.TestingT, *Config, error, want)
+	}{
+		{
+			name:   "zero",
+			args:   args{},
+			want:   want{},
+			config: Config{},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "positive with empty config",
+			args:   args{intervalSec: 35},
+			want:   want{interval: 35 * time.Second},
+			config: Config{},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+				assert.Equal(t, want.interval, c.MetricStoreInterval)
+			},
+		},
+		{
+			name:   "positive with existing config",
+			args:   args{intervalSec: 35},
+			want:   want{interval: 35 * time.Second},
+			config: Config{MetricStoreInterval: 10 * time.Second},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+				assert.Equal(t, want.interval, c.MetricStoreInterval)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := MetricStoreInterval(tt.args.intervalSec)(&tt.config)
+			tt.assertion(t, &tt.config, err, tt.want)
+		})
+	}
+}
+
+func TestMetricStoreFilePath(t *testing.T) {
+	type args struct {
+		path string
+	}
+	type want struct {
+		path string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      want
+		config    Config
+		assertion func(assert.TestingT, *Config, error, want)
+	}{
+		{
+			name:   "empty is allowed",
+			args:   args{},
+			want:   want{},
+			config: Config{},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "dir not allowed",
+			args:   args{path: "."},
+			want:   want{},
+			config: Config{},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name: "relative",
+			args: args{path: "test.txt"},
+			want: want{path: func() string {
+				p, err := os.Getwd()
+				require.NoError(t, err)
+				return filepath.Join(p, "test.txt")
+			}()},
+			config: Config{},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "absolute",
+			args:   args{path: "/test/me/here/please.txt"},
+			want:   want{path: "/test/me/here/please.txt"},
+			config: Config{},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "overrides previous value",
+			args:   args{path: "/test/me/here/please.txt"},
+			want:   want{path: "/test/me/here/please.txt"},
+			config: Config{MetricStoreFilePath: "/a/default/path"},
+			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := MetricStoreFilePath(tt.args.path)(&tt.config)
+			tt.assertion(t, &tt.config, err, tt.want)
+		})
+	}
+}
+
+func TestMetricStoreLoadOnStartup(t *testing.T) {
+	type args struct {
+		action bool
+	}
+	tests := []struct {
+		name string
+		args args
+		want Option
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, MetricStoreLoadOnStartup(tt.args.action))
 		})
 	}
 }
