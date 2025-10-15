@@ -290,28 +290,28 @@ func Test_router_ServeHTTP(t *testing.T) {
 	casesDefault := []innerTest{
 		{
 			args: args{method: http.MethodGet},
-			want: want{code: http.StatusMethodNotAllowed, body: ""},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodPost},
-			want: want{code: http.StatusBadRequest, body: ""},
+			want: want{code: http.StatusBadRequest, body: "invalid request"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodPut},
-			want: want{code: http.StatusMethodNotAllowed, body: ""},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodDelete},
-			want: want{code: http.StatusMethodNotAllowed, body: ""},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -344,7 +344,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 	casesUpdate := []innerTest{
 		{
 			args: args{method: http.MethodPost, url: "/update/counter"},
-			want: want{code: http.StatusNotFound, body: ""},
+			want: want{code: http.StatusNotFound, body: "missing metric id"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -358,7 +358,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 		},
 		{
 			args: args{method: http.MethodPost, url: "/update/counter/id1/123/none"},
-			want: want{code: http.StatusBadRequest, body: ""},
+			want: want{code: http.StatusBadRequest, body: "unknown metric operation"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -369,7 +369,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 		{
 			name: "GET not allowed",
 			args: args{method: http.MethodGet},
-			want: want{code: http.StatusMethodNotAllowed, body: ""},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -377,7 +377,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 		{
 			name: "empty body, missing content-type",
 			args: args{method: http.MethodPost},
-			want: want{code: http.StatusBadRequest, body: ""},
+			want: want{code: http.StatusBadRequest, body: "invalid content type"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -391,7 +391,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
-			want: want{code: http.StatusUnprocessableEntity, body: ""},
+			want: want{code: http.StatusUnprocessableEntity, body: "cannot decode metric"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -405,7 +405,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 					contentType: httpheaders.ContentTypeTextPlain,
 				},
 			},
-			want: want{code: http.StatusBadRequest, body: ""},
+			want: want{code: http.StatusBadRequest, body: "invalid content type"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -489,21 +489,21 @@ func Test_router_ServeHTTP(t *testing.T) {
 	casesValue := []innerTest{
 		{
 			args: args{method: http.MethodGet, url: "/value/counter"},
-			want: want{code: http.StatusNotFound, body: ""},
+			want: want{code: http.StatusNotFound, body: "missing metric id"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/"},
-			want: want{code: http.StatusNotFound, body: ""},
+			want: want{code: http.StatusNotFound, body: "missing metric id"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/id1"},
-			want: want{code: http.StatusNotFound, body: ""},
+			want: want{code: http.StatusNotFound, body: "metric not found"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -532,7 +532,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 		},
 		{
 			args: args{method: http.MethodGet, url: "/value/counter/id1/123"},
-			want: want{code: http.StatusBadRequest, body: ""},
+			want: want{code: http.StatusBadRequest, body: "missing metric value"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -549,7 +549,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
-			want: want{code: http.StatusUnprocessableEntity, body: ""},
+			want: want{code: http.StatusUnprocessableEntity, body: "cannot decode metric"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -563,7 +563,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 					contentType: httpheaders.ContentTypeTextPlain,
 				},
 			},
-			want: want{code: http.StatusBadRequest, body: ""},
+			want: want{code: http.StatusBadRequest, body: "invalid content type"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -577,7 +577,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
-			want: want{code: http.StatusNotFound, body: ""},
+			want: want{code: http.StatusNotFound, body: "metric not found"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},
@@ -610,7 +610,7 @@ func Test_router_ServeHTTP(t *testing.T) {
 					contentType: httpheaders.ContentTypeApplicationJSON,
 				},
 			},
-			want: want{code: http.StatusNotFound, body: ""},
+			want: want{code: http.StatusNotFound, body: "metric not found"},
 			assertion: func(t *testing.T, want want, body []byte, h http.Header) {
 				assert.Equal(t, want.body, strings.TrimRight(string(body), "\n"))
 			},

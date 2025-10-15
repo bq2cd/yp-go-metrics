@@ -23,8 +23,8 @@ type recovererMiddleware struct {
 func (m *recovererMiddleware) Intercept(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	defer func() {
 		if err := recover(); err != nil {
-			m.logger.Error().Any("panic", err).Msg("internal error")
-			http.Error(w, "internal error", http.StatusInternalServerError)
+			m.logger.Error().Any("panic", err).Msg("recovered from panic")
+			http.Error(w, "recovered from panic", http.StatusInternalServerError)
 		}
 	}()
 	next.ServeHTTP(w, r)

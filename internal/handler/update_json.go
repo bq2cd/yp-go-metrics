@@ -20,30 +20,30 @@ type updateJSONHandler struct {
 // ServeHTTP implements http.Handler for /update endpoint with JSON requests/responses.
 func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !httpheaders.ContentTypeApplicationJSON.Matches(r.Header) {
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "invalid content type", http.StatusBadRequest)
 		return
 	}
 
 	var m model.Metric
 	err := json.NewDecoder(r.Body).Decode(&m)
 	if err != nil {
-		http.Error(w, "", http.StatusUnprocessableEntity)
+		http.Error(w, "cannot decode metric", http.StatusUnprocessableEntity)
 		return
 	}
 
 	if m.Key().Empty() {
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "empty metric type or id", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.metrics.StoreSingle(m); err != nil {
-		http.Error(w, "", http.StatusInsufficientStorage)
+		http.Error(w, "cannot store metric", http.StatusInsufficientStorage)
 		return
 	}
 
 	m, err = h.metrics.RetrieveSingle(m.Key())
 	if err != nil {
-		http.Error(w, "", http.StatusNotFound)
+		http.Error(w, "cannot retrieve metric", http.StatusNotFound)
 		return
 	}
 

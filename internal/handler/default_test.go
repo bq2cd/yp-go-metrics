@@ -32,7 +32,7 @@ func Test_defaultHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "GET %s NOT_ALLOWED",
 			args: args{method: http.MethodGet, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name: "HEAD %s NOT_ALLOWED",
@@ -42,23 +42,23 @@ func Test_defaultHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "PUT %s NOT_ALLOWED",
 			args: args{method: http.MethodPut, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name: "DELETE %s NOT_ALLOWED",
 			args: args{method: http.MethodDelete, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "invalid method\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// Bad Request
 		{
 			name: "POST %s BAD_REQUEST",
 			args: args{method: http.MethodPost, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusBadRequest, body: "invalid request\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name: "POST %s BAD_REQUEST",
 			args: args{method: http.MethodPost, url: "/bla", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusBadRequest, body: "invalid request\n", contentType: "text/plain; charset=utf-8"},
 		},
 	}
 	for _, tt := range tests {

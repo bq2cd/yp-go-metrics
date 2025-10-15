@@ -8,6 +8,12 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )
 
+var (
+	// ErrMetricNotFound wraps [repository.ErrMetricNotFound] to avoid exposure of [repository]
+	// to a caller.
+	ErrMetricNotFound = errors.New("metric not found")
+)
+
 // MetricStorer defines an interface to work with metrics.
 // E.g. store, retrieve, delete, etc.
 type MetricStorer interface {
@@ -70,7 +76,11 @@ func (s *metricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error)
 		// avoid returning empty metrics from underlying storage as
 		// the storage should not store such metrics in the first place,
 		// but in case it did, we will intercept such cases here.
-		return model.Metric{}, repository.ErrMetricNotFound
+		return model.Metric{}, ErrMetricNotFound
+	}
+	if errors.Is(err, repository.ErrMetricNotFound) {
+		// wrap not found error to avoid exposing repository layer to the caller.
+		return m, ErrMetricNotFound
 	}
 	return m, err
 }

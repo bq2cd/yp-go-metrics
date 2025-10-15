@@ -346,7 +346,7 @@ func Test_metricStorer_RetrieveSingle(t *testing.T) {
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				assert.Error(t, err)
-				return assert.ErrorIs(t, err, repository.ErrMetricNotFound)
+				return assert.ErrorIs(t, err, ErrMetricNotFound)
 			},
 		},
 		{
@@ -373,7 +373,7 @@ func Test_metricStorer_RetrieveSingle(t *testing.T) {
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id2")},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.ErrorIs(t, err, repository.ErrMetricNotFound)
+				return assert.ErrorIs(t, err, ErrMetricNotFound)
 			},
 		},
 		{

@@ -40,27 +40,27 @@ func Test_valueHandler_ServeHTTP(t *testing.T) {
 			name:   "GET %s INTERNAL_ERROR",
 			fields: fields{metrics: &faultyMetricService{}},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusInternalServerError, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusInternalServerError, body: "cannot retrieve metric\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// Not Found
 		{
 			name:   "GET %s NOT_FOUND",
 			fields: fields{metrics: service.NewMetricStorer(repository.NewMemStorage())},
 			args:   args{method: http.MethodGet, url: "/value/badType", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name:   "GET %s NOT_FOUND",
 			fields: fields{metrics: service.NewMetricStorer(repository.NewMemStorage())},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "metric not found\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// Bad Request
 		{
 			name:   "GET %s BAD_REQUEST",
 			fields: fields{metrics: service.NewMetricStorer(repository.NewMemStorage())},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1/123", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "missing metric value\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// OK
 		{

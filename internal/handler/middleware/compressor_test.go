@@ -592,7 +592,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 					},
 					want: want{
 						contentEncoding: httpheaders.ContentEncodingEmpty,
-						dataDecoded:     []byte("\n"),
+						dataDecoded:     []byte("cannot decompress request\n"),
 						status:          http.StatusInternalServerError,
 					},
 				},

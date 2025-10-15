@@ -8,7 +8,6 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
@@ -22,22 +21,22 @@ func (h *valueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	needle, err := metricOp.ToMetric()
 	switch err {
 	case urlpath.ErrMissingMetricID:
-		http.Error(w, "", http.StatusNotFound)
+		http.Error(w, "missing metric id", http.StatusNotFound)
 		return
 	case urlpath.ErrMissingMetricValue:
 		// OK
 	default:
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "missing metric value", http.StatusBadRequest)
 		return
 	}
 
 	metric, err := h.metrics.RetrieveSingle(needle.Key())
 	switch {
-	case errors.Is(err, repository.ErrMetricNotFound):
-		http.Error(w, "", http.StatusNotFound)
+	case errors.Is(err, service.ErrMetricNotFound):
+		http.Error(w, "metric not found", http.StatusNotFound)
 		return
 	case err != nil:
-		http.Error(w, "", http.StatusInternalServerError)
+		http.Error(w, "cannot retrieve metric", http.StatusInternalServerError)
 		return
 	}
 

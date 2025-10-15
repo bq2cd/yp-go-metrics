@@ -92,7 +92,7 @@ func Test_recovererMiddleware_Intercept(t *testing.T) {
 				e := events[0]
 
 				assert.Equal(t, e.Level(), log.LevelError)
-				assert.Equal(t, e.Message(), "internal error")
+				assert.Equal(t, e.Message(), "recovered from panic")
 				fp := e.Fields().GetFieldByKey("panic")
 
 				require.NotNil(t, fp)
