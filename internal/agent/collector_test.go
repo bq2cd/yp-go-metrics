@@ -10,6 +10,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/agent/source/memstats"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -66,7 +67,7 @@ func Test_collector_Collect(t *testing.T) {
 	}{
 		{
 			name: "default metrics",
-			args: args{sources: []source.Source{memstats.New(), extra.New()}, storage: repository.NewMemStorage()},
+			args: args{sources: []source.Source{memstats.New(), extra.New()}, storage: storagetest.NewMockStorage()},
 			want: want{
 				metricIDToType: func() map[string]model.MetricType {
 					m := make(map[string]model.MetricType)
@@ -92,12 +93,7 @@ func Test_collector_Collect(t *testing.T) {
 			name: "extra metrics",
 			args: args{
 				sources: []source.Source{extra.New()},
-				storage: func() repository.Storage {
-					s := repository.NewMemStorage()
-					err := s.Set(model.NewCounterMetric("PollCount", 10))
-					assert.NoError(t, err)
-					return s
-				}(),
+				storage: storagetest.NewMockStorage(model.NewCounterMetric("PollCount", 10)),
 			},
 			want: want{
 				metricIDToType: func() map[string]model.MetricType {
@@ -153,13 +149,13 @@ func TestNewCollector(t *testing.T) {
 		},
 		{
 			name: "empty sources",
-			args: args{storage: repository.NewMemStorage()},
-			want: &collector{collected: repository.NewMemStorage()},
+			args: args{storage: storagetest.NewMockStorage()},
+			want: &collector{collected: storagetest.NewMockStorage()},
 		},
 		{
 			name: "some sources",
-			args: args{sources: []source.Source{extra.New()}, storage: repository.NewMemStorage()},
-			want: &collector{sources: []source.Source{extra.New()}, collected: repository.NewMemStorage()},
+			args: args{sources: []source.Source{extra.New()}, storage: storagetest.NewMockStorage()},
+			want: &collector{sources: []source.Source{extra.New()}, collected: storagetest.NewMockStorage()},
 		},
 	}
 	for _, tt := range tests {
@@ -190,9 +186,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "no metrics",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{}},
 			want: want{metrics: []model.Metric{}},
@@ -206,9 +200,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "single metric",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
@@ -222,9 +214,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple metrics",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
@@ -238,9 +228,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple metrics 2",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
@@ -254,16 +242,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple metrics 3",
 			fields: fields{
-				collected: func() repository.Storage {
-					s := repository.NewMemStorage()
-					for _, m := range []model.Metric{
-						model.NewCounterMetric("id5", 7),
-					} {
-						err := s.Set(m)
-						assert.NoError(t, err)
-					}
-					return s
-				}(),
+				collected: storagetest.NewMockStorage(model.NewCounterMetric("id5", 7)),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5), model.NewCounterMetric("id5", 7)}},
@@ -277,9 +256,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple counters with the same id",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
@@ -293,9 +270,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple counters with the same id 2",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3), model.NewCounterMetric("id1", -5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
@@ -309,16 +284,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple counters with the same id 3",
 			fields: fields{
-				collected: func() repository.Storage {
-					s := repository.NewMemStorage()
-					for _, m := range []model.Metric{
-						model.NewCounterMetric("id1", 7),
-					} {
-						err := s.Set(m)
-						assert.NoError(t, err)
-					}
-					return s
-				}(),
+				collected: storagetest.NewMockStorage(model.NewCounterMetric("id1", 7)),
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3), model.NewCounterMetric("id1", -5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
@@ -332,9 +298,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple gauges with the same id",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			args: args{metrics: []model.Metric{model.NewGaugeMetric("id1", 0.5), model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
@@ -348,16 +312,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "multiple gauges with the same id 2",
 			fields: fields{
-				collected: func() repository.Storage {
-					s := repository.NewMemStorage()
-					for _, m := range []model.Metric{
-						model.NewGaugeMetric("id1", 7.7),
-					} {
-						err := s.Set(m)
-						assert.NoError(t, err)
-					}
-					return s
-				}(),
+				collected: storagetest.NewMockStorage(model.NewGaugeMetric("id1", 7.7)),
 			},
 			args: args{metrics: []model.Metric{model.NewGaugeMetric("id1", 0.5), model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
@@ -371,9 +326,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		{
 			name: "storage error",
 			fields: fields{
-				collected: func() repository.Storage {
-					return &faultyStorage{}
-				}(),
+				collected: &faultyStorage{},
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
 			want: want{metrics: []model.Metric{}},
@@ -407,9 +360,7 @@ func Test_collector_Snapshot(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				collected: func() repository.Storage {
-					return repository.NewMemStorage()
-				}(),
+				collected: storagetest.NewMockStorage(),
 			},
 			want: []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -419,16 +370,7 @@ func Test_collector_Snapshot(t *testing.T) {
 		{
 			name: "single metric",
 			fields: fields{
-				collected: func() repository.Storage {
-					s := repository.NewMemStorage()
-					for _, m := range []model.Metric{
-						model.NewCounterMetric("id1", 5),
-					} {
-						err := s.Set(m)
-						assert.NoError(t, err)
-					}
-					return s
-				}(),
+				collected: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5)),
 			},
 			want: []model.Metric{model.NewCounterMetric("id1", 5)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -438,17 +380,10 @@ func Test_collector_Snapshot(t *testing.T) {
 		{
 			name: "multiple metrics",
 			fields: fields{
-				collected: func() repository.Storage {
-					s := repository.NewMemStorage()
-					for _, m := range []model.Metric{
-						model.NewCounterMetric("id1", 5),
-						model.NewGaugeMetric("id2", -4.1),
-					} {
-						err := s.Set(m)
-						assert.NoError(t, err)
-					}
-					return s
-				}(),
+				collected: storagetest.NewMockStorage(
+					model.NewCounterMetric("id1", 5),
+					model.NewGaugeMetric("id2", -4.1),
+				),
 			},
 			want: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -4.1)},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
@@ -458,9 +393,7 @@ func Test_collector_Snapshot(t *testing.T) {
 		{
 			name: "retrieval error",
 			fields: fields{
-				collected: func() repository.Storage {
-					return &faultyStorage{}
-				}(),
+				collected: &faultyStorage{},
 			},
 			want: []model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {

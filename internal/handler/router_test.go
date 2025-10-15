@@ -15,7 +15,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/middleware"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/go-chi/chi/v5"
@@ -41,7 +40,7 @@ func TestNewRouter(t *testing.T) {
 	}{
 		{
 			name: "new router with mux=nil",
-			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(repository.NewMemStorage()), mux: nil},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(storagetest.NewMockStorage()), mux: nil},
 			want: want{
 				routes: map[string]string{
 					"/":         "GET",
@@ -79,7 +78,7 @@ func TestNewRouter(t *testing.T) {
 		},
 		{
 			name: "new router with mux=NewServeMux()",
-			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(repository.NewMemStorage()), mux: http.NewServeMux()},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(storagetest.NewMockStorage()), mux: http.NewServeMux()},
 			assertion: func(rt *router, want want) bool {
 				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
@@ -91,7 +90,7 @@ func TestNewRouter(t *testing.T) {
 		},
 		{
 			name: "new router with mux=chi.NewRouter()",
-			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(repository.NewMemStorage()), mux: chi.NewRouter()},
+			args: args{logger: log.NewNoopLogger(), metrics: service.NewMetricStorer(storagetest.NewMockStorage()), mux: chi.NewRouter()},
 			assertion: func(rt *router, want want) bool {
 				assert.NotNil(t, rt.logger)
 				assert.NotNil(t, rt.mux)
@@ -125,7 +124,7 @@ func Test_router_configureChiRouter(t *testing.T) {
 			fields: fields{
 				logger:  log.NewNoopLogger(),
 				mux:     http.NewServeMux(),
-				metrics: service.NewMetricStorer(repository.NewMemStorage()),
+				metrics: service.NewMetricStorer(storagetest.NewMockStorage()),
 			},
 		},
 	}
