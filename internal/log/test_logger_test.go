@@ -1075,7 +1075,7 @@ func Test_testLogger_With(t *testing.T) {
 				require.IsType(t, &testLoggerImpl{}, l.impl)
 				impl := l.impl.(*testLoggerImpl)
 				assert.Equal(t, want.fields.ToMap(), impl.fieldsByKey)
-				assert.Len(t, fields.baseLogger.impl.(*testLoggerImpl).fieldsByKey, 0)
+				assert.Empty(t, fields.baseLogger.impl.(*testLoggerImpl).fieldsByKey)
 			},
 		},
 	}

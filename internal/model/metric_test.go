@@ -377,8 +377,8 @@ func TestMetric_Copy(t *testing.T) {
 				assert.Equal(t, want, got)
 				*got.Value += 1.5
 				assert.NotEqual(t, want, got)
-				assert.Equal(t, 0.1, *want.Value)
-				assert.Equal(t, 1.6, *got.Value)
+				assert.InEpsilon(t, 0.1, *want.Value, 1e-10)
+				assert.InEpsilon(t, 1.6, *got.Value, 1e-10)
 			},
 		},
 	}

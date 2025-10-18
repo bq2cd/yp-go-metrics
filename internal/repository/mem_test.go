@@ -44,8 +44,7 @@ func Test_memStorage_Get(t *testing.T) {
 			args:   args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want:   model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				assert.Error(t, err)
-				return assert.Equal(t, ErrMetricNotFound, err)
+				return assert.ErrorIs(t, err, ErrMetricNotFound)
 			},
 		},
 		{
@@ -95,8 +94,7 @@ func Test_memStorage_Get(t *testing.T) {
 			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want: model.Metric{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				assert.Error(t, err)
-				return assert.Equal(t, err, ErrMetricNotFound)
+				return assert.ErrorIs(t, err, ErrMetricNotFound)
 			},
 		},
 	}

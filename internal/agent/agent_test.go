@@ -10,6 +10,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type mockPeriodicTask struct {
@@ -199,7 +200,7 @@ func Test_agent_Run(t *testing.T) {
 			mReporter := tt.fields.reporter.On("Report", tt.want.metrics).Return(nil)
 
 			err := a.Run()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			mCollector.Parent.AssertExpectations(t)
 			mReporter.Parent.AssertExpectations(t)
@@ -297,7 +298,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 0,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 7)
 			},
@@ -314,7 +315,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 30 * time.Millisecond,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 5)
 			},
@@ -331,7 +332,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 0,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 1)
 			},
@@ -348,7 +349,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 0,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 2)
 			},
@@ -365,7 +366,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 30 * time.Millisecond,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 1)
 			},
@@ -382,7 +383,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 10 * time.Millisecond,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 2)
 			},
@@ -399,7 +400,7 @@ func Test_runPeriodicTask(t *testing.T) {
 				initialDelay: 5 * time.Millisecond,
 			},
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				m.AssertExpectations(t)
 				m.AssertNumberOfCalls(t, "doWork", 3)
 			},

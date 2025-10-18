@@ -6,6 +6,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockMemStats struct {
@@ -140,7 +141,7 @@ func Test_source_ReadMetrics(t *testing.T) {
 				reader:           tt.args.reader,
 			}
 			got, err := s.ReadMetrics()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			tt.assertion(t, tt.want, got)
 		})
 	}
@@ -292,7 +293,11 @@ func Test_castToFloat64(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := castToFloat64(tt.args.v)
-			assert.Equal(t, tt.want, got)
+			if tt.want != 0 {
+				assert.InEpsilon(t, tt.want, got, 1e-10)
+			} else {
+				assert.Zero(t, got)
+			}
 			assert.Equal(t, tt.ok, ok)
 		})
 	}

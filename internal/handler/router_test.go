@@ -71,7 +71,7 @@ func TestNewRouter(t *testing.T) {
 				assert.Implements(t, (*service.MetricStorer)(nil), rt.metrics)
 				seen := make(map[string]string)
 				err := chi.Walk(rt.mux.(chi.Router), want.walkFn(want.routes, seen))
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, want.routes, seen)
 				return true
 			},

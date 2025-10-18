@@ -13,6 +13,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type mockCollector struct {
@@ -124,9 +125,9 @@ func Test_collector_Collect(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &collector{sources: tt.args.sources, collected: tt.args.storage}
 			err := c.Collect()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			got, err := tt.args.storage.GetAll()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			tt.assertion(t, tt.want, got)
 		})
 	}
@@ -181,7 +182,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 		fields    fields
 		args      args
 		want      want
-		assertion func(assert.TestingT, repository.Storage, want, error)
+		assertion func(*testing.T, repository.Storage, want, error)
 	}{
 		{
 			name: "no metrics",
@@ -190,10 +191,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{}},
 			want: want{metrics: []model.Metric{}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -204,10 +205,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -218,10 +219,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -232,10 +233,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -246,10 +247,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5), model.NewCounterMetric("id5", 7)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -260,10 +261,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -274,10 +275,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3), model.NewCounterMetric("id1", -5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -288,10 +289,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3), model.NewCounterMetric("id1", -5)}},
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -302,10 +303,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewGaugeMetric("id1", 0.5), model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -316,10 +317,10 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewGaugeMetric("id1", 0.5), model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.NoError(t, err)
 				metrics, err := s.GetAll()
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
 		},
@@ -330,8 +331,8 @@ func Test_collector_storeMetrics(t *testing.T) {
 			},
 			args: args{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
 			want: want{metrics: []model.Metric{}},
-			assertion: func(t assert.TestingT, s repository.Storage, want want, err error) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
+				require.Error(t, err)
 			},
 		},
 	}

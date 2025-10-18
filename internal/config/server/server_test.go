@@ -21,28 +21,22 @@ func TestNew(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			name: "empty",
-			args: args{},
-			want: &Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "empty",
+			args:      args{},
+			want:      &Config{},
+			assertion: assert.NoError,
 		},
 		{
-			name: "listen address",
-			args: args{opts: []Option{ListenAddress("localhost:91")}},
-			want: &Config{ListenAddress: "localhost:91"},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "listen address",
+			args:      args{opts: []Option{ListenAddress("localhost:91")}},
+			want:      &Config{ListenAddress: "localhost:91"},
+			assertion: assert.NoError,
 		},
 		{
-			name: "shutdown timeout",
-			args: args{opts: []Option{ShutdownTimeout(5)}},
-			want: &Config{ShutdownTimeout: 5 * time.Second},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "shutdown timeout",
+			args:      args{opts: []Option{ShutdownTimeout(5)}},
+			want:      &Config{ShutdownTimeout: 5 * time.Second},
+			assertion: assert.NoError,
 		},
 		{
 			name: "multiple options",
@@ -54,9 +48,7 @@ func TestNew(t *testing.T) {
 				ListenAddress:   "localhost:83",
 				ShutdownTimeout: 3 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "multiple options but some invalid",
@@ -64,10 +56,8 @@ func TestNew(t *testing.T) {
 				ListenAddress("localhost:83"),
 				ShutdownTimeout(0),
 			}},
-			want: nil,
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      nil,
+			assertion: assert.Error,
 		},
 	}
 	for _, tt := range tests {
@@ -91,14 +81,14 @@ func TestListenAddress(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "empty",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.Error(t, err)
 			},
 		},
@@ -107,7 +97,7 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: "localhost:91:invalid"},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.Error(t, err)
 			},
 		},
@@ -116,8 +106,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: "localhost:91"},
 			want:   want{addr: "localhost:91"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -126,8 +116,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: ":91"},
 			want:   want{addr: ":91"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -136,8 +126,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: ":0"},
 			want:   want{addr: ":0"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -146,8 +136,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: "127.0.0.1:39"},
 			want:   want{addr: "127.0.0.1:39"},
 			config: Config{ListenAddress: ":0"},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -172,15 +162,15 @@ func TestShutdownTimeout(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "zero",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
@@ -188,8 +178,8 @@ func TestShutdownTimeout(t *testing.T) {
 			args:   args{timeoutSec: 35},
 			want:   want{timeout: 35 * time.Second},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.timeout, c.ShutdownTimeout)
 			},
 		},
@@ -198,8 +188,8 @@ func TestShutdownTimeout(t *testing.T) {
 			args:   args{timeoutSec: 35},
 			want:   want{timeout: 35 * time.Second},
 			config: Config{ShutdownTimeout: 10 * time.Second},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.timeout, c.ShutdownTimeout)
 			},
 		},
@@ -226,20 +216,16 @@ func TestConfig_Validate(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			name:   "empty",
-			fields: fields{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "empty",
+			fields:    fields{},
+			assertion: assert.Error,
 		},
 		{
 			name: "zero shutdown timeout",
 			fields: fields{
 				ListenAddress: ":0",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			assertion: assert.Error,
 		},
 		{
 			name: "empty store path when loading at startup",
@@ -248,9 +234,7 @@ func TestConfig_Validate(t *testing.T) {
 				ShutdownTimeout:          1 * time.Second,
 				MetricStoreLoadOnStartup: true,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			assertion: assert.Error,
 		},
 		{
 			name: "all good",
@@ -259,9 +243,7 @@ func TestConfig_Validate(t *testing.T) {
 				ShutdownTimeout:     1 * time.Second,
 				MetricStoreFilePath: "test.json",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
@@ -290,14 +272,14 @@ func TestMetricStoreInterval(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "zero",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -306,8 +288,8 @@ func TestMetricStoreInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.MetricStoreInterval)
 			},
 		},
@@ -316,8 +298,8 @@ func TestMetricStoreInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{MetricStoreInterval: 10 * time.Second},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.MetricStoreInterval)
 			},
 		},
@@ -342,14 +324,14 @@ func TestMetricStoreFilePath(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "empty is allowed",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -358,7 +340,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 			args:   args{path: "."},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.Error(t, err)
 			},
 		},
@@ -371,7 +353,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 				return filepath.Join(p, "test.txt")
 			}()},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -380,7 +362,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 			args:   args{path: "/test/me/here/please.txt"},
 			want:   want{path: "/test/me/here/please.txt"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -389,7 +371,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 			args:   args{path: "/test/me/here/please.txt"},
 			want:   want{path: "/test/me/here/please.txt"},
 			config: Config{MetricStoreFilePath: "/a/default/path"},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},

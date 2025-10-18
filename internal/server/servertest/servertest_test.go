@@ -31,7 +31,7 @@ func TestGetRandomListenAddress(t *testing.T) {
 		{
 			name: "localhost",
 			assertion: func(t *testing.T, got string) {
-				assert.True(t, got != "")
+				assert.NotEmpty(t, got)
 				parts := strings.Split(got, ":")
 				assert.Len(t, parts, 2)
 				assert.Equal(t, "127.0.0.1", parts[0])
@@ -243,8 +243,8 @@ func Test_tempFileFactory_Create(t *testing.T) {
 			args: args{pattern: "some-*-thing"},
 			assertion: func(t *testing.T, created []string) {
 				require.Len(t, created, 3)
-				assert.Equal(t, created[0], "/tmp/123")
-				assert.Equal(t, created[1], "/tmp/456")
+				assert.Equal(t, "/tmp/123", created[0])
+				assert.Equal(t, "/tmp/456", created[1])
 			},
 		},
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNew(t *testing.T) {
@@ -19,36 +20,28 @@ func TestNew(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			name: "empty",
-			args: args{},
-			want: &Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "empty",
+			args:      args{},
+			want:      &Config{},
+			assertion: assert.NoError,
 		},
 		{
-			name: "upstream url",
-			args: args{opts: []Option{UpstreamURL("localhost:91")}},
-			want: &Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:91"}},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "upstream url",
+			args:      args{opts: []Option{UpstreamURL("localhost:91")}},
+			want:      &Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:91"}},
+			assertion: assert.NoError,
 		},
 		{
-			name: "poll interval",
-			args: args{opts: []Option{PollInterval(5)}},
-			want: &Config{PollInterval: 5 * time.Second},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "poll interval",
+			args:      args{opts: []Option{PollInterval(5)}},
+			want:      &Config{PollInterval: 5 * time.Second},
+			assertion: assert.NoError,
 		},
 		{
-			name: "report interval",
-			args: args{opts: []Option{ReportInterval(5)}},
-			want: &Config{ReportInterval: 5 * time.Second},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "report interval",
+			args:      args{opts: []Option{ReportInterval(5)}},
+			want:      &Config{ReportInterval: 5 * time.Second},
+			assertion: assert.NoError,
 		},
 		{
 			name: "multiple options",
@@ -62,9 +55,7 @@ func TestNew(t *testing.T) {
 				PollInterval:   10 * time.Second,
 				ReportInterval: 5 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "multiple options but some invalid",
@@ -73,10 +64,8 @@ func TestNew(t *testing.T) {
 				PollInterval(0),
 				ReportInterval(5),
 			}},
-			want: nil,
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      nil,
+			assertion: assert.Error,
 		},
 	}
 	for _, tt := range tests {
@@ -100,15 +89,15 @@ func TestUpstreamURL(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "emtpy",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
@@ -116,8 +105,8 @@ func TestUpstreamURL(t *testing.T) {
 			args:   args{upstreamURL: "http://localhost:91:invalid/123"},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
@@ -125,8 +114,8 @@ func TestUpstreamURL(t *testing.T) {
 			args:   args{upstreamURL: "localhost:91"},
 			want:   want{upstreamURL: url.URL{Scheme: "http", Host: "localhost:91"}},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.upstreamURL, c.UpstreamURL)
 			},
 		},
@@ -135,8 +124,8 @@ func TestUpstreamURL(t *testing.T) {
 			args:   args{upstreamURL: "https://example.com:443"},
 			want:   want{upstreamURL: url.URL{Scheme: "https", Host: "example.com:443"}},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.upstreamURL, c.UpstreamURL)
 			},
 		},
@@ -145,8 +134,8 @@ func TestUpstreamURL(t *testing.T) {
 			args:   args{upstreamURL: "https://example.com:443"},
 			want:   want{upstreamURL: url.URL{Scheme: "https", Host: "example.com:443"}},
 			config: Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:8080"}},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.upstreamURL, c.UpstreamURL)
 			},
 		},
@@ -174,23 +163,23 @@ func Test_setInterval(t *testing.T) {
 		args      args
 		target    target
 		want      want
-		assertion func(assert.TestingT, *target, error, want)
+		assertion func(*testing.T, *target, error, want)
 	}{
 		{
 			name: "zero",
 			args: args{},
 			want: want{},
-			assertion: func(t assert.TestingT, target *target, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, target *target, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
 			name: "positive",
 			args: args{intervalSec: 55},
 			want: want{interval: 55 * time.Second},
-			assertion: func(t assert.TestingT, target *target, err error, want want) {
-				assert.NoError(t, err)
-				assert.Equal(t, target.interval, want.interval)
+			assertion: func(t *testing.T, target *target, err error, want want) {
+				require.NoError(t, err)
+				assert.Equal(t, want.interval, target.interval)
 			},
 		},
 	}
@@ -214,15 +203,15 @@ func TestPollInterval(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "zero",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
@@ -230,8 +219,8 @@ func TestPollInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.PollInterval)
 			},
 		},
@@ -240,8 +229,8 @@ func TestPollInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{PollInterval: 10 * time.Second},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.PollInterval)
 			},
 		},
@@ -266,15 +255,15 @@ func TestReportInterval(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "zero",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
@@ -282,8 +271,8 @@ func TestReportInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.ReportInterval)
 			},
 		},
@@ -292,8 +281,8 @@ func TestReportInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{PollInterval: 10 * time.Second},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.ReportInterval)
 			},
 		},
@@ -318,11 +307,9 @@ func TestConfig_Validate(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			name:   "empty",
-			fields: fields{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "empty",
+			fields:    fields{},
+			assertion: assert.Error,
 		},
 		{
 			name: "zero poll interval",
@@ -330,9 +317,7 @@ func TestConfig_Validate(t *testing.T) {
 				UpstreamURL:    url.URL{Host: "localhost:91"},
 				ReportInterval: 5 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			assertion: assert.Error,
 		},
 		{
 			name: "zero report interval",
@@ -340,9 +325,7 @@ func TestConfig_Validate(t *testing.T) {
 				UpstreamURL:  url.URL{Host: "localhost:91"},
 				PollInterval: 5 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			assertion: assert.Error,
 		},
 		{
 			name: "report interval < poll interval",
@@ -351,9 +334,7 @@ func TestConfig_Validate(t *testing.T) {
 				PollInterval:   5 * time.Second,
 				ReportInterval: 1 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			assertion: assert.Error,
 		},
 		{
 			name: "normal values",
@@ -362,9 +343,7 @@ func TestConfig_Validate(t *testing.T) {
 				PollInterval:   5 * time.Second,
 				ReportInterval: 10 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {

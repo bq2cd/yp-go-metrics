@@ -112,11 +112,11 @@ func Test_compressorResponseWriter_Write(t *testing.T) {
 			got, err := cw.Write(tt.args.data)
 
 			if tt.wantErr {
-				assert.Error(t, err)
-				assert.Error(t, compressor.Close())
+				require.Error(t, err)
+				require.Error(t, compressor.Close())
 			} else {
-				assert.NoError(t, err)
-				assert.NoError(t, compressor.Close())
+				require.NoError(t, err)
+				require.NoError(t, compressor.Close())
 			}
 			assert.Equal(t, len(tt.want.data), got)
 
@@ -216,7 +216,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeTextPlain.Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte("done!"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -241,7 +241,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeTextPlain.Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte("done!"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -265,7 +265,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeTextPlain.Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte("done!"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -294,7 +294,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte(`{"id": 1}`))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -318,7 +318,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeTextHTML.Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte("<html></html>"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -343,7 +343,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeTextPlain.Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte("done!"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -367,7 +367,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentType("image/png").Apply(w.Header())
 							w.WriteHeader(http.StatusOK)
 							_, err := w.Write([]byte("some binary data"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -391,7 +391,7 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 							httpheaders.ContentTypeTextPlain.Apply(w.Header())
 							w.WriteHeader(http.StatusBadRequest)
 							_, err := w.Write([]byte("bad request"))
-							require.NoError(t, err)
+							assert.NoError(t, err)
 						}),
 					},
 					want: want{
@@ -655,12 +655,12 @@ func Test_compressorMiddleware_Intercept(t *testing.T) {
 						rgz, err := gzip.NewReader(resp.Body)
 						require.NoError(t, err)
 						body, err = io.ReadAll(rgz)
-						assert.NoError(t, err)
-						assert.NoError(t, rgz.Close())
+						require.NoError(t, err)
+						require.NoError(t, rgz.Close())
 					} else {
 						var err error
 						body, err = io.ReadAll(resp.Body)
-						assert.NoError(t, err)
+						require.NoError(t, err)
 					}
 					assert.Equal(t, tt.want.dataDecoded, body)
 				})
@@ -812,7 +812,7 @@ func Test_compressorGzipFactory_Create(t *testing.T) {
 			name:   "valid level",
 			fields: fields{level: gzip.BestCompression},
 			assertion: func(t *testing.T, got io.WriteCloser, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.IsType(t, &gzip.Writer{}, got)
 			},
 		},
@@ -820,7 +820,7 @@ func Test_compressorGzipFactory_Create(t *testing.T) {
 			name:   "invalid level",
 			fields: fields{level: -5},
 			assertion: func(t *testing.T, got io.WriteCloser, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, got)
 			},
 		},

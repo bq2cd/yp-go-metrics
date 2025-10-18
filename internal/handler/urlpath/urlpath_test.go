@@ -347,7 +347,7 @@ func TestMetricOperation_ToURLPath(t *testing.T) {
 			fields: fields{Type: OperationTypeUpdate},
 			want:   "",
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err, ErrMissingMetricType)
+				return assert.ErrorIs(t, err, ErrMissingMetricType)
 			},
 		},
 		{

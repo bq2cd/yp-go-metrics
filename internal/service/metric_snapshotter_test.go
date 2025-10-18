@@ -113,9 +113,9 @@ func Test_metricSnapshotter_markDirty(t *testing.T) {
 			assert.Equal(t, struct{}{}, <-p.notifyCh)
 			select {
 			case <-p.notifyCh:
-				assert.Truef(t, false, "channel must be empty")
+				t.Errorf("channel must be empty")
 			default:
-				assert.True(t, true)
+				// all is good
 			}
 		})
 	}
@@ -983,7 +983,7 @@ func Test_metricSnapshotter_C(t *testing.T) {
 			got := p.C()
 			select {
 			case tt.fields.notifyCh <- struct{}{}:
-				assert.True(t, !tt.wantErr)
+				assert.Falsef(t, tt.wantErr, "unexpected read from channel")
 			default:
 				assert.Truef(t, tt.wantErr, "failed to write to the channel")
 			}

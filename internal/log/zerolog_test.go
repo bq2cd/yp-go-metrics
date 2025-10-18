@@ -25,7 +25,7 @@ func TestNewZeroLogger(t *testing.T) {
 			name:   "bytes buffer",
 			writer: &bytes.Buffer{},
 			assertion: func(t *testing.T, want io.Writer, got Logger, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.IsType(t, &baseLogger{}, got)
 				assert.IsType(t, &zeroLogger{}, got.(*baseLogger).impl)
 				assert.IsType(t, zerolog.Logger{}, got.(*baseLogger).impl.(*zeroLogger).logger)
@@ -155,7 +155,7 @@ func Test_convertFieldToZeroEvent(t *testing.T) {
 			evt := convertFieldToZeroEvent(l.Log(), tt.args.field)
 			evt.Send()
 			want, err := json.Marshal(tt.want)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.JSONEq(t, string(want), buf.String())
 		})
 	}
@@ -262,14 +262,14 @@ func Test_zeroLogger_logFatal(t *testing.T) {
 
 	err := cmd.Run()
 
-	require.IsType(t, &exec.ExitError{}, err)
-	status := err.(*exec.ExitError)
+	status, ok := err.(*exec.ExitError)
+	require.True(t, ok)
 
 	assert.Equal(t, 1, status.ExitCode())
 
 	var got map[string]any
 	err = json.Unmarshal(buf.Bytes(), &got)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	delete(got, "caller")
 	delete(got, "ts")
 	assert.Equal(t, map[string]any{"level": "fatal", "msg": "oops!", "crashed": true}, got)
@@ -463,13 +463,13 @@ func Test_zeroLogger_log(t *testing.T) {
 			l.log(tt.args.lvl, tt.args.msg, tt.args.fields...)
 
 			if tt.want.skipped {
-				assert.Len(t, buf.Bytes(), 0)
+				assert.Empty(t, buf.Bytes())
 				return
 			}
 
 			got := map[string]any{}
 			err := json.Unmarshal(buf.Bytes(), &got)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			delete(got, "caller")
 			delete(got, "ts")
 			assert.Equal(t, tt.want.logEntry, got)
@@ -483,7 +483,7 @@ func Test_zeroLogger_log(t *testing.T) {
 
 			got = map[string]any{}
 			err = json.Unmarshal(buf.Bytes(), &got)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			delete(got, "caller")
 			delete(got, "ts")
 			assert.Equal(t, tt.want2.logEntry, got)
@@ -586,7 +586,7 @@ func Test_zeroLogger_clone(t *testing.T) {
 
 			var origEntry map[string]any
 			err := json.Unmarshal(origMsg, &origEntry)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			delete(origEntry, "caller")
 			delete(origEntry, "ts")
 			delete(origEntry, "level")
@@ -594,7 +594,7 @@ func Test_zeroLogger_clone(t *testing.T) {
 
 			var newEntry map[string]any
 			err = json.Unmarshal(newMsg, &newEntry)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			delete(newEntry, "caller")
 			delete(newEntry, "ts")
 			delete(newEntry, "level")
@@ -698,7 +698,7 @@ func Test_zeroLogger_with(t *testing.T) {
 
 			var origEntry map[string]any
 			err := json.Unmarshal(origMsg, &origEntry)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			delete(origEntry, "caller")
 			delete(origEntry, "ts")
 			delete(origEntry, "level")
@@ -706,7 +706,7 @@ func Test_zeroLogger_with(t *testing.T) {
 
 			var newEntry map[string]any
 			err = json.Unmarshal(newMsg, &newEntry)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			delete(newEntry, "caller")
 			delete(newEntry, "ts")
 			delete(newEntry, "level")
@@ -738,7 +738,7 @@ func Test_zeroLogger_sync(t *testing.T) {
 				logger:      tt.fields.logger,
 				fieldsByKey: tt.fields.fieldsByKey,
 			}
-			assert.NoError(t, l.sync())
+			require.NoError(t, l.sync())
 		})
 	}
 }

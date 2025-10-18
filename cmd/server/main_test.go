@@ -486,9 +486,9 @@ func Test_run(t *testing.T) {
 				},
 			},
 			assertionResp: func(t *testing.T, req *http.Request, cancel context.CancelFunc) {
+				defer cancel()
 				err := servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
-				assert.NoError(t, err)
-				cancel()
+				require.NoError(t, err)
 			},
 			assertionErr: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -678,7 +678,7 @@ func Test_main(t *testing.T) {
 				require.NoError(t, err)
 				httpheaders.ContentTypeApplicationJSON.Apply(req.Header)
 				resp, err := http.DefaultClient.Do(req)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				defer func() { _ = resp.Body.Close() }()
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
@@ -722,8 +722,8 @@ func Test_main(t *testing.T) {
 			if tt.want.exitCode == 0 {
 				require.NoError(t, err)
 			} else {
-				require.IsType(t, &exec.ExitError{}, err)
-				status := err.(*exec.ExitError)
+				status, ok := err.(*exec.ExitError)
+				require.True(t, ok)
 				assert.Equal(t, tt.want.exitCode, status.ExitCode())
 			}
 		})

@@ -11,6 +11,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 type mockReporter struct {
@@ -237,7 +238,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			tt.want.checkErr(t, err)
 			if !tt.want.metricStored.Empty() {
 				got, err := tt.fields.reported.Get(tt.want.metricStored.Key())
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.want.metricStored, got)
 			}
 		})
@@ -503,7 +504,7 @@ func Test_reporter_Report(t *testing.T) {
 			}
 			for _, m := range tt.want.storedMetrics {
 				got, err := tt.fields.reported.Get(m.Key())
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, m, got)
 			}
 		})

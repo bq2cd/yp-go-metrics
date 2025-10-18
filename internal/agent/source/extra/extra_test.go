@@ -5,6 +5,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetSupportedMetrics(t *testing.T) {
@@ -85,7 +86,7 @@ func Test_source_ReadMetrics(t *testing.T) {
 				pollCounter: tt.fields.pollCounter,
 			}
 			got, err := s.ReadMetrics()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			tt.assertion(t, tt.want, got, s)
 		})
 	}

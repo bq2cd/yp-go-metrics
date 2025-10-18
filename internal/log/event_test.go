@@ -32,8 +32,8 @@ func Test_newEventBuilder(t *testing.T) {
 			e := newEventBuilder(tt.args.logger, tt.args.level)
 			assert.Equal(t, tt.args.logger, e.logger)
 			assert.Equal(t, tt.want.level, e.level)
-			assert.Len(t, e.fields, 0)
-			assert.Greater(t, cap(e.fields), 0)
+			assert.Empty(t, e.fields)
+			assert.Positive(t, cap(e.fields))
 		})
 	}
 }

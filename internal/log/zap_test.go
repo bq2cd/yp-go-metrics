@@ -33,7 +33,7 @@ func TestNewZapLogger(t *testing.T) {
 				cfg: zap.Config{},
 			},
 			assertion: func(t *testing.T, got Logger, err error) {
-				assert.Error(t, err)
+				require.Error(t, err)
 				assert.Nil(t, got)
 			},
 		},
@@ -43,7 +43,7 @@ func TestNewZapLogger(t *testing.T) {
 				cfg: zap.NewDevelopmentConfig(),
 			},
 			assertion: func(t *testing.T, got Logger, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				l := got.(*baseLogger).impl.(*zapLogger).logger
 				assert.Equal(t, zap.DebugLevel, l.Level())
 			},
@@ -54,7 +54,7 @@ func TestNewZapLogger(t *testing.T) {
 				cfg: zap.NewProductionConfig(),
 			},
 			assertion: func(t *testing.T, got Logger, err error) {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				l := got.(*baseLogger).impl.(*zapLogger).logger
 				assert.Equal(t, zap.InfoLevel, l.Level())
 			},
@@ -213,14 +213,14 @@ func Test_zapLogger_logFatal(t *testing.T) {
 
 	err := cmd.Run()
 
-	require.IsType(t, &exec.ExitError{}, err)
-	status := err.(*exec.ExitError)
+	status, ok := err.(*exec.ExitError)
+	require.True(t, ok)
 
 	assert.Equal(t, 1, status.ExitCode())
 
 	var got map[string]any
 	err = json.Unmarshal(buf.Bytes(), &got)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	delete(got, "ts")
 	assert.Equal(t, map[string]any{"level": "fatal", "msg": "oops!", "crashed": true}, got)
 }
