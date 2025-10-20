@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -22,7 +23,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		responder metricJSONResponder
 	}
 	type args struct {
-		bodyData       testBodyData
+		bodyData       handlertest.BodyData
 		shouldCompress bool
 	}
 	type want struct {
@@ -45,7 +46,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -62,7 +63,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -80,7 +81,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -98,7 +99,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -117,7 +118,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -134,7 +135,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
 			},
 			want: want{
 				code:        http.StatusNotFound,
@@ -152,7 +153,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -169,11 +170,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: func() testBodyData {
-					bd := newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7))
-					bd.contentType = httpheaders.ContentTypeTextPlain
-					return bd
-				}(),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)).AsType(httpheaders.ContentTypeTextPlain),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
@@ -190,10 +187,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: testBodyData{
-					data:        []byte(`{ id: 1 }`),
-					contentType: httpheaders.ContentTypeApplicationJSON,
-				},
+				bodyData: handlertest.NewBodyDataOfType(t, []byte(`{ id: 1 }`), httpheaders.ContentTypeApplicationJSON),
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
@@ -210,7 +204,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "")),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
@@ -227,7 +221,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 7)),
 			},
 			want: want{
 				code:        http.StatusInsufficientStorage,
@@ -245,7 +239,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &faultyMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id3", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id3", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -271,8 +265,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			ts := httptest.NewServer(h)
 			defer ts.Close()
 
-			req, err := tt.args.bodyData.toRequest(http.MethodPost, ts.URL+"/update", tt.args.shouldCompress)
-			require.NoError(t, err)
+			req := tt.args.bodyData.NewRequest(http.MethodPost, ts.URL+"/update", tt.args.shouldCompress)
 
 			resp, err := ts.Client().Do(req)
 			require.NoError(t, err)

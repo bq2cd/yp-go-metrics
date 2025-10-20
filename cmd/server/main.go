@@ -14,6 +14,7 @@ import (
 	applogger "github.com/bq2cd/yp-go-metrics/internal/app/logger"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/router"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/server"
@@ -40,7 +41,12 @@ func runServer(logger log.Logger, ctx context.Context, cfg config.Config) error 
 	storage := repository.NewMemStorage()
 	storer := service.NewMetricStorer(storage)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
-	router := handler.NewRouter(logger, snapshotter, nil)
+	handlers := handler.NewRegistry(logger, snapshotter)
+
+	router, err := router.New(logger, handlers)
+	if err != nil {
+		return fmt.Errorf("cannot create router: %w", err)
+	}
 
 	srv := server.NewServer(logger, ctx, cfg, router, snapshotter)
 

@@ -284,3 +284,25 @@ func TestContentEncoding_Apply(t *testing.T) {
 		})
 	}
 }
+
+func TestGetContentEncoding(t *testing.T) {
+	type args struct {
+		header http.Header
+	}
+	type want struct {
+		got ContentEncoding
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := GetContentEncoding(tt.args.header)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

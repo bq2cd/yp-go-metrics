@@ -14,6 +14,8 @@ const (
 	ContentEncodingDeflate   = ContentEncoding("deflate")
 )
 
+type ContentEncoding string
+
 func AcceptedContentEncodings(header http.Header) []ContentEncoding {
 	accepted := strings.Split(header.Get(HeaderKeyAcceptEncoding), ",")
 	result := make([]ContentEncoding, 0, len(accepted))
@@ -25,7 +27,9 @@ func AcceptedContentEncodings(header http.Header) []ContentEncoding {
 	return result
 }
 
-type ContentEncoding string
+func GetContentEncoding(header http.Header) ContentEncoding {
+	return ContentEncoding(header.Get(HeaderKeyContentEncoding))
+}
 
 func (c ContentEncoding) String() string {
 	return string(c)
@@ -58,7 +62,7 @@ func (c ContentEncoding) MakeAccepted(header http.Header) ContentEncoding {
 }
 
 func (c ContentEncoding) Matches(header http.Header) bool {
-	return c == ContentEncoding(header.Get(HeaderKeyContentEncoding))
+	return c == GetContentEncoding(header)
 }
 
 func (c ContentEncoding) Apply(header http.Header) ContentEncoding {

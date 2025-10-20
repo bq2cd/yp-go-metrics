@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -22,7 +23,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		responder metricJSONResponder
 	}
 	type args struct {
-		bodyData       testBodyData
+		bodyData       handlertest.BodyData
 		shouldCompress bool
 	}
 	type want struct {
@@ -45,7 +46,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id1")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id1")),
 			},
 			want: want{
 				code:        http.StatusNotFound,
@@ -63,7 +64,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "")),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
@@ -81,11 +82,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: func() testBodyData {
-					bd := newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id1"))
-					bd.contentType = httpheaders.ContentTypeTextPlain
-					return bd
-				}(),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id1")).AsType(httpheaders.ContentTypeTextPlain),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
@@ -103,10 +100,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: testBodyData{
-					data:        []byte(`{ id: 1 }`),
-					contentType: httpheaders.ContentTypeApplicationJSON,
-				},
+				bodyData: handlertest.NewBodyDataOfType(t, []byte(`{ id: 1 }`), httpheaders.ContentTypeApplicationJSON),
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
@@ -124,7 +118,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id3")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "id3")),
 			},
 			want: want{
 				code:        http.StatusNotFound,
@@ -142,7 +136,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, storagetest.FaultyStorageErrorTrigger)),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, storagetest.FaultyStorageErrorTrigger)),
 			},
 			want: want{
 				code:        http.StatusInternalServerError,
@@ -160,7 +154,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeGauge, "id2")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeGauge, "id2")),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -178,7 +172,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &faultyMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeGauge, "id2")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeGauge, "id2")),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -204,8 +198,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			ts := httptest.NewServer(h)
 			defer ts.Close()
 
-			req, err := tt.args.bodyData.toRequest(http.MethodPost, ts.URL+"/value", tt.args.shouldCompress)
-			require.NoError(t, err)
+			req := tt.args.bodyData.NewRequest(http.MethodPost, ts.URL+"/value", tt.args.shouldCompress)
 
 			resp, err := ts.Client().Do(req)
 			require.NoError(t, err)

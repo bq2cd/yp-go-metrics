@@ -1,82 +1,20 @@
 package handler
 
 import (
-	"bytes"
-	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
+	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type testBodyData struct {
-	data        []byte
-	contentType httpheaders.ContentType
-}
-
-func newTestBodyDataFromMetric(t *testing.T, m model.Metric) testBodyData {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(m)
-	require.NoError(t, err)
-	return testBodyData{
-		data:        buf.Bytes(),
-		contentType: httpheaders.ContentTypeApplicationJSON,
-	}
-}
-
-func newTestBodyDataFromMetricKey(t *testing.T, k model.MetricKey) testBodyData {
-	var buf bytes.Buffer
-	err := json.NewEncoder(&buf).Encode(k)
-	require.NoError(t, err)
-	return testBodyData{
-		data:        buf.Bytes(),
-		contentType: httpheaders.ContentTypeApplicationJSON,
-	}
-}
-
-func (b *testBodyData) getBody(shouldCompress bool) (io.ReadCloser, error) {
-	var body io.ReadCloser = http.NoBody
-	if len(b.data) == 0 {
-		return body, nil
-	}
-	r := bytes.NewReader(b.data)
-	if !shouldCompress {
-		return io.NopCloser(r), nil
-	}
-	var buf bytes.Buffer
-	wgz := gzip.NewWriter(&buf)
-	_, err := io.Copy(wgz, r)
-	if err != nil {
-		return nil, err
-	}
-	err = wgz.Close()
-	if err != nil {
-		return nil, err
-	}
-	return io.NopCloser(&buf), nil
-}
-
-func (b *testBodyData) toRequest(method, url string, shouldCompress bool) (*http.Request, error) {
-	body, err := b.getBody(shouldCompress)
-	if err != nil {
-		return nil, err
-	}
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return nil, err
-	}
-	if shouldCompress {
-		httpheaders.ContentEncodingGzip.Apply(req.Header)
-	}
-	b.contentType.Apply(req.Header)
-	return req, nil
-}
 
 type faultyMetricJSONResponder struct{}
 
@@ -149,4 +87,9 @@ func Test_defaultMetricJSONResponder_WriteResponse(t *testing.T) {
 			tt.assertion(t, tt.want, body, errSend)
 		})
 	}
+}
+
+func TestNewRegistry(t *testing.T) {
+	got := NewRegistry(log.NewNoopLogger(), service.NewMetricStorer(storagetest.NewMockStorage()))
+	require.NotEmpty(t, got)
 }

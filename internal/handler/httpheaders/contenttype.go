@@ -15,6 +15,10 @@ const (
 
 type ContentType string
 
+func GetContentType(header http.Header) ContentType {
+	return ContentType(header.Get(HeaderKeyContentType))
+}
+
 func (c ContentType) String() string {
 	return string(c)
 }
@@ -24,7 +28,7 @@ func (c ContentType) UTF8() ContentType {
 }
 
 func (c ContentType) Matches(header http.Header) bool {
-	return c == ContentType(header.Get(HeaderKeyContentType))
+	return c == GetContentType(header)
 }
 
 func (c ContentType) Apply(header http.Header) ContentType {
