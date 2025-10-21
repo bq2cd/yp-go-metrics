@@ -10,6 +10,10 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
+//go:generate go tool mockgen -destination=handlertest/mock_handler.go -package=handlertest github.com/bq2cd/yp-go-metrics/internal/handler Handler
+
+type Handler = http.Handler
+
 const (
 	IdentDefault    = "default"
 	IdentRead       = "read"
@@ -23,7 +27,7 @@ const (
 type Ident string
 
 // Registry maps a handler ID ([Ident]) to a [http.Handler] implementation.
-type Registry map[Ident]http.Handler
+type Registry map[Ident]Handler
 
 // NewRegistry creates a new [Registry] map.
 func NewRegistry(logger log.Logger, metrics service.MetricStorer) Registry {
@@ -53,7 +57,7 @@ func getHandlers(metrics service.MetricStorer) map[Ident]handlerLogger {
 // handlerLogger is an internal interface to facilitate common logging configuration
 // and testing.
 type handlerLogger interface {
-	http.Handler
+	Handler
 	setLogger(logger log.Logger)
 	getLogger() log.Logger
 }

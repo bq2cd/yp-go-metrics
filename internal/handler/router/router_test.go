@@ -331,7 +331,7 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 
 	handlers := handler.NewRegistry(log.NewNoopLogger(), service.NewMetricStorer(storagetest.NewMockStorage()))
 	for id := range handlers {
-		m := NewMockHandler(ctrl)
+		m := handlertest.NewMockHandler(ctrl)
 		handlers[id] = m
 		if id == handlerID {
 			m.EXPECT().ServeHTTP(gomock.Any(), gomock.Any()).Do(handlerFn)

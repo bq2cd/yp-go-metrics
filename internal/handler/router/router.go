@@ -11,10 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-//go:generate go tool mockgen -destination=mock_handler_test.go -package=router github.com/bq2cd/yp-go-metrics/internal/handler/router Handler
-
-type Handler = http.Handler
-
 var (
 	ErrRouteEmptyPatterns     = errors.New("empty patterns")
 	ErrRouteEmptyHandler      = errors.New("empty handler")
