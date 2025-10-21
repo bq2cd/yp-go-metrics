@@ -442,7 +442,6 @@ func Test_run(t *testing.T) {
 		assertionResp func(*testing.T, *http.Request, context.CancelFunc)
 		assertionErr  assert.ErrorAssertionFunc
 	}{
-		// TODO: Add test cases.
 		{
 			name: "normal flow",
 			skip: func() (bool, string) {
