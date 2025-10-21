@@ -258,9 +258,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewTestLogger()
 			h := &updateJSONHandler{
-				logger:    logger,
-				metrics:   tt.fields.metrics,
-				responder: tt.fields.responder,
+				baseHandler: baseHandler{logger: logger},
+				metrics:     tt.fields.metrics,
+				responder:   tt.fields.responder,
 			}
 			ts := httptest.NewServer(h)
 			defer ts.Close()

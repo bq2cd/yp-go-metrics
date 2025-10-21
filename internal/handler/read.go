@@ -11,6 +11,7 @@ import (
 )
 
 type readHandler struct {
+	baseHandler
 	metrics service.MetricStorer
 }
 

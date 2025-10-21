@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
@@ -90,6 +91,59 @@ func Test_defaultMetricJSONResponder_WriteResponse(t *testing.T) {
 }
 
 func TestNewRegistry(t *testing.T) {
-	got := NewRegistry(log.NewNoopLogger(), service.NewMetricStorer(storagetest.NewMockStorage()))
-	require.NotEmpty(t, got)
+	t.Run("all handlers have logger", func(t *testing.T) {
+		tests := map[string]struct {
+			logger log.Logger
+		}{
+			"incoming logger is nil": {
+				logger: nil,
+			},
+			"incoming logger is not nil": {
+				logger: log.NewNoopLogger(),
+			},
+		}
+		for name, tt := range tests {
+			t.Run(name, func(t *testing.T) {
+				got := NewRegistry(tt.logger, service.NewMetricStorer(storagetest.NewMockStorage()))
+				require.NotEmpty(t, got)
+				for _, h := range got {
+					logger := reflect.ValueOf(h).Elem().FieldByName("logger")
+					assert.Truef(t, logger.IsValid(), "missing logger field")
+					assert.Falsef(t, logger.IsNil(), "logger is nil")
+				}
+			})
+		}
+	})
+
+	t.Run("logger contains handler name field", func(t *testing.T) {
+		logger := log.NewTestLogger()
+
+		got := NewRegistry(logger, service.NewMetricStorer(storagetest.NewMockStorage()))
+		require.NotEmpty(t, got)
+		for _, h := range got {
+			hl, ok := h.(handlerLogger)
+			assert.Truef(t, ok, "must implement handlerLogger interface")
+			hl.getLogger().Info().Send()
+		}
+
+		events := logger.RecordedEvents()
+		for ident := range got {
+			assert.NotEmpty(t, events.FindMatchingEvents(log.LevelInfo, "", log.Str("handler", string(ident))))
+		}
+	})
+}
+
+func Test_getHandlers(t *testing.T) {
+	// covered by [TestNewRegistry]
+	t.SkipNow()
+}
+
+func Test_baseHandler_setLogger(t *testing.T) {
+	// covered by [TestNewRegistry]
+	t.SkipNow()
+}
+
+func Test_baseHandler_getLogger(t *testing.T) {
+	// covered by [TestNewRegistry]
+	t.SkipNow()
 }

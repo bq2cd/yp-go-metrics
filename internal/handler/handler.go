@@ -22,19 +22,52 @@ const (
 // Ident represents a handler ID.
 type Ident string
 
-// Registry maps a handler ID ([Ident]) to a handler implementation.
+// Registry maps a handler ID ([Ident]) to a [http.Handler] implementation.
 type Registry map[Ident]http.Handler
 
 // NewRegistry creates a new [Registry] map.
 func NewRegistry(logger log.Logger, metrics service.MetricStorer) Registry {
-	return Registry{
+	if logger == nil {
+		logger = log.NewNoopLogger()
+	}
+	handlers := getHandlers(metrics)
+	reg := make(Registry, len(handlers))
+	for ident, h := range handlers {
+		h.setLogger(logger.With(log.Str("handler", string(ident))))
+		reg[ident] = h
+	}
+	return reg
+}
+
+func getHandlers(metrics service.MetricStorer) map[Ident]handlerLogger {
+	return map[Ident]handlerLogger{
 		IdentDefault:    &defaultHandler{},
 		IdentRead:       &readHandler{metrics: metrics},
 		IdentUpdate:     &updateHandler{metrics: metrics},
-		IdentUpdateJSON: &updateJSONHandler{logger: logger, metrics: metrics, responder: &defaultMetricJSONResponder{}},
+		IdentUpdateJSON: &updateJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
 		IdentValue:      &valueHandler{metrics: metrics},
-		IdentValueJSON:  &valueJSONHandler{logger: logger, metrics: metrics, responder: &defaultMetricJSONResponder{}},
+		IdentValueJSON:  &valueJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
 	}
+}
+
+// handlerLogger is an internal interface to facilitate common logging configuration
+// and testing.
+type handlerLogger interface {
+	http.Handler
+	setLogger(logger log.Logger)
+	getLogger() log.Logger
+}
+
+type baseHandler struct {
+	logger log.Logger
+}
+
+func (h *baseHandler) setLogger(logger log.Logger) {
+	h.logger = logger
+}
+
+func (h *baseHandler) getLogger() log.Logger {
+	return h.logger
 }
 
 type metricJSONResponder interface {

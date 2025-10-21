@@ -4,7 +4,9 @@ import (
 	"net/http"
 )
 
-type defaultHandler struct{}
+type defaultHandler struct {
+	baseHandler
+}
 
 // ServeHTTP implements http.Handler for any endpoint except /update
 func (h *defaultHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {

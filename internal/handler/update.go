@@ -9,6 +9,7 @@ import (
 )
 
 type updateHandler struct {
+	baseHandler
 	metrics service.MetricStorer
 }
 
