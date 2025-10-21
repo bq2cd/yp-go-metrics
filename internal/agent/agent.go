@@ -17,8 +17,9 @@ type agent struct {
 	reporter  Reporter
 }
 
-// NewAgent creates an instance of an agent worker.
-func NewAgent(ctx context.Context, cfg config.Config, collector Collector, reporter Reporter) *agent {
+// New creates an instance of an agent process which runs
+// metrics collector and reporter.
+func New(ctx context.Context, cfg config.Config, collector Collector, reporter Reporter) *agent {
 	return &agent{context: ctx, config: cfg, collector: collector, reporter: reporter}
 }
 

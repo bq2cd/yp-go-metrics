@@ -112,7 +112,7 @@ func createTempFile(t *testing.T, pattern string) string {
 	return f.Name()
 }
 
-func TestNewServer(t *testing.T) {
+func TestNew(t *testing.T) {
 	type args struct {
 		logger      log.Logger
 		ctx         context.Context
@@ -190,7 +190,7 @@ func TestNewServer(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewServer(tt.args.logger, tt.args.ctx, tt.args.cfg, tt.args.router, tt.args.snapshotter))
+			tt.assertion(t, tt.args, New(tt.args.ctx, tt.args.logger, tt.args.cfg, tt.args.router, tt.args.snapshotter))
 		})
 	}
 }

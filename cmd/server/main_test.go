@@ -18,7 +18,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
@@ -422,26 +421,6 @@ func Test_parseArgs_withEnv(t *testing.T) {
 			got, err := parseArgs(fs, tt.args.args, envparser.NewParserWithOptions(env.Options{Environment: tt.args.env}))
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func Test_runServer(t *testing.T) {
-	type args struct {
-		ctx context.Context
-		cfg config.Config
-	}
-	tests := []struct {
-		name      string
-		args      args
-		assertion assert.ErrorAssertionFunc
-	}{
-		// `runServer` is always called by `run`, so there is no
-		// need for a separate test here.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, runServer(log.NewNoopLogger(), tt.args.ctx, tt.args.cfg))
 		})
 	}
 }

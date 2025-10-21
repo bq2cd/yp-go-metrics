@@ -250,26 +250,6 @@ func (m *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func Test_runAgent(t *testing.T) {
-	type args struct {
-		ctx context.Context
-		cfg config.Config
-	}
-	tests := []struct {
-		name      string
-		args      args
-		assertion assert.ErrorAssertionFunc
-	}{
-		// `runAgent` is always called by `run`, so there is no
-		// need for a separate test here.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, runAgent(tt.args.ctx, tt.args.cfg))
-		})
-	}
-}
-
 func Test_run(t *testing.T) {
 	type args struct {
 		stderr io.Writer
@@ -419,18 +399,10 @@ func Test_run(t *testing.T) {
 }
 
 func Test_main(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		// `main` only calls `run` under the hood,
-		// so there's not much to test here
-		// unless we could mock `run` function;
-		// and the only way to mock it would be
-		// to assign it to a global variable.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			main()
-		})
-	}
+	// `main` only calls `run` under the hood,
+	// so there's not much to test here
+	// unless we could mock `run` function;
+	// and the only way to mock it would be
+	// to assign it to a global variable.
+	t.SkipNow()
 }

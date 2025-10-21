@@ -29,7 +29,7 @@ func (m *mockPeriodicTask) doWork() error {
 	return nil
 }
 
-func TestNewAgent(t *testing.T) {
+func TestNew(t *testing.T) {
 	type args struct {
 		ctx       context.Context
 		cfg       config.Config
@@ -61,7 +61,7 @@ func TestNewAgent(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := NewAgent(tt.args.ctx, tt.args.cfg, tt.args.collector, tt.args.reporter)
+			got := New(tt.args.ctx, tt.args.cfg, tt.args.collector, tt.args.reporter)
 			assert.Equal(t, tt.args.ctx, got.context)
 			assert.Equal(t, tt.args.cfg, got.config)
 			assert.Equal(t, tt.args.collector, got.collector)

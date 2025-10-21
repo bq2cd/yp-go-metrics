@@ -42,8 +42,9 @@ type server struct {
 	lnFactory   ListenerFactory
 }
 
-// NewServer creates an instance of a server worker.
-func NewServer(logger log.Logger, ctx context.Context, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter) *server {
+// New creates an instance of a server process that runs
+// an HTTP server and other background tasks.
+func New(ctx context.Context, logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter) *server {
 	l := logger
 	if l == nil {
 		l = log.NewNoopLogger()
