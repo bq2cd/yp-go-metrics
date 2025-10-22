@@ -14,6 +14,8 @@ var (
 	ErrMetricNotFound = errors.New("metric not found")
 )
 
+//go:generate go tool mockgen -destination=servicetest/mock_metric_storer.go -package servicetest github.com/bq2cd/yp-go-metrics/internal/service MetricStorer
+
 // MetricStorer defines an interface to work with metrics.
 // E.g. store, retrieve, delete, etc.
 type MetricStorer interface {

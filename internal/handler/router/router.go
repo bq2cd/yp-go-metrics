@@ -39,6 +39,7 @@ func RouteDefinitions() []RouteDefinition {
 		{ident: handler.IdentUpdate, patterns: []string{"POST /update/*"}},
 		{ident: handler.IdentValueJSON, patterns: []string{"POST /value", "POST /value/"}},
 		{ident: handler.IdentValue, patterns: []string{"GET /value/*"}},
+		{ident: handler.IdentPing, patterns: []string{"GET /ping"}},
 	}
 }
 

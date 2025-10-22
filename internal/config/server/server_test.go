@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -209,6 +210,7 @@ func TestConfig_Validate(t *testing.T) {
 		MetricStoreInterval      time.Duration
 		MetricStoreFilePath      string
 		MetricStoreLoadOnStartup bool
+		DatabaseURL              url.URL
 	}
 	tests := []struct {
 		name      string
@@ -237,11 +239,30 @@ func TestConfig_Validate(t *testing.T) {
 			assertion: assert.Error,
 		},
 		{
+			name: "invalid database scheme",
+			fields: fields{
+				ListenAddress:   ":0",
+				ShutdownTimeout: 1 * time.Second,
+				DatabaseURL:     url.URL{Scheme: "mysql", Host: "localhost:5432"},
+			},
+			assertion: assert.Error,
+		},
+		{
 			name: "all good",
 			fields: fields{
 				ListenAddress:       ":0",
 				ShutdownTimeout:     1 * time.Second,
 				MetricStoreFilePath: "test.json",
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "all good with database",
+			fields: fields{
+				ListenAddress:       ":0",
+				ShutdownTimeout:     1 * time.Second,
+				MetricStoreFilePath: "test.json",
+				DatabaseURL:         url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/db1", RawQuery: "sslmode=verify-full"},
 			},
 			assertion: assert.NoError,
 		},
@@ -254,6 +275,7 @@ func TestConfig_Validate(t *testing.T) {
 				MetricStoreInterval:      tt.fields.MetricStoreInterval,
 				MetricStoreFilePath:      tt.fields.MetricStoreFilePath,
 				MetricStoreLoadOnStartup: tt.fields.MetricStoreLoadOnStartup,
+				DatabaseURL:              tt.fields.DatabaseURL,
 			}
 			tt.assertion(t, c.Validate())
 		})
@@ -388,16 +410,137 @@ func TestMetricStoreLoadOnStartup(t *testing.T) {
 	type args struct {
 		action bool
 	}
-	tests := []struct {
-		name string
-		args args
-		want Option
-	}{
-		// TODO: Add test cases.
+	type want struct {
+		action bool
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, MetricStoreLoadOnStartup(tt.args.action))
+	type testcase struct {
+		args   args
+		want   want
+		config Config
+	}
+	tests := map[string]testcase{
+		"false -> true": {
+			args:   args{action: true},
+			want:   want{action: true},
+			config: Config{},
+		},
+		"true -> false": {
+			args:   args{action: false},
+			want:   want{action: false},
+			config: Config{MetricStoreLoadOnStartup: true},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := MetricStoreLoadOnStartup(tt.args.action)(c)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want.action, c.MetricStoreLoadOnStartup)
+		})
+	}
+}
+
+func TestDatabaseURL(t *testing.T) {
+	type args struct {
+		dsn string
+	}
+	type want struct {
+		url url.URL
+	}
+	type testcase struct {
+		args      args
+		want      want
+		config    Config
+		assertion func(*testing.T, *Config, error, want)
+	}
+	tests := map[string]testcase{
+		"empty dsn is allowed": {
+			args:   args{dsn: ""},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"invalid url fails": {
+			args:   args{dsn: "localhost:" + string([]rune{0x7f}) + "99"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"only postgres/postgresql scheme is allowed": {
+			args:   args{dsn: "mysql://"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"missing host": {
+			args:   args{dsn: "postgres://"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"missing port": {
+			args:   args{dsn: "postgresql://localhost"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"valid url with postgres": {
+			args:   args{dsn: "postgres://localhost:5432"},
+			want:   want{url: url.URL{Scheme: "postgres", Host: "localhost:5432"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"valid url with postgresql": {
+			args:   args{dsn: "postgresql://localhost:5432"},
+			want:   want{url: url.URL{Scheme: "postgresql", Host: "localhost:5432"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"valid url with database": {
+			args:   args{dsn: "postgres://localhost:5432/test-db"},
+			want:   want{url: url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/test-db"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"overrides previous url": {
+			args:   args{dsn: "postgresql://localhost:1234/test-db-1"},
+			want:   want{url: url.URL{Scheme: "postgresql", Host: "localhost:1234", Path: "/test-db-1"}},
+			config: Config{DatabaseURL: url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/test-db"}},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"valid url with username and password": {
+			args:   args{dsn: "postgres://user:password@127.0.0.1:9876/db-11_dev?sslmode=verify-full"},
+			want:   want{url: url.URL{Scheme: "postgres", User: url.UserPassword("user", "password"), Host: "127.0.0.1:9876", Path: "/db-11_dev", RawQuery: "sslmode=verify-full"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := DatabaseURL(tt.args.dsn)(c)
+			tt.assertion(t, &tt.config, err, tt.want)
+			assert.Equal(t, tt.want.url, c.DatabaseURL)
 		})
 	}
 }

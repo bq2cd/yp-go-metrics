@@ -29,6 +29,7 @@ type cliOptions struct {
 	MetricStoreInterval      uint   `env:"STORE_INTERVAL"`
 	MetricStoreFilePath      string `env:"FILE_STORAGE_PATH"`
 	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
+	DatabaseDSN              string `env:"DATABASE_DSN"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -39,6 +40,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.UintVar(&opts.MetricStoreInterval, "i", defaultMetricStoreIntervalSec, "dump metrics on disk each interval (in seconds)")
 	fs.StringVar(&opts.MetricStoreFilePath, "f", defaultMetricStoreFilePath, "path to file for dumping metrics")
 	fs.BoolVar(&opts.MetricStoreLoadOnStartup, "r", defaultMetricStoreLoadOnStartup, "restore metrics from file on startup")
+	fs.StringVar(&opts.DatabaseDSN, "d", "", "database dsn (only postgres is supported)")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
@@ -54,6 +56,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.MetricStoreInterval(opts.MetricStoreInterval),
 		config.MetricStoreFilePath(opts.MetricStoreFilePath),
 		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
+		config.DatabaseURL(opts.DatabaseDSN),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

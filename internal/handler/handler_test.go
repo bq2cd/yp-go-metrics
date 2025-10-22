@@ -10,11 +10,11 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 type faultyMetricJSONResponder struct{}
@@ -91,6 +91,9 @@ func Test_defaultMetricJSONResponder_WriteResponse(t *testing.T) {
 }
 
 func TestNewRegistry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	t.Run("all handlers have logger", func(t *testing.T) {
 		tests := map[string]struct {
 			logger log.Logger
@@ -104,7 +107,7 @@ func TestNewRegistry(t *testing.T) {
 		}
 		for name, tt := range tests {
 			t.Run(name, func(t *testing.T) {
-				got := NewRegistry(tt.logger, service.NewMetricStorer(storagetest.NewMockStorage()))
+				got := NewRegistry(tt.logger, servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
 				require.NotEmpty(t, got)
 				for _, h := range got {
 					logger := reflect.ValueOf(h).Elem().FieldByName("logger")
@@ -118,7 +121,7 @@ func TestNewRegistry(t *testing.T) {
 	t.Run("logger contains handler name field", func(t *testing.T) {
 		logger := log.NewTestLogger()
 
-		got := NewRegistry(logger, service.NewMetricStorer(storagetest.NewMockStorage()))
+		got := NewRegistry(logger, servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
 		require.NotEmpty(t, got)
 		for _, h := range got {
 			hl, ok := h.(handlerLogger)

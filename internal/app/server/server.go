@@ -15,10 +15,16 @@ import (
 
 // Run is an app entry point to launch a server process.
 func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
-	storage := repository.NewMemStorage()
-	storer := service.NewMetricStorer(storage)
+	sqlStorage, err := repository.NewSQLStorage(cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("cannot create SQL storage: %w", err)
+	}
+
+	memStorage := repository.NewMemStorage()
+	storer := service.NewMetricStorer(memStorage)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
-	handlers := handler.NewRegistry(logger, snapshotter)
+
+	handlers := handler.NewRegistry(logger, snapshotter, sqlStorage)
 
 	router, err := router.New(logger, handlers)
 	if err != nil {

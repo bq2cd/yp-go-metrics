@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,9 +67,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "extra positional args",
@@ -80,65 +79,55 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreFilePath:      filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				MetricStoreLoadOnStartup: true,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
-			name: "unknown args",
-			args: args{args: []string{"-x", "--test"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "unknown args",
+			args:      args{args: []string{"-x", "--test"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, address",
-			args: args{args: []string{"-a"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, address",
+			args:      args{args: []string{"-a"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, address 2",
-			args: args{args: []string{"-a", "host1:host2:host3"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, address 2",
+			args:      args{args: []string{"-a", "host1:host2:host3"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, shutdown timeout",
-			args: args{args: []string{"-t=0"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, shutdown timeout",
+			args:      args{args: []string{"-t=0"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, metric store interval",
-			args: args{args: []string{"-i=-1"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, metric store interval",
+			args:      args{args: []string{"-i=-1"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, metric store path",
-			args: args{args: []string{"-f=" + servertest.GetCwd(t)}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, metric store path",
+			args:      args{args: []string{"-f=" + servertest.GetCwd(t)}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, metric store load at startup",
-			args: args{args: []string{"-r=123"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, metric store load at startup",
+			args:      args{args: []string{"-r=123"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, invalid database url",
+			args:      args{args: []string{"-d=postgres://"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
 			name: "good args, address",
@@ -149,9 +138,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 1",
@@ -162,9 +149,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 2",
@@ -175,9 +160,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 3",
@@ -188,9 +171,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 4",
@@ -201,9 +182,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, shutdown timeout",
@@ -214,9 +193,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store interval",
@@ -227,9 +204,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: 12 * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store interval 2",
@@ -240,9 +215,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: 0,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store path",
@@ -253,9 +226,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: 12 * time.Second,
 				MetricStoreFilePath: "/some/path/here.txt",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store load at startup",
@@ -267,9 +238,19 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreFilePath:      "/some/path/here.txt",
 				MetricStoreLoadOnStartup: true,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, database url",
+			args: args{args: []string{"-d=postgresql://localhost:1234"}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				DatabaseURL:         url.URL{Scheme: "postgresql", Host: "localhost:1234"},
 			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
@@ -306,9 +287,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides shutdown timeout",
@@ -322,9 +301,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides shutdown timeout 2",
@@ -338,9 +315,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env invalid shutdown timeout",
@@ -348,10 +323,8 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				args: []string{"-a=localhost:9090"},
 				env:  map[string]string{"SHUTDOWN_TIMEOUT": "-5"},
 			},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
 			name: "env invalid address",
@@ -359,10 +332,8 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				args: []string{"-a=localhost:9090"},
 				env:  map[string]string{"ADDRESS": "123:456:789"},
 			},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
 			name: "env overrides metric store interval",
@@ -376,9 +347,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: 18 * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides metric store path",
@@ -392,9 +361,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: 8 * time.Second,
 				MetricStoreFilePath: "/an/override/to/a/different/file.json",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides metric store load on startup",
@@ -409,9 +376,31 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreFilePath:      "/a/path/to/some/file.json",
 				MetricStoreLoadOnStartup: false,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides database url",
+			args: args{
+				args: []string{"-d=postgres://localhost:1234"},
+				env:  map[string]string{"DATABASE_DSN": "postgres://user:password@localhost:4567/db1"},
 			},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				DatabaseURL:         url.URL{Scheme: "postgres", User: url.UserPassword("user", "password"), Host: "localhost:4567", Path: "/db1"},
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env invalid database url",
+			args: args{
+				args: []string{"-d=postgres://localhost:1234"},
+				env:  map[string]string{"DATABASE_DSN": "mysql://user:password@localhost:4567/db1"},
+			},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 	}
 	for _, tt := range tests {

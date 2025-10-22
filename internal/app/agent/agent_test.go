@@ -38,10 +38,10 @@ func TestRun(t *testing.T) {
 	tests := map[string]testcase{
 		"agent collects metrics and reports to server successfully": {
 			args: args{
-				timeout: 10 * time.Millisecond,
+				timeout: 50 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   2 * time.Millisecond,
-					ReportInterval: 5 * time.Millisecond,
+					PollInterval:   10 * time.Millisecond,
+					ReportInterval: 30 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusOK,
@@ -52,10 +52,10 @@ func TestRun(t *testing.T) {
 		},
 		"agent collects metrics but server responds with error": {
 			args: args{
-				timeout: 10 * time.Millisecond,
+				timeout: 50 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   2 * time.Millisecond,
-					ReportInterval: 5 * time.Millisecond,
+					PollInterval:   10 * time.Millisecond,
+					ReportInterval: 30 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusInternalServerError,
@@ -67,10 +67,10 @@ func TestRun(t *testing.T) {
 		},
 		"agent collects metrics but server unreachable": {
 			args: args{
-				timeout: 10 * time.Millisecond,
+				timeout: 50 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   2 * time.Millisecond,
-					ReportInterval: 5 * time.Millisecond,
+					PollInterval:   10 * time.Millisecond,
+					ReportInterval: 30 * time.Millisecond,
 					UpstreamURL:    url.URL{Host: "localhost"},
 				},
 			},

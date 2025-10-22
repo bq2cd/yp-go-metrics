@@ -12,8 +12,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/middleware"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
 	"github.com/go-chi/chi/v5"
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
@@ -129,6 +128,14 @@ func testRouterServeHTTPHandlers(t *testing.T) {
 			cases: []testcase{
 				{method: http.MethodPost, url: "/value"},
 				{method: http.MethodPost, url: "/value/"},
+			},
+		},
+		handler.IdentPing: {
+			status:      http.StatusOK,
+			body:        []byte(`OK`),
+			contentType: httpheaders.ContentTypeTextPlain,
+			cases: []testcase{
+				{method: http.MethodGet, url: "/ping"},
 			},
 		},
 	}
@@ -329,7 +336,7 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 
 	logger := log.NewTestLogger()
 
-	handlers := handler.NewRegistry(log.NewNoopLogger(), service.NewMetricStorer(storagetest.NewMockStorage()))
+	handlers := handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
 	for id := range handlers {
 		m := handlertest.NewMockHandler(ctrl)
 		handlers[id] = m
@@ -475,6 +482,8 @@ func TestNewRoute(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 	type args struct {
 		logger   log.Logger
 		handlers handler.Registry
@@ -492,10 +501,10 @@ func TestNew(t *testing.T) {
 			want: want{wantErr: true},
 		},
 		"proper handlers pass": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), service.NewMetricStorer(storagetest.NewMockStorage()))},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
 		},
 		"nil logger replaced by noop": {
-			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), service.NewMetricStorer(storagetest.NewMockStorage()))},
+			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
 		},
 	}
 	for name, tt := range tests {
@@ -522,6 +531,7 @@ func testNewChiRoutes(t *testing.T, rt *Router) {
 		"POST /value":    true,
 		"POST /value/":   true,
 		"GET /value/*":   true,
+		"GET /ping":      true,
 	}
 	testChiRoutes(t, rt.mux, wantRoutes)
 }

@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
@@ -21,7 +22,20 @@ const (
 	IdentUpdateJSON = "update_json"
 	IdentValue      = "value"
 	IdentValueJSON  = "value_json"
+	IdentPing       = "ping"
 )
+
+func getHandlers(metrics service.MetricStorer, pinger service.StoragePinger) map[Ident]handlerLogger {
+	return map[Ident]handlerLogger{
+		IdentDefault:    &defaultHandler{},
+		IdentRead:       &readHandler{metrics: metrics},
+		IdentUpdate:     &updateHandler{metrics: metrics},
+		IdentUpdateJSON: &updateJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
+		IdentValue:      &valueHandler{metrics: metrics},
+		IdentValueJSON:  &valueJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
+		IdentPing:       &pingHandler{pinger: pinger, timeout: 500 * time.Millisecond},
+	}
+}
 
 // Ident represents a handler ID.
 type Ident string
@@ -30,28 +44,17 @@ type Ident string
 type Registry map[Ident]Handler
 
 // NewRegistry creates a new [Registry] map.
-func NewRegistry(logger log.Logger, metrics service.MetricStorer) Registry {
+func NewRegistry(logger log.Logger, metrics service.MetricStorer, pinger service.StoragePinger) Registry {
 	if logger == nil {
 		logger = log.NewNoopLogger()
 	}
-	handlers := getHandlers(metrics)
+	handlers := getHandlers(metrics, pinger)
 	reg := make(Registry, len(handlers))
 	for ident, h := range handlers {
 		h.setLogger(logger.With(log.Str("handler", string(ident))))
 		reg[ident] = h
 	}
 	return reg
-}
-
-func getHandlers(metrics service.MetricStorer) map[Ident]handlerLogger {
-	return map[Ident]handlerLogger{
-		IdentDefault:    &defaultHandler{},
-		IdentRead:       &readHandler{metrics: metrics},
-		IdentUpdate:     &updateHandler{metrics: metrics},
-		IdentUpdateJSON: &updateJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
-		IdentValue:      &valueHandler{metrics: metrics},
-		IdentValueJSON:  &valueJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
-	}
 }
 
 // handlerLogger is an internal interface to facilitate common logging configuration
