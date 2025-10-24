@@ -103,7 +103,7 @@ func Test_memStorage_Get(t *testing.T) {
 			s := &memStorage{
 				data: tt.fields.data,
 			}
-			got, err := s.Get(tt.args.key)
+			got, err := s.Get(t.Context(), tt.args.key)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -232,7 +232,7 @@ func Test_memStorage_Set(t *testing.T) {
 				data: tt.fields.data,
 			}
 			metric := tt.args.metric()
-			tt.assertion(t, s.Set(metric))
+			tt.assertion(t, s.Set(t.Context(), metric))
 			tt.contains(t, tt.fields.data, metric)
 		})
 	}
@@ -287,7 +287,7 @@ func Test_memStorage_GetAll(t *testing.T) {
 			s := &memStorage{
 				data: tt.fields.data,
 			}
-			got, err := s.GetAll()
+			got, err := s.GetAll(t.Context())
 			tt.assertion(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})

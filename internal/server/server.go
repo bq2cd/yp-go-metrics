@@ -116,7 +116,7 @@ func (s *server) tryLoadMetrics() {
 		return
 	}
 	// snapshotter will close the reader
-	err = s.snapshotter.LoadClose(f)
+	err = s.snapshotter.LoadClose(s.context, f)
 	if err != nil {
 		l.Error().Err("error", err).Msg("failed to load metrics")
 	}
@@ -134,7 +134,7 @@ func (s *server) dumpMetrics() error {
 		return fmt.Errorf("failed to open temporary file (%s): %w", tmpfname, err)
 	}
 	// snapshotter will close the writer
-	err = s.snapshotter.DumpClose(tmpf)
+	err = s.snapshotter.DumpClose(s.context, tmpf)
 	if err != nil {
 		return fmt.Errorf("failed to dump metrics: %w", err)
 	}

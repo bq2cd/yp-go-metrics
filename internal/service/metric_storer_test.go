@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -17,24 +18,24 @@ type mockMetricStorer struct {
 	err     error
 }
 
-func (m *mockMetricStorer) StoreSingle(metric model.Metric) error {
-	m.Called(metric)
+func (m *mockMetricStorer) StoreSingle(ctx context.Context, metric model.Metric) error {
+	m.Called(ctx, metric)
 	return m.err
 }
-func (m *mockMetricStorer) StoreBatch(metrics []model.Metric) error {
-	m.Called(metrics)
+func (m *mockMetricStorer) StoreBatch(ctx context.Context, metrics []model.Metric) error {
+	m.Called(ctx, metrics)
 	return m.err
 }
-func (m *mockMetricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
-	m.Called(key)
+func (m *mockMetricStorer) RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error) {
+	m.Called(ctx, key)
 	return model.Metric{}, m.err
 }
-func (m *mockMetricStorer) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
-	m.Called(keys)
+func (m *mockMetricStorer) RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error) {
+	m.Called(ctx, keys)
 	return m.metrics, m.err
 }
-func (m *mockMetricStorer) RetrieveAll() ([]model.Metric, error) {
-	m.Called()
+func (m *mockMetricStorer) RetrieveAll(ctx context.Context) ([]model.Metric, error) {
+	m.Called(ctx)
 	return m.metrics, m.err
 }
 
@@ -87,7 +88,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -101,7 +102,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.ErrorIs(t, err, repository.ErrMetricNotFound)
 				assert.Equal(t, want.metric, got)
 			},
@@ -115,7 +116,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -129,7 +130,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -143,7 +144,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -157,7 +158,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -171,7 +172,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -185,7 +186,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.Get(want.metric.Key())
+				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)
 				assert.Equal(t, want.metric, got)
 			},
@@ -199,7 +200,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 				return assert.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 			},
 			assertStoredMetric: func(t *testing.T, s repository.Storage, want want) {
-				got, err := s.(*storagetest.MockStorage).Get(want.metric.Key())
+				got, err := s.(*storagetest.MockStorage).Get(t.Context(), want.metric.Key())
 				require.ErrorIs(t, err, storagetest.ErrFaultyStorage)
 				assert.Equal(t, model.Metric{}, got)
 			},
@@ -210,7 +211,7 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
-			tt.assertion(t, s.StoreSingle(tt.args.metric))
+			tt.assertion(t, s.StoreSingle(t.Context(), tt.args.metric))
 			tt.assertStoredMetric(t, s.storage, tt.want)
 		})
 	}
@@ -315,9 +316,9 @@ func Test_metricStorer_StoreBatch(t *testing.T) {
 			for _, m := range tt.args.metrics {
 				metrics = append(metrics, m.Copy())
 			}
-			tt.assertion(t, s.StoreBatch(metrics))
+			tt.assertion(t, s.StoreBatch(t.Context(), metrics))
 			for _, m := range tt.want.metrics {
-				got, err := s.storage.Get(m.Key())
+				got, err := s.storage.Get(t.Context(), m.Key())
 				require.NoError(t, err)
 				assert.Equal(t, m, got)
 			}
@@ -391,7 +392,7 @@ func Test_metricStorer_RetrieveSingle(t *testing.T) {
 			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
-			got, err := s.RetrieveSingle(tt.args.key)
+			got, err := s.RetrieveSingle(t.Context(), tt.args.key)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -454,7 +455,7 @@ func Test_metricStorer_RetrieveBatch(t *testing.T) {
 			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
-			got, err := s.RetrieveBatch(tt.args.keys)
+			got, err := s.RetrieveBatch(t.Context(), tt.args.keys)
 			tt.assertion(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})
@@ -501,7 +502,7 @@ func Test_metricStorer_RetrieveAll(t *testing.T) {
 			s := &metricStorer{
 				storage: tt.fields.storage,
 			}
-			got, err := s.RetrieveAll()
+			got, err := s.RetrieveAll(t.Context())
 			tt.assertion(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})

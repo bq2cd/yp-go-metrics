@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"sync"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -19,7 +20,7 @@ func NewMemStorage() *memStorage {
 }
 
 // Get retrieves a metric by its hash from in-memory map.
-func (s *memStorage) Get(key model.MetricKey) (model.Metric, error) {
+func (s *memStorage) Get(_ context.Context, key model.MetricKey) (model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -35,7 +36,7 @@ func (s *memStorage) Get(key model.MetricKey) (model.Metric, error) {
 }
 
 // GetAll returns all metrics currently stored in the in-memory map.
-func (s *memStorage) GetAll() ([]model.Metric, error) {
+func (s *memStorage) GetAll(_ context.Context) ([]model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -51,7 +52,7 @@ func (s *memStorage) GetAll() ([]model.Metric, error) {
 }
 
 // Set stores a given metric to in-memory map.
-func (s *memStorage) Set(metric model.Metric) error {
+func (s *memStorage) Set(_ context.Context, metric model.Metric) error {
 	if metric.Empty() {
 		return nil
 	}

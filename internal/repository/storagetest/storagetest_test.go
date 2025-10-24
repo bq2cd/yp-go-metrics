@@ -137,7 +137,7 @@ func TestMockStorage_Get(t *testing.T) {
 				isFaulty:  tt.fields.isFaulty,
 				triggerID: tt.fields.triggerID,
 			}
-			got, err := s.Get(tt.args.k)
+			got, err := s.Get(t.Context(), tt.args.k)
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
 		})
@@ -203,7 +203,7 @@ func TestMockStorage_GetAll(t *testing.T) {
 				isFaulty:  tt.fields.isFaulty,
 				triggerID: tt.fields.triggerID,
 			}
-			got, err := s.GetAll()
+			got, err := s.GetAll(t.Context())
 			if tt.want.err != nil {
 				assert.ErrorIs(t, err, tt.want.err)
 				return
@@ -286,7 +286,7 @@ func TestMockStorage_Set(t *testing.T) {
 				triggerID: tt.fields.triggerID,
 			}
 
-			err := s.Set(tt.args.m)
+			err := s.Set(t.Context(), tt.args.m)
 
 			if tt.want.err != nil {
 				require.ErrorIs(t, err, tt.want.err)

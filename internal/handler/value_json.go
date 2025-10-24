@@ -35,7 +35,7 @@ func (h *valueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := h.metrics.RetrieveSingle(needle.Key())
+	m, err := h.metrics.RetrieveSingle(r.Context(), needle.Key())
 	switch err {
 	case nil:
 		if err := h.responder.WriteResponse(w, m); err != nil {

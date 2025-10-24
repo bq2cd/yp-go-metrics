@@ -31,7 +31,7 @@ func (h *valueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metric, err := h.metrics.RetrieveSingle(needle.Key())
+	metric, err := h.metrics.RetrieveSingle(r.Context(), needle.Key())
 	switch {
 	case errors.Is(err, service.ErrMetricNotFound):
 		http.Error(w, "metric not found", http.StatusNotFound)

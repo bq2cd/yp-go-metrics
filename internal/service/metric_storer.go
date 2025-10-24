@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -19,11 +20,11 @@ var (
 // MetricStorer defines an interface to work with metrics.
 // E.g. store, retrieve, delete, etc.
 type MetricStorer interface {
-	StoreSingle(metric model.Metric) error
-	StoreBatch(metrics []model.Metric) error
-	RetrieveSingle(key model.MetricKey) (model.Metric, error)
-	RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error)
-	RetrieveAll() ([]model.Metric, error)
+	StoreSingle(ctx context.Context, metric model.Metric) error
+	StoreBatch(ctx context.Context, metrics []model.Metric) error
+	RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error)
+	RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error)
+	RetrieveAll(ctx context.Context) ([]model.Metric, error)
 }
 
 type metricStorer struct {
@@ -36,15 +37,15 @@ func NewMetricStorer(storage repository.Storage) *metricStorer {
 }
 
 // StoreSingle updates or replaces a single metric.
-func (s *metricStorer) StoreSingle(metric model.Metric) error {
+func (s *metricStorer) StoreSingle(ctx context.Context, metric model.Metric) error {
 	if metric.Empty() {
 		return nil
 	}
 	switch metric.Type {
 	case model.MetricTypeCounter:
-		prev, err := s.storage.Get(metric.Key())
+		prev, err := s.storage.Get(ctx, metric.Key())
 		if err == repository.ErrMetricNotFound {
-			return s.storage.Set(metric)
+			return s.storage.Set(ctx, metric)
 		}
 		if err != nil {
 			return fmt.Errorf("failed to retrieve existing metric: %w", err)
@@ -54,16 +55,16 @@ func (s *metricStorer) StoreSingle(metric model.Metric) error {
 	default:
 		// pass
 	}
-	return s.storage.Set(metric)
+	return s.storage.Set(ctx, metric)
 }
 
 // StoreBatch updates or replaces a slice of metrics.
 // This method essentially calls StoreSingle method for each metric.
-func (s *metricStorer) StoreBatch(metrics []model.Metric) error {
+func (s *metricStorer) StoreBatch(ctx context.Context, metrics []model.Metric) error {
 	var errFinal error
 
 	for i := range metrics {
-		err := s.StoreSingle(metrics[i])
+		err := s.StoreSingle(ctx, metrics[i])
 		errFinal = errors.Join(errFinal, err)
 	}
 
@@ -72,8 +73,8 @@ func (s *metricStorer) StoreBatch(metrics []model.Metric) error {
 
 // RetrieveSingle obtains a metric from the underlying storage by given key
 // or returns error if metric is not found or storage has failed.
-func (s *metricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
-	m, err := s.storage.Get(key)
+func (s *metricStorer) RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error) {
+	m, err := s.storage.Get(ctx, key)
 	if err == nil && m.Empty() {
 		// avoid returning empty metrics from underlying storage as
 		// the storage should not store such metrics in the first place,
@@ -91,13 +92,13 @@ func (s *metricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error)
 // or returns an error if storage has failed.
 // This method essentially wraps RetrieveSingle while skipping non-existent metrics.
 // NB. Number of metrics returned might be smaller than the number of the keys requested.
-func (s *metricStorer) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
+func (s *metricStorer) RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error) {
 	var errFinal error
 
 	metrics := make([]model.Metric, 0, len(keys))
 
 	for _, k := range keys {
-		m, err := s.storage.Get(k)
+		m, err := s.storage.Get(ctx, k)
 		switch err {
 		case nil:
 			metrics = append(metrics, m)
@@ -112,6 +113,6 @@ func (s *metricStorer) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, er
 }
 
 // RetrieveAll returns all metrics from the underlying storage.
-func (s *metricStorer) RetrieveAll() ([]model.Metric, error) {
-	return s.storage.GetAll()
+func (s *metricStorer) RetrieveAll(ctx context.Context) ([]model.Metric, error) {
+	return s.storage.GetAll(ctx)
 }

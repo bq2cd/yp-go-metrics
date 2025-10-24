@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"maps"
 	"testing"
@@ -22,16 +23,16 @@ type mockCollector struct {
 	wantErr bool
 }
 
-func (m *mockCollector) Collect() error {
-	m.Called()
+func (m *mockCollector) Collect(ctx context.Context) error {
+	m.Called(ctx)
 	if m.wantErr {
 		return errors.New("collect error")
 	}
 	return nil
 }
 
-func (m *mockCollector) Snapshot() ([]model.Metric, error) {
-	m.Called()
+func (m *mockCollector) Snapshot(ctx context.Context) ([]model.Metric, error) {
+	m.Called(ctx)
 	if m.wantErr {
 		return nil, errors.New("snapshot error")
 	}
@@ -40,15 +41,15 @@ func (m *mockCollector) Snapshot() ([]model.Metric, error) {
 
 type faultyStorage struct{}
 
-func (s *faultyStorage) Get(key model.MetricKey) (model.Metric, error) {
+func (s *faultyStorage) Get(ctx context.Context, key model.MetricKey) (model.Metric, error) {
 	return model.Metric{}, errors.New("faulty storage get error")
 }
 
-func (s *faultyStorage) Set(metric model.Metric) error {
+func (s *faultyStorage) Set(ctx context.Context, metric model.Metric) error {
 	return errors.New("faulty storage set error")
 }
 
-func (s *faultyStorage) GetAll() ([]model.Metric, error) {
+func (s *faultyStorage) GetAll(ctx context.Context) ([]model.Metric, error) {
 	return nil, errors.New("faulty storage getAll error")
 }
 
@@ -124,9 +125,9 @@ func Test_collector_Collect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &collector{sources: tt.args.sources, collected: tt.args.storage}
-			err := c.Collect()
+			err := c.Collect(t.Context())
 			require.NoError(t, err)
-			got, err := tt.args.storage.GetAll()
+			got, err := tt.args.storage.GetAll(t.Context())
 			require.NoError(t, err)
 			tt.assertion(t, tt.want, got)
 		})
@@ -193,7 +194,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -207,7 +208,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -221,7 +222,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", -2.5)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -235,7 +236,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -249,7 +250,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id1", -2.5), model.NewCounterMetric("id5", 7)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -263,7 +264,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", 10), model.NewGaugeMetric("id1", 8.3)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -277,7 +278,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -291,7 +292,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id1", 8.3)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -305,7 +306,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -319,7 +320,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 			want: want{metrics: []model.Metric{model.NewGaugeMetric("id1", -0.5), model.NewCounterMetric("id1", -3)}},
 			assertion: func(t *testing.T, s repository.Storage, want want, err error) {
 				require.NoError(t, err)
-				metrics, err := s.GetAll()
+				metrics, err := s.GetAll(t.Context())
 				require.NoError(t, err)
 				assert.ElementsMatch(t, want.metrics, metrics)
 			},
@@ -342,7 +343,7 @@ func Test_collector_storeMetrics(t *testing.T) {
 				sources:   tt.fields.sources,
 				collected: tt.fields.collected,
 			}
-			tt.assertion(t, tt.fields.collected, tt.want, c.storeMetrics(tt.args.metrics))
+			tt.assertion(t, tt.fields.collected, tt.want, c.storeMetrics(t.Context(), tt.args.metrics))
 		})
 	}
 }
@@ -408,7 +409,7 @@ func Test_collector_Snapshot(t *testing.T) {
 				sources:   tt.fields.sources,
 				collected: tt.fields.collected,
 			}
-			got, err := c.Snapshot()
+			got, err := c.Snapshot(t.Context())
 			tt.assertion(t, err)
 			assert.ElementsMatch(t, tt.want, got)
 		})

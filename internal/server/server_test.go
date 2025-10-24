@@ -64,40 +64,40 @@ type mockMetricSnapshotter struct {
 	notifyCh chan struct{}
 }
 
-func (m *mockMetricSnapshotter) StoreSingle(metric model.Metric) error {
-	m.Called(metric)
+func (m *mockMetricSnapshotter) StoreSingle(ctx context.Context, metric model.Metric) error {
+	m.Called(ctx, metric)
 	select {
 	case m.notifyCh <- struct{}{}:
 	default:
 	}
 	return nil
 }
-func (m *mockMetricSnapshotter) StoreBatch(metrics []model.Metric) error {
-	m.Called(metrics)
+func (m *mockMetricSnapshotter) StoreBatch(ctx context.Context, metrics []model.Metric) error {
+	m.Called(ctx, metrics)
 	select {
 	case m.notifyCh <- struct{}{}:
 	default:
 	}
 	return nil
 }
-func (m *mockMetricSnapshotter) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
-	m.Called(key)
+func (m *mockMetricSnapshotter) RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error) {
+	m.Called(ctx, key)
 	return model.Metric{}, nil
 }
-func (m *mockMetricSnapshotter) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
-	m.Called(keys)
+func (m *mockMetricSnapshotter) RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error) {
+	m.Called(ctx, keys)
 	return model.MetricSet{}, nil
 }
-func (m *mockMetricSnapshotter) RetrieveAll() ([]model.Metric, error) {
-	m.Called()
+func (m *mockMetricSnapshotter) RetrieveAll(ctx context.Context) ([]model.Metric, error) {
+	m.Called(ctx)
 	return model.MetricSet{}, nil
 }
-func (m *mockMetricSnapshotter) DumpClose(w io.WriteCloser) error {
-	m.Called(w)
+func (m *mockMetricSnapshotter) DumpClose(ctx context.Context, w io.WriteCloser) error {
+	m.Called(ctx, w)
 	return nil
 }
-func (m *mockMetricSnapshotter) LoadClose(r io.ReadCloser) error {
-	m.Called(r)
+func (m *mockMetricSnapshotter) LoadClose(ctx context.Context, r io.ReadCloser) error {
+	m.Called(ctx, r)
 	return nil
 }
 func (m *mockMetricSnapshotter) C() <-chan struct{} {
@@ -373,7 +373,7 @@ func Test_server_Run(t *testing.T) {
 						require.NoError(t, <-errCh)
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("DumpClose", mock.Anything).Return(nil).Times(9)
+						m.On("DumpClose", mock.Anything, mock.Anything).Return(nil).Times(9)
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
@@ -444,7 +444,7 @@ func Test_server_Run(t *testing.T) {
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.On("C").Return(mock.AnythingOfType("chan")).Once()
-						m.On("DumpClose", mock.Anything).Return(nil).Times(8)
+						m.On("DumpClose", mock.Anything, mock.Anything).Return(nil).Times(8)
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
@@ -506,7 +506,7 @@ func Test_server_Run(t *testing.T) {
 					},
 					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.On("C").Return(mock.AnythingOfType("chan"))
-						m.On("LoadClose", mock.Anything).Return(nil)
+						m.On("LoadClose", mock.Anything, mock.Anything).Return(nil)
 					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)

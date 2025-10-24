@@ -1,6 +1,7 @@
 package storagetest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -54,7 +55,7 @@ func (s *MockStorage) MakeNormal() *MockStorage {
 // If metric does not exist, [repository.ErrMetricNotFound] error is returned.
 // If storage is faulty and fault is triggered by a special metric ID,
 // then [ErrFaultyStorage] error is returned.
-func (s *MockStorage) Get(k model.MetricKey) (model.Metric, error) {
+func (s *MockStorage) Get(_ context.Context, k model.MetricKey) (model.Metric, error) {
 	if s.isFaulty && k.ID == s.triggerID {
 		return model.Metric{}, fmt.Errorf("get error: %w", ErrFaultyStorage)
 	}
@@ -74,12 +75,12 @@ func (s *MockStorage) Get(k model.MetricKey) (model.Metric, error) {
 // then this metric is not returned.
 // If [ErrFaultyStorage] was returned by [Get], it is immediately
 // returned along with `nil` (empty slice).
-func (s *MockStorage) GetAll() ([]model.Metric, error) {
+func (s *MockStorage) GetAll(ctx context.Context) ([]model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]model.Metric, 0, len(s.data))
 	for k := range s.data {
-		m, err := s.Get(k)
+		m, err := s.Get(ctx, k)
 		switch {
 		case err == nil:
 			out = append(out, m)
@@ -95,7 +96,7 @@ func (s *MockStorage) GetAll() ([]model.Metric, error) {
 // Set stores given metric in the underlying storage.
 // If faulty mode is activated and metric's ID matches a trigger ID,
 // then [ErrFaultyStorage] is immediately returned.
-func (s *MockStorage) Set(m model.Metric) error {
+func (s *MockStorage) Set(_ context.Context, m model.Metric) error {
 	if s.isFaulty && m.ID == s.triggerID {
 		return fmt.Errorf("set error: %w", ErrFaultyStorage)
 	}

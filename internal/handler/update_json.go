@@ -35,12 +35,12 @@ func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.metrics.StoreSingle(m); err != nil {
+	if err := h.metrics.StoreSingle(r.Context(), m); err != nil {
 		http.Error(w, "cannot store metric", http.StatusInsufficientStorage)
 		return
 	}
 
-	m, err = h.metrics.RetrieveSingle(m.Key())
+	m, err = h.metrics.RetrieveSingle(r.Context(), m.Key())
 	if err != nil {
 		http.Error(w, "cannot retrieve metric", http.StatusNotFound)
 		return

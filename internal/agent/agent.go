@@ -27,18 +27,15 @@ func New(ctx context.Context, cfg config.Config, collector Collector, reporter R
 // with optionally different initial delay before the first execution.
 // This is a blocking call and is typically used in a goroutine.
 // Supports cancellation via context.
-func runPeriodicTask(ctx context.Context, interval time.Duration, taskFn func() error, initialDelay time.Duration) error {
-	taskFnWithContext := func(_ context.Context) error {
-		return taskFn()
-	}
-	t := periodictask.NewTimerTask(ctx, interval, taskFnWithContext, initialDelay)
+func runPeriodicTask(ctx context.Context, interval time.Duration, taskFn func(context.Context) error, initialDelay time.Duration) error {
+	t := periodictask.NewTimerTask(ctx, interval, taskFn, initialDelay)
 	return t.Run()
 }
 
-func (a *agent) doReport() error {
+func (a *agent) doReport(ctx context.Context) error {
 	var errFinal error
-	metrics, err := a.collector.Snapshot()
-	errFinal = errors.Join(errFinal, err, a.reporter.Report(metrics))
+	metrics, err := a.collector.Snapshot(ctx)
+	errFinal = errors.Join(errFinal, err, a.reporter.Report(ctx, metrics))
 	return errFinal
 }
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,8 +18,8 @@ import (
 // for notifications on new writes (only the fact of the new writes, not the number of them).
 type MetricSnapshotter interface {
 	MetricStorer
-	DumpClose(w io.WriteCloser) error
-	LoadClose(r io.ReadCloser) error
+	DumpClose(ctx context.Context, w io.WriteCloser) error
+	LoadClose(ctx context.Context, r io.ReadCloser) error
 	C() <-chan struct{}
 }
 
@@ -55,9 +56,9 @@ func (p *metricSnapshotter) markDirty(numWrites int) {
 
 // StoreSingle wraps corresponding [MetricStorer.StoreSingle] method
 // to record a fact of a new write.
-func (p *metricSnapshotter) StoreSingle(m model.Metric) error {
+func (p *metricSnapshotter) StoreSingle(ctx context.Context, m model.Metric) error {
 	p.mu.Lock()
-	err := p.MetricStorer.StoreSingle(m)
+	err := p.MetricStorer.StoreSingle(ctx, m)
 	p.mu.Unlock()
 	if err != nil {
 		return err
@@ -68,12 +69,12 @@ func (p *metricSnapshotter) StoreSingle(m model.Metric) error {
 
 // StoreSingle wraps corresponding [MetricStorer.StoreBatch] method
 // to record a fact of new writes.
-func (p *metricSnapshotter) StoreBatch(metrics []model.Metric) error {
+func (p *metricSnapshotter) StoreBatch(ctx context.Context, metrics []model.Metric) error {
 	if len(metrics) == 0 {
 		return nil
 	}
 	p.mu.Lock()
-	err := p.MetricStorer.StoreBatch(metrics)
+	err := p.MetricStorer.StoreBatch(ctx, metrics)
 	p.mu.Unlock()
 	if err != nil {
 		return err
@@ -85,7 +86,7 @@ func (p *metricSnapshotter) StoreBatch(metrics []model.Metric) error {
 // DumpClose creates a snapshot of all metrics in the underlying [MetricStorer] instance
 // by encoding them with [MetricEncoder] and writing to provided [io.WriteCloser] writer.
 // It closes the writer upon completion regardless of underlying errors.
-func (p *metricSnapshotter) DumpClose(w io.WriteCloser) (errFinal error) {
+func (p *metricSnapshotter) DumpClose(ctx context.Context, w io.WriteCloser) (errFinal error) {
 	defer func() {
 		errFinal = errors.Join(errFinal, w.Close())
 	}()
@@ -94,7 +95,7 @@ func (p *metricSnapshotter) DumpClose(w io.WriteCloser) (errFinal error) {
 		return
 	}
 	p.mu.RLock()
-	metrics, err := p.RetrieveAll()
+	metrics, err := p.RetrieveAll(ctx)
 	p.mu.RUnlock()
 	if err != nil {
 		errFinal = fmt.Errorf("failed to retrieve all metrics: %w", err)
@@ -112,7 +113,7 @@ func (p *metricSnapshotter) DumpClose(w io.WriteCloser) (errFinal error) {
 // DumpClose reads encoded metrics from [io.ReadCloser] reader, decodes them with [MetricDecoder]
 // and stores them into in the underlying [MetricStorer] instance.
 // It closes the reader upon completion regardless of underlying errors.
-func (p *metricSnapshotter) LoadClose(r io.ReadCloser) (errFinal error) {
+func (p *metricSnapshotter) LoadClose(ctx context.Context, r io.ReadCloser) (errFinal error) {
 	defer func() {
 		errFinal = errors.Join(errFinal, r.Close())
 	}()
@@ -121,7 +122,7 @@ func (p *metricSnapshotter) LoadClose(r io.ReadCloser) (errFinal error) {
 		errFinal = fmt.Errorf("failed to decode metrics: %w", err)
 		return
 	}
-	err = p.MetricStorer.StoreBatch(metrics)
+	err = p.MetricStorer.StoreBatch(ctx, metrics)
 	if err != nil {
 		errFinal = fmt.Errorf("failed to store metrics: %w", err)
 		return

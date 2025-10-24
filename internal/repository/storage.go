@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -13,7 +14,7 @@ var (
 
 // Storage abstracts an underlying technology for storing metrics.
 type Storage interface {
-	Get(key model.MetricKey) (model.Metric, error)
-	GetAll() ([]model.Metric, error)
-	Set(metric model.Metric) error
+	Get(ctx context.Context, key model.MetricKey) (model.Metric, error)
+	GetAll(ctx context.Context) ([]model.Metric, error)
+	Set(ctx context.Context, metric model.Metric) error
 }

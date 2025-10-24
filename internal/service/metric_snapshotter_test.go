@@ -170,9 +170,9 @@ func Test_metricSnapshotter_StoreSingle(t *testing.T) {
 				MetricStorer: tt.fields.MetricStorer,
 				notifyCh:     make(chan struct{}, 1),
 			}
-			tt.fields.MetricStorer.On("StoreSingle", tt.args.m).Return(mock.AnythingOfType("error")).Once()
+			tt.fields.MetricStorer.On("StoreSingle", mock.Anything, tt.args.m).Return(mock.AnythingOfType("error")).Once()
 
-			err := p.StoreSingle(tt.args.m)
+			err := p.StoreSingle(t.Context(), tt.args.m)
 
 			tt.assertion(t, err)
 			tt.fields.MetricStorer.AssertExpectations(t)
@@ -235,7 +235,7 @@ func Test_metricSnapshotter_StoreBatch(t *testing.T) {
 			assertion: assert.NoError,
 		},
 		{
-			name: "mutliple metrics",
+			name: "multiple metrics",
 			fields: fields{
 				MetricStorer: &mockMetricStorer{},
 			},
@@ -275,12 +275,12 @@ func Test_metricSnapshotter_StoreBatch(t *testing.T) {
 				MetricStorer: tt.fields.MetricStorer,
 				notifyCh:     make(chan struct{}, 1),
 			}
-			mc := tt.fields.MetricStorer.On("StoreBatch", tt.args.metrics).Return(mock.AnythingOfType("error")).Times(tt.want.numCalls)
+			mc := tt.fields.MetricStorer.On("StoreBatch", mock.Anything, tt.args.metrics).Return(mock.AnythingOfType("error")).Times(tt.want.numCalls)
 			if tt.want.numCalls == 0 {
 				mc.Maybe()
 			}
 
-			err := p.StoreBatch(tt.args.metrics)
+			err := p.StoreBatch(t.Context(), tt.args.metrics)
 
 			tt.assertion(t, err)
 			tt.fields.MetricStorer.AssertExpectations(t)
@@ -663,7 +663,7 @@ func Test_metricSnapshotter_DumpClose(t *testing.T) {
 					tt.fields.MetricStorer.metrics = tt.args.metrics
 					p.dirtyWrites.Store(tt.args.dirtyWrites)
 					{
-						mc := tt.fields.MetricStorer.On("RetrieveAll").Return(tt.args.metrics, tt.errs.RetrieveAll).Times(tt.calls.RetrieveAll)
+						mc := tt.fields.MetricStorer.On("RetrieveAll", mock.Anything).Return(tt.args.metrics, tt.errs.RetrieveAll).Times(tt.calls.RetrieveAll)
 						if tt.calls.RetrieveAll == 0 {
 							mc.Maybe()
 						}
@@ -690,7 +690,7 @@ func Test_metricSnapshotter_DumpClose(t *testing.T) {
 						})
 					}
 
-					err := p.DumpClose(tt.args.w)
+					err := p.DumpClose(t.Context(), tt.args.w)
 
 					tt.assertion(t, err)
 					tt.fields.MetricStorer.AssertExpectations(t)
@@ -924,7 +924,7 @@ func Test_metricSnapshotter_LoadClose(t *testing.T) {
 					}
 					tt.fields.decoder.metrics = tt.args.metrics
 					{
-						mc := tt.fields.MetricStorer.On("StoreBatch", tt.args.metrics).Return(tt.errs.StoreBatch).Times(tt.calls.StoreBatch)
+						mc := tt.fields.MetricStorer.On("StoreBatch", mock.Anything, tt.args.metrics).Return(tt.errs.StoreBatch).Times(tt.calls.StoreBatch)
 						if tt.calls.StoreBatch == 0 {
 							mc.Maybe()
 						}
@@ -942,7 +942,7 @@ func Test_metricSnapshotter_LoadClose(t *testing.T) {
 						}
 					}
 
-					err := p.LoadClose(tt.args.r)
+					err := p.LoadClose(t.Context(), tt.args.r)
 
 					tt.assertion(t, err)
 					tt.fields.MetricStorer.AssertExpectations(t)

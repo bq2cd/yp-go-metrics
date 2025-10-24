@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"testing"
@@ -22,8 +23,8 @@ type mockReporter struct {
 	mu      sync.Mutex
 }
 
-func (m *mockReporter) Report(metrics []model.Metric) error {
-	m.Called(metrics)
+func (m *mockReporter) Report(ctx context.Context, metrics []model.Metric) error {
+	m.Called(ctx, metrics)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.metrics = metrics
@@ -225,7 +226,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			tt.fields.sender.On("Send", tt.want.metricSent).Return(mock.AnythingOfType("error"))
 			metric := tt.args.metric.Copy()
 
-			err := r.reportSingle(metric)
+			err := r.reportSingle(t.Context(), metric)
 
 			defer func() {
 				assert.Equal(t, tt.args.metric, metric)
@@ -237,7 +238,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			}
 			tt.want.checkErr(t, err)
 			if !tt.want.metricStored.Empty() {
-				got, err := tt.fields.reported.Get(tt.want.metricStored.Key())
+				got, err := tt.fields.reported.Get(t.Context(), tt.want.metricStored.Key())
 				require.NoError(t, err)
 				assert.Equal(t, tt.want.metricStored, got)
 			}
@@ -256,7 +257,7 @@ func TestNewReporter(t *testing.T) {
 		assertion func(assert.TestingT, args, *reporter)
 	}{
 		{
-			name: "emtpy",
+			name: "empty",
 			args: args{},
 			assertion: func(t assert.TestingT, args args, r *reporter) {
 				assert.Nil(t, r.sender)
@@ -354,7 +355,7 @@ func Test_reporter_getSendableMetric(t *testing.T) {
 			r := &reporter{
 				reported: tt.fields.reported,
 			}
-			assert.Equal(t, tt.want, r.getSendableMetric(tt.args.metric))
+			assert.Equal(t, tt.want, r.getSendableMetric(t.Context(), tt.args.metric))
 		})
 	}
 }
@@ -496,14 +497,14 @@ func Test_reporter_Report(t *testing.T) {
 			}
 			sender := tt.fields.sender.On("Send", mock.AnythingOfType("model.Metric")).Return(mock.AnythingOfType("error"))
 
-			err := r.Report(tt.args.metrics)
+			err := r.Report(t.Context(), tt.args.metrics)
 
 			tt.assertion(t, err)
 			for _, m := range tt.want.sentMetrics {
 				sender.Parent.AssertCalled(t, "Send", m)
 			}
 			for _, m := range tt.want.storedMetrics {
-				got, err := tt.fields.reported.Get(m.Key())
+				got, err := tt.fields.reported.Get(t.Context(), m.Key())
 				require.NoError(t, err)
 				assert.Equal(t, m, got)
 			}

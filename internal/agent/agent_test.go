@@ -19,8 +19,8 @@ type mockPeriodicTask struct {
 	wantErr      func() bool
 }
 
-func (m *mockPeriodicTask) doWork() error {
-	m.Called()
+func (m *mockPeriodicTask) doWork(ctx context.Context) error {
+	m.Called(ctx)
 	time.Sleep(m.workDuration())
 
 	if m.wantErr() {
@@ -196,8 +196,10 @@ func Test_agent_Run(t *testing.T) {
 				reporter:  tt.fields.reporter,
 			}
 
-			mCollector := tt.fields.collector.On("Collect").Return(nil).On("Snapshot").Return(tt.want.metrics, nil)
-			mReporter := tt.fields.reporter.On("Report", tt.want.metrics).Return(nil)
+			mCollector := tt.fields.collector.
+				On("Collect", mock.Anything).Return(nil).
+				On("Snapshot", mock.Anything).Return(tt.want.metrics, nil)
+			mReporter := tt.fields.reporter.On("Report", mock.Anything, tt.want.metrics).Return(nil)
 
 			err := a.Run()
 			require.NoError(t, err)
@@ -262,10 +264,10 @@ func Test_agent_doReport(t *testing.T) {
 				collector: tt.fields.collector,
 				reporter:  tt.fields.reporter,
 			}
-			tt.fields.collector.On("Snapshot").Return(mock.Anything, mock.Anything)
-			tt.fields.reporter.On("Report", mock.Anything).Return(mock.Anything)
+			tt.fields.collector.On("Snapshot", mock.Anything).Return(mock.Anything, mock.Anything)
+			tt.fields.reporter.On("Report", mock.Anything, mock.Anything).Return(mock.Anything)
 
-			tt.assertion(t, a.doReport())
+			tt.assertion(t, a.doReport(t.Context()))
 
 			tt.fields.collector.AssertExpectations(t)
 			tt.fields.reporter.AssertExpectations(t)
@@ -411,7 +413,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
 			defer cancel()
 
-			tt.args.mockTask.On("doWork").Return(mock.Anything)
+			tt.args.mockTask.On("doWork", mock.Anything).Return(mock.Anything)
 
 			tt.assertion(t, tt.args.mockTask, runPeriodicTask(ctx, tt.args.interval, tt.args.mockTask.doWork, tt.args.initialDelay))
 		})

@@ -35,7 +35,7 @@ func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.metrics.StoreSingle(metric)
+	err = h.metrics.StoreSingle(r.Context(), metric)
 	if err != nil {
 		http.Error(w, "cannot store metric", http.StatusInternalServerError)
 		return

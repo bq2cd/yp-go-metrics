@@ -10,6 +10,7 @@
 package servicetest
 
 import (
+	context "context"
 	reflect "reflect"
 
 	model "github.com/bq2cd/yp-go-metrics/internal/model"
@@ -41,74 +42,74 @@ func (m *MockMetricStorer) EXPECT() *MockMetricStorerMockRecorder {
 }
 
 // RetrieveAll mocks base method.
-func (m *MockMetricStorer) RetrieveAll() ([]model.Metric, error) {
+func (m *MockMetricStorer) RetrieveAll(ctx context.Context) ([]model.Metric, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetrieveAll")
+	ret := m.ctrl.Call(m, "RetrieveAll", ctx)
 	ret0, _ := ret[0].([]model.Metric)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RetrieveAll indicates an expected call of RetrieveAll.
-func (mr *MockMetricStorerMockRecorder) RetrieveAll() *gomock.Call {
+func (mr *MockMetricStorerMockRecorder) RetrieveAll(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveAll", reflect.TypeOf((*MockMetricStorer)(nil).RetrieveAll))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveAll", reflect.TypeOf((*MockMetricStorer)(nil).RetrieveAll), ctx)
 }
 
 // RetrieveBatch mocks base method.
-func (m *MockMetricStorer) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
+func (m *MockMetricStorer) RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetrieveBatch", keys)
+	ret := m.ctrl.Call(m, "RetrieveBatch", ctx, keys)
 	ret0, _ := ret[0].([]model.Metric)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RetrieveBatch indicates an expected call of RetrieveBatch.
-func (mr *MockMetricStorerMockRecorder) RetrieveBatch(keys any) *gomock.Call {
+func (mr *MockMetricStorerMockRecorder) RetrieveBatch(ctx, keys any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveBatch", reflect.TypeOf((*MockMetricStorer)(nil).RetrieveBatch), keys)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveBatch", reflect.TypeOf((*MockMetricStorer)(nil).RetrieveBatch), ctx, keys)
 }
 
 // RetrieveSingle mocks base method.
-func (m *MockMetricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
+func (m *MockMetricStorer) RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetrieveSingle", key)
+	ret := m.ctrl.Call(m, "RetrieveSingle", ctx, key)
 	ret0, _ := ret[0].(model.Metric)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RetrieveSingle indicates an expected call of RetrieveSingle.
-func (mr *MockMetricStorerMockRecorder) RetrieveSingle(key any) *gomock.Call {
+func (mr *MockMetricStorerMockRecorder) RetrieveSingle(ctx, key any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveSingle", reflect.TypeOf((*MockMetricStorer)(nil).RetrieveSingle), key)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetrieveSingle", reflect.TypeOf((*MockMetricStorer)(nil).RetrieveSingle), ctx, key)
 }
 
 // StoreBatch mocks base method.
-func (m *MockMetricStorer) StoreBatch(metrics []model.Metric) error {
+func (m *MockMetricStorer) StoreBatch(ctx context.Context, metrics []model.Metric) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreBatch", metrics)
+	ret := m.ctrl.Call(m, "StoreBatch", ctx, metrics)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StoreBatch indicates an expected call of StoreBatch.
-func (mr *MockMetricStorerMockRecorder) StoreBatch(metrics any) *gomock.Call {
+func (mr *MockMetricStorerMockRecorder) StoreBatch(ctx, metrics any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreBatch", reflect.TypeOf((*MockMetricStorer)(nil).StoreBatch), metrics)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreBatch", reflect.TypeOf((*MockMetricStorer)(nil).StoreBatch), ctx, metrics)
 }
 
 // StoreSingle mocks base method.
-func (m *MockMetricStorer) StoreSingle(metric model.Metric) error {
+func (m *MockMetricStorer) StoreSingle(ctx context.Context, metric model.Metric) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StoreSingle", metric)
+	ret := m.ctrl.Call(m, "StoreSingle", ctx, metric)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StoreSingle indicates an expected call of StoreSingle.
-func (mr *MockMetricStorerMockRecorder) StoreSingle(metric any) *gomock.Call {
+func (mr *MockMetricStorerMockRecorder) StoreSingle(ctx, metric any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreSingle", reflect.TypeOf((*MockMetricStorer)(nil).StoreSingle), metric)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StoreSingle", reflect.TypeOf((*MockMetricStorer)(nil).StoreSingle), ctx, metric)
 }

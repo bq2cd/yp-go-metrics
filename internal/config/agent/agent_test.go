@@ -92,7 +92,7 @@ func TestUpstreamURL(t *testing.T) {
 		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
-			name:   "emtpy",
+			name:   "empty",
 			args:   args{},
 			want:   want{},
 			config: Config{},

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"errors"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -13,7 +14,7 @@ var (
 
 // Reporter abstracts a process of sending metrics to a central storage.
 type Reporter interface {
-	Report(metrics []model.Metric) error
+	Report(ctx context.Context, metrics []model.Metric) error
 }
 
 type reporter struct {
@@ -27,8 +28,8 @@ func NewReporter(sender Sender, storage repository.Storage) *reporter {
 	return &reporter{sender: sender, reported: storage}
 }
 
-func (r *reporter) getSendableMetric(metric model.Metric) model.Metric {
-	reported, err := r.reported.Get(metric.Key())
+func (r *reporter) getSendableMetric(ctx context.Context, metric model.Metric) model.Metric {
+	reported, err := r.reported.Get(ctx, metric.Key())
 	if err != nil {
 		// This includes cases where metric was not found or a storage error;
 		// to avoid dropping metrics in case of storage error, we prefer to send
@@ -54,11 +55,11 @@ func (r *reporter) getSendableMetric(metric model.Metric) model.Metric {
 	return metric
 }
 
-func (r *reporter) reportSingle(metric model.Metric) error {
+func (r *reporter) reportSingle(ctx context.Context, metric model.Metric) error {
 	if metric.Empty() {
 		return ErrReporterEmptyMetric
 	}
-	sendable := r.getSendableMetric(metric)
+	sendable := r.getSendableMetric(ctx, metric)
 
 	err := r.sender.Send(sendable)
 	if err != nil {
@@ -71,14 +72,14 @@ func (r *reporter) reportSingle(metric model.Metric) error {
 	// On the other hand, if we store metric in memory and restart the agent,
 	// we will still report the full value on the first report.
 	// This is something we would need to address at a later stage.
-	return r.reported.Set(metric)
+	return r.reported.Set(ctx, metric)
 }
 
 // Report sends incoming metrics to an upstream.
-func (r *reporter) Report(metrics []model.Metric) error {
+func (r *reporter) Report(ctx context.Context, metrics []model.Metric) error {
 	var errFinal error
 	for _, m := range metrics {
-		errFinal = errors.Join(errFinal, r.reportSingle(m))
+		errFinal = errors.Join(errFinal, r.reportSingle(ctx, m))
 	}
 	return errFinal
 }

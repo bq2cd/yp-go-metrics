@@ -17,7 +17,7 @@ type readHandler struct {
 
 // ServeHTTP implements http.Handler for /value endpoint
 func (h *readHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	metrics, err := h.metrics.RetrieveAll()
+	metrics, err := h.metrics.RetrieveAll(r.Context())
 	if err != nil {
 		http.Error(w, "cannot retrieve metrics", http.StatusInternalServerError)
 		return
