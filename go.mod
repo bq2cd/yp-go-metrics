@@ -9,6 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/goccy/go-json v0.10.5
+	github.com/huandu/go-sqlbuilder v1.38.1
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/jarcoal/httpmock v1.4.1
 	github.com/pressly/goose/v3 v3.26.0
@@ -20,6 +21,8 @@ require (
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/huandu/go-clone v1.7.3 // indirect
+	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
