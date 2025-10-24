@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -20,7 +20,10 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
@@ -555,9 +558,14 @@ func Test_main_subprocess(t *testing.T) {
 
 func Test_main(t *testing.T) {
 	skipIfGithubActions(t)
+
 	addrFactory := servertest.NewListenAddressFactory(t)
 	tempFactory := servertest.NewTempFileFactory(t)
 	defer tempFactory.RemoveAll()
+
+	requester := handlertest.NewRequester(t, http.DefaultClient)
+	var responses sync.Map
+
 	type want struct {
 		exitCode int
 	}
@@ -657,7 +665,7 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "server applies migrations on startup",
+			name: "server uses postgresql database when configured",
 			args: []string{"-i=0"},
 			env: map[string]string{
 				"ADDRESS": addrFactory.New(),
@@ -665,36 +673,74 @@ func Test_main(t *testing.T) {
 					dbCfg := servertest.LaunchEmbeddedPostgres(t, "server-test-user", "server-test-password", "server-test-db")
 					return dbCfg.DSN()
 				}(),
+				"FILE_STORAGE_PATH": tempFactory.Create("test-postgres-metrics-dump-*"),
 			},
 			want: want{
 				exitCode: 0,
 			},
 			assertRunning: func(t *testing.T, addr string) {
-				req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/ping", addr), http.NoBody)
-				require.NoError(t, err)
-				resp, err := http.DefaultClient.Do(req)
-				require.NoError(t, err)
-				defer func() { _ = resp.Body.Close() }()
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				assert.Equal(t, `OK`, string(body))
+				// populate metrics
+				for _, m := range []model.Metric{
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id2", -123),
+					model.NewCounterMetric("id1", 123),
+					model.NewGaugeMetric("id1", 1.23),
+					model.NewGaugeMetric("id2", -1.23),
+					model.NewGaugeMetric("id3", 456),
+					model.NewGaugeMetric("id1", -4.56),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/update/", addr), handlertest.NewBodyDataFromMetric(t, m), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					responses.Store(m.Key(), resp)
+				}
+
+				// wait
+				time.Sleep(50 * time.Millisecond)
+
+				// retrieve metrics
+				for _, k := range []model.MetricKey{
+					model.NewMetricKey(model.MetricTypeCounter, "id1"),
+					model.NewMetricKey(model.MetricTypeCounter, "id2"),
+					model.NewMetricKey(model.MetricTypeGauge, "id1"),
+					model.NewMetricKey(model.MetricTypeGauge, "id2"),
+					model.NewMetricKey(model.MetricTypeGauge, "id3"),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/value/", addr), handlertest.NewBodyDataFromMetricKey(t, k), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					up, ok := responses.Load(k)
+					require.Truef(t, ok, "missing response for metric key %v", k)
+					up.(*handlertest.Response).Body.AssertEqual(resp.Body)
+				}
 			},
 			assertStopped: func(t *testing.T, env map[string]string) {
+				wantMetrics := []model.Metric{
+					model.NewGaugeMetric("id1", -4.56),
+					model.NewGaugeMetric("id2", -1.23),
+					model.NewGaugeMetric("id3", 456),
+					model.NewCounterMetric("id1", 246),
+					model.NewCounterMetric("id2", -123),
+				}
+
+				// db check
 				dbURL, err := url.Parse(env["DATABASE_DSN"])
 				require.NoError(t, err)
 				cfg, err := dbconfig.New(*dbURL)
 				require.NoError(t, err)
-				db, err := sql.Open("pgx", cfg.DSN())
+				storage, err := repository.NewSQLStorage(cfg)
 				require.NoError(t, err)
-				rows, err := db.Query(`
-						SELECT schemaname, tablename
-						FROM pg_catalog.pg_tables
-						WHERE schemaname NOT IN ('information_schema', 'pg_catalog');
-					`)
+				metrics, err := storage.GetAll(t.Context())
 				require.NoError(t, err)
-				defer rows.Close()
-				assert.Truef(t, rows.Next(), "expected at least a single row")
-				assert.NoError(t, rows.Err())
+				assert.ElementsMatch(t, wantMetrics, metrics)
+
+				// snapshot check
+				f, err := os.Open(env["FILE_STORAGE_PATH"])
+				require.NoError(t, err)
+				var snapshotMetrics []model.Metric
+				err = json.NewDecoder(f).Decode(&snapshotMetrics)
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, snapshotMetrics)
 			},
 		},
 	}

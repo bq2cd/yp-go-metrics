@@ -13,7 +13,9 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
+	"github.com/bq2cd/yp-go-metrics/internal/service"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,6 +110,34 @@ func TestRun(t *testing.T) {
 			require.NoError(t, errResp)
 			assert.Equal(t, tt.want.status, resp.StatusCode)
 			_ = resp.Body.Close()
+		})
+	}
+}
+
+func Test_initStorage(t *testing.T) {
+	type args struct {
+		ctx    context.Context
+		logger log.Logger
+		cfg    config.Config
+	}
+	type want struct {
+		got  repository.Storage
+		got1 service.StoragePinger
+		err  error
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, got1, err := initStorage(tt.args.ctx, tt.args.logger, tt.args.cfg)
+			require.Equal(t, tt.want.err, err)
+			assert.Equal(t, tt.want.got, got)
+			assert.Equal(t, tt.want.got1, got1)
 		})
 	}
 }

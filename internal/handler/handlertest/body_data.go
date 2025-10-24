@@ -15,12 +15,12 @@ import (
 )
 
 type BodyData struct {
-	T           *testing.T
+	T           testing.TB
 	data        []byte
 	contentType httpheaders.ContentType
 }
 
-func NewBodyData(t *testing.T, data []byte) BodyData {
+func NewBodyData(t testing.TB, data []byte) BodyData {
 	return BodyData{
 		T:           t,
 		data:        data,
@@ -28,7 +28,7 @@ func NewBodyData(t *testing.T, data []byte) BodyData {
 	}
 }
 
-func NewBodyDataOfType(t *testing.T, data []byte, contentType httpheaders.ContentType) BodyData {
+func NewBodyDataOfType(t testing.TB, data []byte, contentType httpheaders.ContentType) BodyData {
 	return BodyData{
 		T:           t,
 		data:        data,
@@ -36,7 +36,7 @@ func NewBodyDataOfType(t *testing.T, data []byte, contentType httpheaders.Conten
 	}
 }
 
-func NewBodyDataFromMetric(t *testing.T, m model.Metric) BodyData {
+func NewBodyDataFromMetric(t testing.TB, m model.Metric) BodyData {
 	t.Helper()
 	var buf bytes.Buffer
 	err := json.NewEncoder(&buf).Encode(m)
@@ -48,7 +48,7 @@ func NewBodyDataFromMetric(t *testing.T, m model.Metric) BodyData {
 	}
 }
 
-func NewBodyDataFromMetricKey(t *testing.T, k model.MetricKey) BodyData {
+func NewBodyDataFromMetricKey(t testing.TB, k model.MetricKey) BodyData {
 	t.Helper()
 	var buf bytes.Buffer
 	err := json.NewEncoder(&buf).Encode(k)
@@ -60,7 +60,7 @@ func NewBodyDataFromMetricKey(t *testing.T, k model.MetricKey) BodyData {
 	}
 }
 
-func NewBodyDataFromResponse(t *testing.T, resp *http.Response) BodyData {
+func NewBodyDataFromResponse(t testing.TB, resp *http.Response) BodyData {
 	t.Helper()
 
 	body, err := io.ReadAll(resp.Body)
@@ -141,4 +141,10 @@ func (b *BodyData) AssertData(expected []byte) {
 func (b *BodyData) AssertType(expected httpheaders.ContentType) {
 	b.T.Helper()
 	assert.Equal(b.T, expected, b.contentType)
+}
+
+func (b *BodyData) AssertEqual(other BodyData) {
+	b.T.Helper()
+	b.AssertType(other.contentType)
+	b.AssertData(other.data)
 }

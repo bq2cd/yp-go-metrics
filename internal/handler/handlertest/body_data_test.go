@@ -513,3 +513,33 @@ func TestBodyData_AssertType(t *testing.T) {
 		})
 	}
 }
+
+func TestBodyData_AssertEqual(t *testing.T) {
+	type fields struct {
+		T           testing.TB
+		data        []byte
+		contentType httpheaders.ContentType
+	}
+	type args struct {
+		other BodyData
+	}
+	type want struct {
+	}
+	type testcase struct {
+		fields fields
+		args   args
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			b := &BodyData{
+				T:           tt.fields.T,
+				data:        tt.fields.data,
+				contentType: tt.fields.contentType,
+			}
+			b.AssertEqual(tt.args.other)
+		})
+	}
+}

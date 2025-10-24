@@ -12,6 +12,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/huandu/go-sqlbuilder"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -729,6 +730,93 @@ func Test_sqlStorage_Set(t *testing.T) {
 			// Assert
 			tt.want.wantErr(t, err)
 			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func Test_sqlStorage_prepareGetBuilder(t *testing.T) {
+	type fields struct {
+		db *sql.DB
+	}
+	type args struct {
+		key model.MetricKey
+	}
+	type want struct {
+		got sqlbuilder.Builder
+		err error
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &sqlStorage{
+				db: tt.fields.db,
+			}
+			got, err := s.prepareGetBuilder(tt.args.key)
+			require.Equal(t, tt.want.err, err)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func Test_sqlStorage_prepareGetAllBuilder(t *testing.T) {
+	type fields struct {
+		db *sql.DB
+	}
+	type want struct {
+		got sqlbuilder.Builder
+	}
+	type testcase struct {
+		fields fields
+		want   want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &sqlStorage{
+				db: tt.fields.db,
+			}
+			got := s.prepareGetAllBuilder()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func Test_sqlStorage_prepareSetBuilder(t *testing.T) {
+	type fields struct {
+		db *sql.DB
+	}
+	type args struct {
+		metric model.Metric
+	}
+	type want struct {
+		got sqlbuilder.Builder
+		err error
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &sqlStorage{
+				db: tt.fields.db,
+			}
+			got, err := s.prepareSetBuilder(tt.args.metric)
+			require.Equal(t, tt.want.err, err)
+			assert.Equal(t, tt.want.got, got)
 		})
 	}
 }
