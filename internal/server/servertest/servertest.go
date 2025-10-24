@@ -1,11 +1,14 @@
 package servertest
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,6 +26,24 @@ func GetRandomListenAddress(t *testing.T) string {
 	require.NoError(t, err)
 
 	return addr
+}
+
+type ListenAddress struct {
+	Host string
+	Port uint32
+}
+
+func (la ListenAddress) String() string {
+	return fmt.Sprintf("%s:%d", la.Host, la.Port)
+}
+
+// NewListenAddress parses a listen address in the form of "host:port"
+// and returns a [ListenAddress] struct.
+func NewListenAddress(t *testing.T, addr string) ListenAddress {
+	parts := strings.SplitN(addr, ":", 2)
+	port, err := strconv.ParseUint(parts[1], 10, 32)
+	require.NoError(t, err)
+	return ListenAddress{Host: parts[0], Port: uint32(port)}
 }
 
 // MakeSimpleRequest sends prepared request using provided HTTP client

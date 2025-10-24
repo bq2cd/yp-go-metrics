@@ -8,17 +8,19 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewSQLStorage(t *testing.T) {
+func TestNewSQLStorage1(t *testing.T) {
 	type args struct {
 		dbURL url.URL
 	}
 	type want struct {
-		assertion func(*testing.T, *sqlStorage, error)
+		assertConfig  func(*testing.T, *dbconfig.Config, error)
+		assertStorage func(*testing.T, *sqlStorage, error)
 	}
 	type testcase struct {
 		args args
@@ -27,29 +29,50 @@ func TestNewSQLStorage(t *testing.T) {
 	tests := map[string]testcase{
 		"empty url returns no error": {
 			args: args{dbURL: url.URL{}},
-			want: want{assertion: func(t *testing.T, got *sqlStorage, err error) {
-				require.NoError(t, err)
-				assert.NotNil(t, got)
-			}},
+			want: want{
+				assertConfig: func(t *testing.T, got *dbconfig.Config, err error) {
+					require.NoError(t, err)
+					t.Logf("config: %#v, %v", got, got.Enabled())
+					assert.False(t, got.Enabled())
+				},
+				assertStorage: func(t *testing.T, got *sqlStorage, err error) {
+					require.NoError(t, err)
+					assert.NotNil(t, got)
+				},
+			},
 		},
 		"unsupported database type fails": {
 			args: args{dbURL: url.URL{Scheme: "sqlite", Path: "/some.db"}},
-			want: want{assertion: func(t *testing.T, got *sqlStorage, err error) {
-				require.ErrorIs(t, err, ErrUnsupportedDBType)
-				assert.Nil(t, got)
-			}},
+			want: want{
+				assertConfig: func(t *testing.T, got *dbconfig.Config, err error) {
+					require.ErrorIs(t, err, dbconfig.ErrUnsupportedDBType)
+					assert.False(t, got.Enabled())
+				},
+				assertStorage: func(t *testing.T, got *sqlStorage, err error) {
+					require.Errorf(t, err, "sql: unknown driver")
+					assert.Nil(t, got)
+				},
+			},
 		},
 		"valid url succeeds": {
 			args: args{dbURL: url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/db1"}},
-			want: want{assertion: func(t *testing.T, got *sqlStorage, err error) {
-				require.NoError(t, err)
-				assert.NotNil(t, got)
-			}},
+			want: want{
+				assertConfig: func(t *testing.T, got *dbconfig.Config, err error) {
+					require.NoError(t, err)
+					assert.True(t, got.Enabled())
+				},
+				assertStorage: func(t *testing.T, got *sqlStorage, err error) {
+					require.NoError(t, err)
+					assert.NotNil(t, got)
+				},
+			},
 		}}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := NewSQLStorage(tt.args.dbURL)
-			tt.want.assertion(t, got, err)
+			cfg, err := dbconfig.New(tt.args.dbURL)
+			tt.want.assertConfig(t, &cfg, err)
+			got, err := NewSQLStorage(cfg)
+			tt.want.assertStorage(t, got, err)
 		})
 	}
 }
@@ -159,6 +182,30 @@ func Test_sqlStorage_Close(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestNewSQLStorage(t *testing.T) {
+	type args struct {
+		cfg dbconfig.Config
+	}
+	type want struct {
+		got *sqlStorage
+		err error
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := NewSQLStorage(tt.args.cfg)
+			require.Equal(t, tt.want.err, err)
+			assert.Equal(t, tt.want.got, got)
 		})
 	}
 }

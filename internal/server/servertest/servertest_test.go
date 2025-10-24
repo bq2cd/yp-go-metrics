@@ -487,3 +487,53 @@ func TestGetCwd(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, cwd, GetCwd(t))
 }
+
+func TestListenAddress_String(t *testing.T) {
+	type fields struct {
+		Host string
+		Port uint32
+	}
+	type want struct {
+		got string
+	}
+	type testcase struct {
+		fields fields
+		want   want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			la := ListenAddress{
+				Host: tt.fields.Host,
+				Port: tt.fields.Port,
+			}
+			got := la.String()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestNewListenAddress(t *testing.T) {
+	type args struct {
+		t    *testing.T
+		addr string
+	}
+	type want struct {
+		got ListenAddress
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := NewListenAddress(tt.args.t, tt.args.addr)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

@@ -31,7 +31,11 @@ func (a App[C]) Run(ctx context.Context, logger log.Logger, args []string, stder
 	defer stop()
 
 	err = a.LaunchProcess(ctx, logger, cfg)
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+		logger.Error().Msg("received termination signal")
+	default:
+	}
 
 	return err
 }

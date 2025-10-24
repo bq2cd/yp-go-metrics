@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
@@ -652,6 +654,47 @@ func Test_main(t *testing.T) {
 				assert.JSONEq(t, `{"id": "id1", "type": "counter", "delta": 78}`, string(body))
 			},
 			assertStopped: func(t *testing.T, env map[string]string) {
+			},
+		},
+		{
+			name: "server applies migrations on startup",
+			args: []string{"-i=0"},
+			env: map[string]string{
+				"ADDRESS": addrFactory.New(),
+				"DATABASE_DSN": func() string {
+					dbCfg := servertest.LaunchEmbeddedPostgres(t, "server-test-user", "server-test-password", "server-test-db")
+					return dbCfg.DSN()
+				}(),
+			},
+			want: want{
+				exitCode: 0,
+			},
+			assertRunning: func(t *testing.T, addr string) {
+				req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/ping", addr), http.NoBody)
+				require.NoError(t, err)
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				defer func() { _ = resp.Body.Close() }()
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				assert.Equal(t, `OK`, string(body))
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
+				dbURL, err := url.Parse(env["DATABASE_DSN"])
+				require.NoError(t, err)
+				cfg, err := dbconfig.New(*dbURL)
+				require.NoError(t, err)
+				db, err := sql.Open("pgx", cfg.DSN())
+				require.NoError(t, err)
+				rows, err := db.Query(`
+						SELECT schemaname, tablename
+						FROM pg_catalog.pg_tables
+						WHERE schemaname NOT IN ('information_schema', 'pg_catalog');
+					`)
+				require.NoError(t, err)
+				defer rows.Close()
+				assert.Truef(t, rows.Next(), "expected at least a single row")
+				assert.NoError(t, rows.Err())
 			},
 		},
 	}

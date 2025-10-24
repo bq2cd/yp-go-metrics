@@ -3,15 +3,9 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"errors"
-	"fmt"
-	"net/url"
 
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	_ "github.com/jackc/pgx/v5/stdlib"
-)
-
-var (
-	ErrUnsupportedDBType = errors.New("unsupported database type")
 )
 
 type sqlStorage struct {
@@ -20,13 +14,8 @@ type sqlStorage struct {
 
 // NewSQLStorage creates an instance of the storage backed by an SQL database.
 // Currently, only PostgreSQL is supported.
-func NewSQLStorage(dbURL url.URL) (*sqlStorage, error) {
-	dsn := dbURL.String()
-	isPostgres := dbURL.Scheme == "postgres" || dbURL.Scheme == "postgresql"
-	if dsn != "" && !isPostgres {
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDBType, dbURL.Scheme)
-	}
-	db, err := sql.Open("pgx", dsn)
+func NewSQLStorage(cfg dbconfig.Config) (*sqlStorage, error) {
+	db, err := sql.Open(string(cfg.Driver()), cfg.DSN())
 	if err != nil {
 		return nil, err
 	}
