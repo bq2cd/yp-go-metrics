@@ -48,6 +48,18 @@ func NewBodyDataFromMetric(t testing.TB, m model.Metric) BodyData {
 	}
 }
 
+func NewBodyDataFromMetrics(t testing.TB, metrics []model.Metric) BodyData {
+	t.Helper()
+	var buf bytes.Buffer
+	err := json.NewEncoder(&buf).Encode(metrics)
+	require.NoError(t, err)
+	return BodyData{
+		T:           t,
+		data:        buf.Bytes(),
+		contentType: httpheaders.ContentTypeApplicationJSON,
+	}
+}
+
 func NewBodyDataFromMetricKey(t testing.TB, k model.MetricKey) BodyData {
 	t.Helper()
 	var buf bytes.Buffer

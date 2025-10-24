@@ -281,6 +281,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			} else {
 				assert.Equal(t, tt.want.body, strings.TrimRight(string(body), "\n"))
 			}
+			if tt.assertLogEvents != nil {
+				tt.assertLogEvents(t, logger.RecordedEvents())
+			}
 		})
 	}
 }

@@ -26,6 +26,15 @@ func (r *faultyMetricJSONResponder) WriteResponse(w http.ResponseWriter, m model
 	return json.NewEncoder(w).Encode(invalid)
 }
 
+type faultyMetricBatchJSONResponder struct{}
+
+func (r *faultyMetricBatchJSONResponder) WriteResponse(w http.ResponseWriter, metrics []model.Metric) error {
+	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
+	w.WriteHeader(http.StatusOK)
+	var invalid chan struct{}
+	return json.NewEncoder(w).Encode(invalid)
+}
+
 func Test_defaultMetricJSONResponder_WriteResponse(t *testing.T) {
 	type args struct {
 		w *httptest.ResponseRecorder
@@ -149,4 +158,68 @@ func Test_baseHandler_setLogger(t *testing.T) {
 func Test_baseHandler_getLogger(t *testing.T) {
 	// covered by [TestNewRegistry]
 	t.SkipNow()
+}
+
+func Test_defaultMetricBatchJSONResponder_WriteResponse(t *testing.T) {
+	type args struct {
+		w       *httptest.ResponseRecorder
+		metrics []model.Metric
+	}
+	type want struct {
+		data []byte
+	}
+	type testcase struct {
+		r         metricBatchJSONResponder
+		args      args
+		want      want
+		assertion func(testing.TB, want, []byte, error)
+	}
+	tests := map[string]testcase{
+		"empty metrics": {
+			r:    &defaultMetricBatchJSONResponder{},
+			args: args{w: httptest.NewRecorder(), metrics: []model.Metric{}},
+			want: want{data: []byte(`[]`)},
+			assertion: func(t testing.TB, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+		"single metric": {
+			r:    &defaultMetricBatchJSONResponder{},
+			args: args{w: httptest.NewRecorder(), metrics: []model.Metric{model.NewCounterMetric("id1", -5)}},
+			want: want{data: []byte(`[{"id": "id1", "type": "counter", "delta": -5}]`)},
+			assertion: func(t testing.TB, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+		"multiple metrics": {
+			r:    &defaultMetricBatchJSONResponder{},
+			args: args{w: httptest.NewRecorder(), metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id2", -3.21)}},
+			want: want{data: []byte(`[{"id": "id1", "type": "counter", "delta": -5}, {"id": "id2", "type": "gauge", "value": -3.21}]`)},
+			assertion: func(t testing.TB, want want, body []byte, err error) {
+				require.NoError(t, err)
+				assert.JSONEq(t, string(want.data), string(body))
+			},
+		},
+		"json encoder failure": {
+			r:    &faultyMetricBatchJSONResponder{},
+			args: args{w: httptest.NewRecorder(), metrics: []model.Metric{model.NewCounterMetric("id1", -5), model.NewGaugeMetric("id2", -3.21)}},
+			want: want{data: []byte(``)},
+			assertion: func(t testing.TB, want want, body []byte, err error) {
+				require.Error(t, err)
+				assert.Equal(t, string(want.data), string(body))
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			errSend := tt.r.WriteResponse(tt.args.w, tt.args.metrics)
+			resp := tt.args.w.Result()
+			defer func() { _ = resp.Body.Close() }()
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			tt.assertion(t, tt.want, body, errSend)
+		})
+	}
 }

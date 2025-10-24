@@ -105,6 +105,15 @@ func testRouterServeHTTPHandlers(t *testing.T) {
 				{method: http.MethodPost, url: "/update/"},
 			},
 		},
+		handler.IdentUpdateBatchJSON: {
+			status:      http.StatusOK,
+			body:        []byte(`{}`),
+			contentType: httpheaders.ContentTypeApplicationJSON,
+			cases: []testcase{
+				{method: http.MethodPost, url: "/updates"},
+				{method: http.MethodPost, url: "/updates/"},
+			},
+		},
 		handler.IdentValue: {
 			status:      http.StatusOK,
 			body:        []byte{},
