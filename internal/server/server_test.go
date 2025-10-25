@@ -86,11 +86,11 @@ func (m *mockMetricSnapshotter) RetrieveSingle(ctx context.Context, key model.Me
 }
 func (m *mockMetricSnapshotter) RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error) {
 	m.Called(ctx, keys)
-	return model.MetricSet{}, nil
+	return []model.Metric{}, nil
 }
 func (m *mockMetricSnapshotter) RetrieveAll(ctx context.Context) ([]model.Metric, error) {
 	m.Called(ctx)
-	return model.MetricSet{}, nil
+	return []model.Metric{}, nil
 }
 func (m *mockMetricSnapshotter) DumpClose(ctx context.Context, w io.WriteCloser) error {
 	m.Called(ctx, w)
