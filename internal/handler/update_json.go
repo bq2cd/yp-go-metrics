@@ -36,12 +36,14 @@ func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.metrics.StoreSingle(r.Context(), m); err != nil {
+		h.logger.Error().Err("error", err).Any("metric", m).Msg("cannot store metric")
 		http.Error(w, "cannot store metric", http.StatusInsufficientStorage)
 		return
 	}
 
 	m, err = h.metrics.RetrieveSingle(r.Context(), m.Key())
 	if err != nil {
+		h.logger.Error().Err("error", err).Any("metric_key", m.Key()).Msg("cannot retrieve metric")
 		http.Error(w, "cannot retrieve metric", http.StatusNotFound)
 		return
 	}

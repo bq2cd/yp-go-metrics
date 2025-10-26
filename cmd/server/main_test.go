@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,7 +24,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
@@ -684,10 +685,16 @@ func Test_main(t *testing.T) {
 					model.NewCounterMetric("id1", 123),
 					model.NewCounterMetric("id2", -123),
 					model.NewCounterMetric("id1", 123),
-					model.NewGaugeMetric("id1", 1.23),
-					model.NewGaugeMetric("id2", -1.23),
-					model.NewGaugeMetric("id3", 456),
-					model.NewGaugeMetric("id1", -4.56),
+					model.NewCounterMetric("id3", -456),
+					model.NewGaugeMetric("id10", 1.23),
+					model.NewGaugeMetric("id20", -1.23),
+					model.NewGaugeMetric("id30", 456),
+					model.NewGaugeMetric("id10", -4.56),
+					model.NewCounterMetric("max_u32", math.MaxUint32),
+					model.NewCounterMetric("max_i64", math.MaxInt64),
+					model.NewGaugeMetric("max_f32", math.MaxFloat32),
+					model.NewGaugeMetric("max_fu32", float64(math.MaxUint32)),
+					model.NewGaugeMetric("max_f64", math.MaxFloat64),
 				} {
 					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/update/", addr), handlertest.NewBodyDataFromMetric(t, m), true)
 					require.NoError(t, err)
@@ -702,9 +709,15 @@ func Test_main(t *testing.T) {
 				for _, k := range []model.MetricKey{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"),
 					model.NewMetricKey(model.MetricTypeCounter, "id2"),
-					model.NewMetricKey(model.MetricTypeGauge, "id1"),
-					model.NewMetricKey(model.MetricTypeGauge, "id2"),
-					model.NewMetricKey(model.MetricTypeGauge, "id3"),
+					model.NewMetricKey(model.MetricTypeCounter, "id3"),
+					model.NewMetricKey(model.MetricTypeGauge, "id10"),
+					model.NewMetricKey(model.MetricTypeGauge, "id20"),
+					model.NewMetricKey(model.MetricTypeGauge, "id30"),
+					model.NewMetricKey(model.MetricTypeCounter, "max_u32"),
+					model.NewMetricKey(model.MetricTypeCounter, "max_i64"),
+					model.NewMetricKey(model.MetricTypeGauge, "max_f32"),
+					model.NewMetricKey(model.MetricTypeGauge, "max_fu32"),
+					model.NewMetricKey(model.MetricTypeGauge, "max_f64"),
 				} {
 					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/value/", addr), handlertest.NewBodyDataFromMetricKey(t, k), true)
 					require.NoError(t, err)
@@ -716,11 +729,17 @@ func Test_main(t *testing.T) {
 			},
 			assertStopped: func(t *testing.T, env map[string]string) {
 				wantMetrics := []model.Metric{
-					model.NewGaugeMetric("id1", -4.56),
-					model.NewGaugeMetric("id2", -1.23),
-					model.NewGaugeMetric("id3", 456),
+					model.NewGaugeMetric("id10", -4.56),
+					model.NewGaugeMetric("id20", -1.23),
+					model.NewGaugeMetric("id30", 456),
 					model.NewCounterMetric("id1", 246),
 					model.NewCounterMetric("id2", -123),
+					model.NewCounterMetric("id3", -456),
+					model.NewCounterMetric("max_u32", math.MaxUint32),
+					model.NewCounterMetric("max_i64", math.MaxInt64),
+					model.NewGaugeMetric("max_f32", math.MaxFloat32),
+					model.NewGaugeMetric("max_fu32", float64(math.MaxUint32)),
+					model.NewGaugeMetric("max_f64", math.MaxFloat64),
 				}
 
 				// db check
@@ -728,7 +747,7 @@ func Test_main(t *testing.T) {
 				require.NoError(t, err)
 				cfg, err := dbconfig.New(*dbURL)
 				require.NoError(t, err)
-				storage, err := repository.NewSQLStorage(cfg)
+				storage, err := sqlstorage.New(cfg)
 				require.NoError(t, err)
 				metrics, err := storage.GetAll(t.Context())
 				require.NoError(t, err)

@@ -11,6 +11,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/router"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/server"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -47,7 +48,7 @@ func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (rep
 		return nil, nil, fmt.Errorf("cannot apply DB migrations: %w", err)
 	}
 
-	sqlStorage, err := repository.NewSQLStorage(dbCfg)
+	sqlStorage, err := sqlstorage.New(dbCfg)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot create SQL storage: %w", err)
 	}

@@ -1,24 +1,30 @@
-package repository
+package sqlstorage
 
 import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/huandu/go-sqlbuilder"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewSQLStorage(t *testing.T) {
+const (
+	databaseDriver = "pgx"
+)
+
+func TestNew(t *testing.T) {
 	type args struct {
 		dbURL url.URL
 	}
@@ -75,7 +81,7 @@ func TestNewSQLStorage(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg, err := dbconfig.New(tt.args.dbURL)
 			tt.want.assertConfig(t, &cfg, err)
-			got, err := NewSQLStorage(cfg)
+			got, err := New(cfg)
 			tt.want.assertStorage(t, got, err)
 		})
 	}
@@ -123,7 +129,7 @@ func Test_sqlStorage_Ping(t *testing.T) {
 
 			mock.ExpectPing().WillDelayFor(tt.fields.mockDelay).WillReturnError(tt.fields.mockErr)
 			s := &sqlStorage{
-				db: db,
+				db: sqlx.NewDb(db, databaseDriver),
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.args.timeout)
@@ -173,7 +179,7 @@ func Test_sqlStorage_Close(t *testing.T) {
 
 			mock.ExpectClose().WillReturnError(tt.fields.mockErr)
 			s := &sqlStorage{
-				db: db,
+				db: sqlx.NewDb(db, databaseDriver),
 			}
 
 			// Act
@@ -188,6 +194,36 @@ func Test_sqlStorage_Close(t *testing.T) {
 			require.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+func getExpectedSelectQuery(metricType model.MetricType, numArgs int) string {
+	sb := &strings.Builder{}
+	fmt.Fprintf(sb, "SELECT metric_id, value FROM %s%s", tableNamePrefix, metricType)
+	if numArgs == 0 {
+		return sb.String()
+	}
+	sb.WriteString(` WHERE metric_id IN (`)
+	for i := 1; i <= numArgs; i++ {
+		fmt.Fprintf(sb, "$%d", i)
+		if i < numArgs {
+			sb.WriteRune(',')
+		}
+	}
+	sb.WriteString(`)`)
+	return sb.String()
+}
+
+func getExpectedInsertQuery(metricType model.MetricType, numArgs int) string {
+	sb := &strings.Builder{}
+	fmt.Fprintf(sb, "INSERT INTO %s%s (metric_id, value) VALUES ", tableNamePrefix, metricType)
+	for i := 1; i <= numArgs*2; i += 2 {
+		fmt.Fprintf(sb, "($%d, $%d)", i, i+1)
+		if i < numArgs*2-1 {
+			sb.WriteString(", ")
+		}
+	}
+	sb.WriteString(" ON CONFLICT (metric_id) DO UPDATE SET value = EXCLUDED.value")
+	return sb.String()
 }
 
 func Test_sqlStorage_Get(t *testing.T) {
@@ -219,8 +255,8 @@ func Test_sqlStorage_Get(t *testing.T) {
 				expectMockCall: true,
 				mockErr:        sql.ErrNoRows,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `SELECT value FROM metrics_counter WHERE metric_id = $1`,
-				mockArgs:       []driver.Value{"id1"},
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 1),
+				mockArgs:       []driver.Value{`id1`},
 				mockRows:       func() *sqlmock.Rows { return sqlmock.NewRows(nil) },
 			},
 			args: args{key: model.NewMetricKey(model.MetricTypeCounter, "id1")},
@@ -237,11 +273,11 @@ func Test_sqlStorage_Get(t *testing.T) {
 				expectMockCall: true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `SELECT value FROM metrics_counter WHERE metric_id = $1`,
-				mockArgs:       []driver.Value{"id1"},
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 1),
+				mockArgs:       []driver.Value{`id1`},
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"value"})
-					rows.AddRow(123)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 123)
 					return rows
 				},
 			},
@@ -259,11 +295,11 @@ func Test_sqlStorage_Get(t *testing.T) {
 				expectMockCall: true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `SELECT value FROM metrics_gauge WHERE metric_id = $1`,
-				mockArgs:       []driver.Value{"id1"},
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 1),
+				mockArgs:       []driver.Value{`id1`},
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"value"})
-					rows.AddRow(-1.23)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, -1.23)
 					return rows
 				},
 			},
@@ -294,11 +330,11 @@ func Test_sqlStorage_Get(t *testing.T) {
 				expectMockCall: true,
 				mockErr:        nil,
 				mockDelay:      25 * time.Millisecond,
-				mockQuery:      `SELECT value FROM metrics_counter WHERE metric_id = $1`,
-				mockArgs:       []driver.Value{"id1"},
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 1),
+				mockArgs:       []driver.Value{`id1`},
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"value"})
-					rows.AddRow(123)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 123)
 					return rows
 				},
 			},
@@ -316,11 +352,11 @@ func Test_sqlStorage_Get(t *testing.T) {
 				expectMockCall: true,
 				mockErr:        errors.New("database crashed"),
 				mockDelay:      25 * time.Millisecond,
-				mockQuery:      `SELECT value FROM metrics_counter WHERE metric_id = $1`,
-				mockArgs:       []driver.Value{"id1"},
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 1),
+				mockArgs:       []driver.Value{`id1`},
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"value"})
-					rows.AddRow(123)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 123)
 					return rows
 				},
 			},
@@ -348,7 +384,7 @@ func Test_sqlStorage_Get(t *testing.T) {
 					WillReturnRows(tt.fields.mockRows())
 			}
 			s := &sqlStorage{
-				db: db,
+				db: sqlx.NewDb(db, databaseDriver),
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -378,18 +414,26 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 		wantErr func(testing.TB, error)
 	}
 	type testcase struct {
-		timeout time.Duration
-		fields  fields
-		want    want
+		timeout       time.Duration
+		fieldsCounter fields
+		fieldsGauge   fields
+		want          want
 	}
 	tests := map[string]testcase{
 		"empty storage returns empty slice without error": {
 			timeout: 100 * time.Millisecond,
-			fields: fields{
+			fieldsCounter: fields{
 				expectMockCall: true,
 				mockErr:        sql.ErrNoRows,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `(SELECT 'counter' AS metric_type, metric_id, value::NUMERIC FROM metrics_counter) UNION ALL (SELECT 'gauge' AS metric_type, metric_id, value::NUMERIC FROM metrics_gauge)`,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 0),
+				mockRows:       func() *sqlmock.Rows { return sqlmock.NewRows(nil) },
+			},
+			fieldsGauge: fields{
+				expectMockCall: true,
+				mockErr:        sql.ErrNoRows,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 0),
 				mockRows:       func() *sqlmock.Rows { return sqlmock.NewRows(nil) },
 			},
 			want: want{
@@ -401,18 +445,25 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 		},
 		"storage contains only counters": {
 			timeout: 100 * time.Millisecond,
-			fields: fields{
+			fieldsCounter: fields{
 				expectMockCall: true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `(SELECT 'counter' AS metric_type, metric_id, value::NUMERIC FROM metrics_counter) UNION ALL (SELECT 'gauge' AS metric_type, metric_id, value::NUMERIC FROM metrics_gauge)`,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 0),
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"metric_type", "metric_id", "value"})
-					rows.AddRow("counter", "id1", 123)
-					rows.AddRow("counter", "id2", -123)
-					rows.AddRow("counter", "id3", 456)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 123)
+					rows.AddRow(`id2`, -123)
+					rows.AddRow(`id3`, 456)
 					return rows
 				},
+			},
+			fieldsGauge: fields{
+				expectMockCall: true,
+				mockErr:        sql.ErrNoRows,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 0),
+				mockRows:       func() *sqlmock.Rows { return sqlmock.NewRows(nil) },
 			},
 			want: want{
 				got: []model.Metric{
@@ -427,17 +478,24 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 		},
 		"storage contains only gauges": {
 			timeout: 100 * time.Millisecond,
-			fields: fields{
+			fieldsCounter: fields{
+				expectMockCall: true,
+				mockErr:        sql.ErrNoRows,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 0),
+				mockRows:       func() *sqlmock.Rows { return sqlmock.NewRows(nil) },
+			},
+			fieldsGauge: fields{
 				expectMockCall: true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `(SELECT 'counter' AS metric_type, metric_id, value::NUMERIC FROM metrics_counter) UNION ALL (SELECT 'gauge' AS metric_type, metric_id, value::NUMERIC FROM metrics_gauge)`,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 0),
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"metric_type", "metric_id", "value"})
-					rows.AddRow("gauge", "id1", 1.23)
-					rows.AddRow("gauge", "id2", -1.23)
-					rows.AddRow("gauge", "id3", 456)
-					rows.AddRow("gauge", "id4", -789)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 1.23)
+					rows.AddRow(`id2`, -1.23)
+					rows.AddRow(`id3`, 456)
+					rows.AddRow(`id4`, -789)
 					return rows
 				},
 			},
@@ -455,21 +513,31 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 		},
 		"storage contains mix of counters and gauges": {
 			timeout: 100 * time.Millisecond,
-			fields: fields{
+			fieldsCounter: fields{
 				expectMockCall: true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `(SELECT 'counter' AS metric_type, metric_id, value::NUMERIC FROM metrics_counter) UNION ALL (SELECT 'gauge' AS metric_type, metric_id, value::NUMERIC FROM metrics_gauge)`,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 0),
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"metric_type", "metric_id", "value"})
-					rows.AddRow("counter", "id4", 789)
-					rows.AddRow("gauge", "id1", 1.23)
-					rows.AddRow("gauge", "id2", -1.23)
-					rows.AddRow("counter", "id1", 123)
-					rows.AddRow("gauge", "id3", 456)
-					rows.AddRow("counter", "id2", -123)
-					rows.AddRow("counter", "id3", 456)
-					rows.AddRow("gauge", "id4", -789)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id4`, 789)
+					rows.AddRow(`id1`, 123)
+					rows.AddRow(`id2`, -123)
+					rows.AddRow(`id3`, 456)
+					return rows
+				},
+			},
+			fieldsGauge: fields{
+				expectMockCall: true,
+				mockErr:        nil,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 0),
+				mockRows: func() *sqlmock.Rows {
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 1.23)
+					rows.AddRow(`id2`, -1.23)
+					rows.AddRow(`id3`, 456)
+					rows.AddRow(`id4`, -789)
 					return rows
 				},
 			},
@@ -490,18 +558,28 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 			},
 		},
 		"slow storage request cancelled": {
-			timeout: 10 * time.Millisecond,
-			fields: fields{
+			timeout: 15 * time.Millisecond,
+			fieldsCounter: fields{
 				expectMockCall: true,
 				mockErr:        nil,
-				mockDelay:      25 * time.Millisecond,
-				mockQuery:      `(SELECT 'counter' AS metric_type, metric_id, value::NUMERIC FROM metrics_counter) UNION ALL (SELECT 'gauge' AS metric_type, metric_id, value::NUMERIC FROM metrics_gauge)`,
+				mockDelay:      10 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 0),
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"metric_type", "metric_id", "value"})
-					rows.AddRow("counter", "id4", 789)
-					rows.AddRow("gauge", "id1", 1.23)
-					rows.AddRow("gauge", "id2", -1.23)
-					rows.AddRow("counter", "id1", 123)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id4`, 789)
+					rows.AddRow(`id1`, 123)
+					return rows
+				},
+			},
+			fieldsGauge: fields{
+				expectMockCall: true,
+				mockErr:        nil,
+				mockDelay:      10 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 0),
+				mockRows: func() *sqlmock.Rows {
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 1.23)
+					rows.AddRow(`id2`, -1.23)
 					return rows
 				},
 			},
@@ -514,17 +592,28 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 		},
 		"storage unknown error": {
 			timeout: 100 * time.Millisecond,
-			fields: fields{
+			fieldsCounter: fields{
 				expectMockCall: true,
 				mockErr:        errors.New("oops"),
 				mockDelay:      25 * time.Millisecond,
-				mockQuery:      `(SELECT 'counter' AS metric_type, metric_id, value::NUMERIC FROM metrics_counter) UNION ALL (SELECT 'gauge' AS metric_type, metric_id, value::NUMERIC FROM metrics_gauge)`,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeCounter, 0),
 				mockRows: func() *sqlmock.Rows {
-					rows := sqlmock.NewRows([]string{"metric_type", "metric_id", "value"})
-					rows.AddRow("counter", "id4", 789)
-					rows.AddRow("gauge", "id1", 1.23)
-					rows.AddRow("gauge", "id2", -1.23)
-					rows.AddRow("counter", "id1", 123)
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id4`, 789)
+					rows.AddRow(`id1`, 123)
+					return rows
+				},
+			},
+			fieldsGauge: fields{
+				// this will not get called since we return on the first error and metric types are sorted (counter comes first)
+				expectMockCall: false,
+				mockErr:        errors.New("oops"),
+				mockDelay:      25 * time.Millisecond,
+				mockQuery:      getExpectedSelectQuery(model.MetricTypeGauge, 0),
+				mockRows: func() *sqlmock.Rows {
+					rows := sqlmock.NewRows([]string{`metric_id`, `value`})
+					rows.AddRow(`id1`, 1.23)
+					rows.AddRow(`id2`, -1.23)
 					return rows
 				},
 			},
@@ -543,14 +632,21 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			if tt.fields.expectMockCall {
-				mock.ExpectQuery(tt.fields.mockQuery).
-					WillDelayFor(tt.fields.mockDelay).
-					WillReturnError(tt.fields.mockErr).
-					WillReturnRows(tt.fields.mockRows())
+			if tt.fieldsCounter.expectMockCall {
+				mock.ExpectQuery(tt.fieldsCounter.mockQuery).
+					WillDelayFor(tt.fieldsCounter.mockDelay).
+					WillReturnError(tt.fieldsCounter.mockErr).
+					WillReturnRows(tt.fieldsCounter.mockRows())
 			}
+			if tt.fieldsGauge.expectMockCall {
+				mock.ExpectQuery(tt.fieldsGauge.mockQuery).
+					WillDelayFor(tt.fieldsGauge.mockDelay).
+					WillReturnError(tt.fieldsGauge.mockErr).
+					WillReturnRows(tt.fieldsGauge.mockRows())
+			}
+
 			s := &sqlStorage{
-				db: db,
+				db: sqlx.NewDb(db, databaseDriver),
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -569,12 +665,15 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 
 func Test_sqlStorage_Set(t *testing.T) {
 	type fields struct {
-		expectMockCall bool
-		mockErr        error
-		mockDelay      time.Duration
-		mockQuery      string
-		mockArgs       []driver.Value
-		mockResult     driver.Result
+		expectTxBegin    bool
+		expectTxCommit   bool
+		expectTxRollback bool
+		expectQuery      bool
+		mockErr          error
+		mockDelay        time.Duration
+		mockQuery        string
+		mockArgs         []driver.Value
+		mockResult       driver.Result
 	}
 	type args struct {
 		metric model.Metric
@@ -592,7 +691,9 @@ func Test_sqlStorage_Set(t *testing.T) {
 		"empty metric is ignored": {
 			timeout: 100 * time.Millisecond,
 			fields: fields{
-				expectMockCall: false,
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
 			},
 			args: args{metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"}},
 			want: want{
@@ -604,7 +705,9 @@ func Test_sqlStorage_Set(t *testing.T) {
 		"unknown metric returns error": {
 			timeout: 100 * time.Millisecond,
 			fields: fields{
-				expectMockCall: false,
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
 			},
 			args: args{metric: func() model.Metric {
 				var value float64
@@ -620,10 +723,12 @@ func Test_sqlStorage_Set(t *testing.T) {
 		"counter metrics updated/inserted": {
 			timeout: 100 * time.Millisecond,
 			fields: fields{
-				expectMockCall: true,
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `INSERT INTO metrics_counter (metric_id, value) VALUES ($1, $2) ON CONFLICT (metric_id) DO UPDATE SET value = EXCLUDED.value`,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 1),
 				mockArgs:       []driver.Value{"id1", 123},
 				mockResult:     driver.RowsAffected(1),
 			},
@@ -637,10 +742,12 @@ func Test_sqlStorage_Set(t *testing.T) {
 		"gauge metrics updated/inserted": {
 			timeout: 100 * time.Millisecond,
 			fields: fields{
-				expectMockCall: true,
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `INSERT INTO metrics_gauge (metric_id, value) VALUES ($1, $2) ON CONFLICT (metric_id) DO UPDATE SET value = EXCLUDED.value`,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeGauge, 1),
 				mockArgs:       []driver.Value{"id1", -1.23},
 				mockResult:     driver.RowsAffected(1),
 			},
@@ -654,10 +761,12 @@ func Test_sqlStorage_Set(t *testing.T) {
 		"slow storage update cancelled": {
 			timeout: 10 * time.Millisecond,
 			fields: fields{
-				expectMockCall: true,
+				expectTxBegin:  true,
+				expectTxCommit: false,
+				expectQuery:    true,
 				mockErr:        nil,
 				mockDelay:      25 * time.Millisecond,
-				mockQuery:      `INSERT INTO metrics_counter (metric_id, value) VALUES ($1, $2) ON CONFLICT (metric_id) DO UPDATE SET value = EXCLUDED.value`,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 1),
 				mockArgs:       []driver.Value{"id1", 123},
 				mockResult:     driver.RowsAffected(1),
 			},
@@ -671,10 +780,12 @@ func Test_sqlStorage_Set(t *testing.T) {
 		"internal storage error": {
 			timeout: 100 * time.Millisecond,
 			fields: fields{
-				expectMockCall: true,
+				expectTxBegin:  true,
+				expectTxCommit: false,
+				expectQuery:    true,
 				mockErr:        errors.New("database crash"),
 				mockDelay:      15 * time.Millisecond,
-				mockQuery:      `INSERT INTO metrics_counter (metric_id, value) VALUES ($1, $2) ON CONFLICT (metric_id) DO UPDATE SET value = EXCLUDED.value`,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 1),
 				mockArgs:       []driver.Value{"id1", 123},
 				mockResult:     driver.ResultNoRows,
 			},
@@ -685,20 +796,22 @@ func Test_sqlStorage_Set(t *testing.T) {
 				},
 			},
 		},
-		"no rows updated results in error": {
+		"no rows updated should not fail": {
 			timeout: 10 * time.Millisecond,
 			fields: fields{
-				expectMockCall: true,
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
 				mockErr:        nil,
 				mockDelay:      5 * time.Millisecond,
-				mockQuery:      `INSERT INTO metrics_counter (metric_id, value) VALUES ($1, $2) ON CONFLICT (metric_id) DO UPDATE SET value = EXCLUDED.value`,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 1),
 				mockArgs:       []driver.Value{"id1", 123},
 				mockResult:     driver.ResultNoRows,
 			},
 			args: args{metric: model.NewCounterMetric("id1", 123)},
 			want: want{
 				wantErr: func(t testing.TB, err error) {
-					require.Errorf(t, err, "nothing was updated")
+					require.NoError(t, err)
 				},
 			},
 		},
@@ -710,15 +823,24 @@ func Test_sqlStorage_Set(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			if tt.fields.expectMockCall {
+			if tt.fields.expectTxBegin {
+				mock.ExpectBegin()
+			}
+			if tt.fields.expectQuery {
 				mock.ExpectExec(tt.fields.mockQuery).
 					WithArgs(tt.fields.mockArgs...).
 					WillDelayFor(tt.fields.mockDelay).
 					WillReturnError(tt.fields.mockErr).
 					WillReturnResult(tt.fields.mockResult)
 			}
+			if tt.fields.expectTxRollback {
+				mock.ExpectRollback()
+			}
+			if tt.fields.expectTxCommit {
+				mock.ExpectCommit()
+			}
 			s := &sqlStorage{
-				db: db,
+				db: sqlx.NewDb(db, databaseDriver),
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -734,15 +856,259 @@ func Test_sqlStorage_Set(t *testing.T) {
 	}
 }
 
-func Test_sqlStorage_prepareGetBuilder(t *testing.T) {
+func Test_sqlStorage_SetMulti(t *testing.T) {
 	type fields struct {
-		db *sql.DB
+		expectTxBegin    bool
+		expectTxCommit   bool
+		expectTxRollback bool
+		expectQuery      bool
+		mockErr          error
+		mockDelay        time.Duration
+		mockQuery        string
+		mockArgs         []driver.Value
+		mockResult       driver.Result
 	}
 	type args struct {
-		key model.MetricKey
+		metrics model.MetricSet
 	}
 	type want struct {
-		got sqlbuilder.Builder
+		wantErr func(testing.TB, error)
+	}
+	type testcase struct {
+		timeout       time.Duration
+		fieldsCounter fields
+		fieldsGauge   fields
+		args          args
+		want          want
+	}
+	tests := map[string]testcase{
+		"empty metric set does not query database": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			args: args{metrics: model.NewMetricSet()},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"empty metrics never reach database": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
+				model.Metric{Type: model.MetricTypeGauge, ID: "id2"},
+			)},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"unknown metrics result in error": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			args: args{metrics: model.NewMetricSet(
+				func() model.Metric {
+					var value float64
+					m := model.Metric{Type: model.MetricType("something"), ID: "id1", Value: &value}
+					return m
+				}(),
+				model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
+				model.Metric{Type: model.MetricTypeGauge, ID: "id2"},
+			)},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.ErrorIs(t, err, ErrUnsupportedMetricType)
+				},
+			},
+		},
+		"only counters are updated/inserted": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
+				mockErr:        nil,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 3),
+				mockArgs:       []driver.Value{"id1", 123, "id2", -123, "id3", 456},
+				mockResult:     driver.RowsAffected(2),
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewCounterMetric("id3", 456),
+			)},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"only gauges are updated/inserted": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
+				mockErr:        nil,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeGauge, 4),
+				mockArgs:       []driver.Value{"id1", 1.23, "id2", -12.3, "id3", float64(456), "id4", float64(-789)},
+				mockResult:     driver.RowsAffected(4),
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewGaugeMetric("id1", 1.23),
+				model.NewGaugeMetric("id2", -12.3),
+				model.NewGaugeMetric("id3", 456),
+				model.NewGaugeMetric("id4", -789),
+			)},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"both counter and gauges are updated/inserted": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
+				mockErr:        nil,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 3),
+				mockArgs:       []driver.Value{"id5", 123, "id6", -123, "id7", 456},
+				mockResult:     driver.RowsAffected(3),
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
+				mockErr:        nil,
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeGauge, 4),
+				mockArgs:       []driver.Value{"id1", 1.23, "id2", -12.3, "id3", float64(456), "id4", float64(-789)},
+				mockResult:     driver.RowsAffected(4),
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewGaugeMetric("id2", -12.3),
+				model.NewGaugeMetric("id1", 1.23),
+				model.Metric{Type: model.MetricTypeCounter, ID: "id9"},
+				model.NewGaugeMetric("id3", 456),
+				model.NewCounterMetric("id6", -123),
+				model.NewGaugeMetric("id4", -789),
+				model.NewCounterMetric("id5", 123),
+				model.Metric{Type: model.MetricTypeGauge, ID: "id8"},
+				model.NewCounterMetric("id7", 456),
+			)},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			// Arrange
+			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+			require.NoError(t, err)
+			defer db.Close()
+
+			if tt.fieldsCounter.expectTxBegin {
+				mock.ExpectBegin()
+			}
+			if tt.fieldsCounter.expectQuery {
+				mock.ExpectExec(tt.fieldsCounter.mockQuery).
+					WithArgs(tt.fieldsCounter.mockArgs...).
+					WillDelayFor(tt.fieldsCounter.mockDelay).
+					WillReturnError(tt.fieldsCounter.mockErr).
+					WillReturnResult(tt.fieldsCounter.mockResult)
+			}
+			if tt.fieldsCounter.expectTxCommit {
+				mock.ExpectCommit()
+			}
+
+			if tt.fieldsGauge.expectTxBegin {
+				mock.ExpectBegin()
+			}
+			if tt.fieldsGauge.expectQuery {
+				mock.ExpectExec(tt.fieldsGauge.mockQuery).
+					WithArgs(tt.fieldsGauge.mockArgs...).
+					WillDelayFor(tt.fieldsGauge.mockDelay).
+					WillReturnError(tt.fieldsGauge.mockErr).
+					WillReturnResult(tt.fieldsGauge.mockResult)
+			}
+			if tt.fieldsGauge.expectTxCommit {
+				mock.ExpectCommit()
+			}
+
+			s := &sqlStorage{
+				db: sqlx.NewDb(db, databaseDriver),
+			}
+
+			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
+			defer cancel()
+
+			// Act
+			err = s.SetMulti(ctx, tt.args.metrics)
+
+			// Assert
+			tt.want.wantErr(t, err)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func Test_sqlStorage_GetMulti(t *testing.T) {
+	type fields struct {
+		db *sqlx.DB
+	}
+	type args struct {
+		ctx  context.Context
+		keys model.MetricKeySet
+	}
+	type want struct {
+		got []model.Metric
 		err error
 	}
 	type testcase struct {
@@ -758,63 +1124,7 @@ func Test_sqlStorage_prepareGetBuilder(t *testing.T) {
 			s := &sqlStorage{
 				db: tt.fields.db,
 			}
-			got, err := s.prepareGetBuilder(tt.args.key)
-			require.Equal(t, tt.want.err, err)
-			assert.Equal(t, tt.want.got, got)
-		})
-	}
-}
-
-func Test_sqlStorage_prepareGetAllBuilder(t *testing.T) {
-	type fields struct {
-		db *sql.DB
-	}
-	type want struct {
-		got sqlbuilder.Builder
-	}
-	type testcase struct {
-		fields fields
-		want   want
-	}
-	tests := map[string]testcase{
-		// TODO: Add test cases.
-	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			s := &sqlStorage{
-				db: tt.fields.db,
-			}
-			got := s.prepareGetAllBuilder()
-			assert.Equal(t, tt.want.got, got)
-		})
-	}
-}
-
-func Test_sqlStorage_prepareSetBuilder(t *testing.T) {
-	type fields struct {
-		db *sql.DB
-	}
-	type args struct {
-		metric model.Metric
-	}
-	type want struct {
-		got sqlbuilder.Builder
-		err error
-	}
-	type testcase struct {
-		fields fields
-		args   args
-		want   want
-	}
-	tests := map[string]testcase{
-		// TODO: Add test cases.
-	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			s := &sqlStorage{
-				db: tt.fields.db,
-			}
-			got, err := s.prepareSetBuilder(tt.args.metric)
+			got, err := s.GetMulti(tt.args.ctx, tt.args.keys)
 			require.Equal(t, tt.want.err, err)
 			assert.Equal(t, tt.want.got, got)
 		})

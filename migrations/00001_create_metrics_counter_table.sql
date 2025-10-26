@@ -5,7 +5,7 @@
 -- +goose StatementBegin
 CREATE TABLE metrics_counter (
     metric_id varchar(255) PRIMARY KEY,
-    value integer NOT NULL
+    value bigint NOT NULL
 );
 
 -- +goose StatementEnd
