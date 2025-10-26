@@ -3,9 +3,18 @@ package handler
 import (
 	"context"
 	"fmt"
+	"testing"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
+	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
+
+func newMetricStorer(t *testing.T, storage *storagetest.MockStorage) service.MetricStorer {
+	w := service.NewStorageBatchWriter(storage)
+	go w.StartProcessing(t.Context())
+	return service.NewMetricStorer(storage, w)
+}
 
 type faultyMetricService struct{}
 

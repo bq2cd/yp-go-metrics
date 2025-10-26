@@ -24,7 +24,8 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot init storage: %w", err)
 	}
 
-	storer := service.NewMetricStorer(storage)
+	writer := service.NewStorageBatchWriter(storage)
+	storer := service.NewMetricStorer(storage, writer)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
 
 	handlers := handler.NewRegistry(logger, snapshotter, pinger)
@@ -33,12 +34,12 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot create router: %w", err)
 	}
 
-	srv := server.New(ctx, logger, cfg, router, snapshotter)
+	srv := server.New(ctx, logger, cfg, router, snapshotter, writer)
 
 	return srv.Run()
 }
 
-func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (repository.Storage, service.StoragePinger, error) {
+func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (repository.StorageMulti, service.StoragePinger, error) {
 	dbCfg, err := dbconfig.New(cfg.DatabaseURL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot create DB config: %w", err)

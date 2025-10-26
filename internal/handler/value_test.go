@@ -45,39 +45,39 @@ func Test_valueHandler_ServeHTTP(t *testing.T) {
 		// Not Found
 		{
 			name:   "GET %s NOT_FOUND",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage())},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodGet, url: "/value/badType", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name:   "GET %s NOT_FOUND",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage())},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusNotFound, body: "metric not found\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// Bad Request
 		{
 			name:   "GET %s BAD_REQUEST",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage())},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1/123", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusBadRequest, body: "missing metric value\n", contentType: "text/plain; charset=utf-8"},
 		},
 		// OK
 		{
 			name:   "GET %s OK",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "123", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name:   "GET %s OK",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
 			args:   args{method: http.MethodGet, url: "/value/counter/id1/", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "123", contentType: "text/plain; charset=utf-8"},
 		},
 		{
 			name:   "GET %s OK",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage(model.NewGaugeMetric("id1", -1.23)))},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage(model.NewGaugeMetric("id1", -1.23)))},
 			args:   args{method: http.MethodGet, url: "/value/gauge/id1", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "-1.23", contentType: "text/plain; charset=utf-8"},
 		},

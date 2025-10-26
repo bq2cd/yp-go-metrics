@@ -39,12 +39,13 @@ type server struct {
 	config      config.Config
 	router      http.Handler
 	snapshotter service.MetricSnapshotter
+	batchWriter service.StorageBatchWriter
 	lnFactory   ListenerFactory
 }
 
 // New creates an instance of a server process that runs
 // an HTTP server and other background tasks.
-func New(ctx context.Context, logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter) *server {
+func New(ctx context.Context, logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter, batchWriter service.StorageBatchWriter) *server {
 	l := logger
 	if l == nil {
 		l = log.NewNoopLogger()
@@ -55,6 +56,7 @@ func New(ctx context.Context, logger log.Logger, cfg config.Config, router http.
 		config:      cfg,
 		router:      router,
 		snapshotter: snapshotter,
+		batchWriter: batchWriter,
 		lnFactory:   &listenerFactory{},
 	}
 }
@@ -165,30 +167,49 @@ func (s *server) createPeriodicTask(f func() error) periodictask.Task {
 	return t
 }
 
-// Run launches main loop of the server focused on two things:
-// (1) listening on provided address and serving incoming HTTP requests;
-// (2) periodically dumping received metrics to disk;
-func (s *server) Run() error {
-	s.logger.Info().Any("config", s.config).Msg("starting with config")
-
-	s.tryLoadMetrics()
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, 1)
-
-	// launch http server
+func (s *server) launchHTTPServer(wg *sync.WaitGroup, errCh chan error) {
+	s.logger.Info().Msg("launching http server")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		errCh <- s.listenAndServe()
 	}()
+}
 
-	// launch metric dumper
+func (s *server) launchBatchWriter(wg *sync.WaitGroup) {
+	s.logger.Info().Msg("launching storage batch writer")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.batchWriter.StartProcessing(s.context)
+	}()
+}
+
+func (s *server) launchMetricDumper(wg *sync.WaitGroup, errCh chan error) {
+	s.logger.Info().Msg("launching metric dumper")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		errCh <- s.createPeriodicTask(s.dumpMetrics).Run()
 	}()
+}
+
+// Run launches main loop of the server focused on the following things:
+// (1) listening on provided address and serving incoming HTTP requests;
+// (2) processing batch metric writes via [service.StorageBatchWriter];
+// (2) periodically dumping received metrics to disk (if configured);
+func (s *server) Run() error {
+	s.logger.Info().Any("config", s.config).Msg("starting with config")
+
+	wg := new(sync.WaitGroup)
+	errCh := make(chan error, 2)
+
+	s.launchBatchWriter(wg)
+
+	s.tryLoadMetrics()
+
+	s.launchHTTPServer(wg, errCh)
+	s.launchMetricDumper(wg, errCh)
 
 	go func() {
 		wg.Wait()

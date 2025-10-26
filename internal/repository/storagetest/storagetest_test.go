@@ -15,7 +15,7 @@ func TestNewMockStorage(t *testing.T) {
 	}
 	type want struct {
 		isFaulty bool
-		metrics  map[model.MetricKey]model.Metric
+		metrics  model.MetricSet
 	}
 	tests := []struct {
 		name string
@@ -25,7 +25,7 @@ func TestNewMockStorage(t *testing.T) {
 		{
 			name: "default",
 			args: args{},
-			want: want{metrics: map[model.MetricKey]model.Metric{}},
+			want: want{metrics: model.NewMetricSet()},
 		},
 		{
 			name: "some metrics",
@@ -36,7 +36,7 @@ func TestNewMockStorage(t *testing.T) {
 				},
 			},
 			want: want{
-				metrics: map[model.MetricKey]model.Metric{
+				metrics: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", -3.3),
 				},
@@ -54,7 +54,7 @@ func TestNewMockStorage(t *testing.T) {
 				},
 			},
 			want: want{
-				metrics: map[model.MetricKey]model.Metric{
+				metrics: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", -5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", 4),
 					model.NewMetricKey(model.MetricTypeCounter, "id3"): model.NewCounterMetric("id3", 15),
@@ -73,7 +73,7 @@ func TestNewMockStorage(t *testing.T) {
 
 func TestMockStorage_Get(t *testing.T) {
 	type fields struct {
-		data      map[model.MetricKey]model.Metric
+		data      model.MetricSet
 		isFaulty  bool
 		triggerID string
 	}
@@ -90,7 +90,7 @@ func TestMockStorage_Get(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{},
+				data: model.NewMetricSet(),
 			},
 			args: args{k: model.NewMetricKey(model.MetricTypeCounter, "id1")},
 			want: model.Metric{},
@@ -101,7 +101,7 @@ func TestMockStorage_Get(t *testing.T) {
 		{
 			name: "normal get",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", -3.3),
 				},
@@ -117,7 +117,7 @@ func TestMockStorage_Get(t *testing.T) {
 			fields: fields{
 				isFaulty:  true,
 				triggerID: "zztop",
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"):   model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeCounter, "zztop"): model.NewCounterMetric(FaultyStorageErrorTrigger, 17),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):     model.NewGaugeMetric("id2", -3.3),
@@ -146,7 +146,7 @@ func TestMockStorage_Get(t *testing.T) {
 
 func TestMockStorage_GetAll(t *testing.T) {
 	type fields struct {
-		data      map[model.MetricKey]model.Metric
+		data      model.MetricSet
 		isFaulty  bool
 		triggerID string
 	}
@@ -162,14 +162,14 @@ func TestMockStorage_GetAll(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{},
+				data: model.NewMetricSet(),
 			},
 			want: want{metrics: []model.Metric{}},
 		},
 		{
 			name: "some metrics",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id3"): model.NewCounterMetric("id3", -8),
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", -3.3),
@@ -186,7 +186,7 @@ func TestMockStorage_GetAll(t *testing.T) {
 			fields: fields{
 				isFaulty:  true,
 				triggerID: "tada",
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id3"): model.NewCounterMetric("id3", -8),
 					model.NewMetricKey(model.MetricTypeGauge, "tada"):  model.NewGaugeMetric("tada", 1.8),
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
@@ -217,7 +217,7 @@ func TestMockStorage_GetAll(t *testing.T) {
 
 func TestMockStorage_Set(t *testing.T) {
 	type fields struct {
-		data      map[model.MetricKey]model.Metric
+		data      model.MetricSet
 		isFaulty  bool
 		triggerID string
 	}
@@ -237,7 +237,7 @@ func TestMockStorage_Set(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{},
+				data: model.NewMetricSet(),
 			},
 			args: args{m: model.NewCounterMetric("id1", 5)},
 			want: want{m: model.NewCounterMetric("id1", 5)},
@@ -245,7 +245,7 @@ func TestMockStorage_Set(t *testing.T) {
 		{
 			name: "add new",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", -3.3),
 				},
@@ -256,7 +256,7 @@ func TestMockStorage_Set(t *testing.T) {
 		{
 			name: "overwrite existing",
 			fields: fields{
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", -3.3),
 				},
@@ -269,7 +269,7 @@ func TestMockStorage_Set(t *testing.T) {
 			fields: fields{
 				isFaulty:  true,
 				triggerID: "oops",
-				data: map[model.MetricKey]model.Metric{
+				data: model.MetricSet{
 					model.NewMetricKey(model.MetricTypeCounter, "id1"): model.NewCounterMetric("id1", 5),
 					model.NewMetricKey(model.MetricTypeGauge, "id2"):   model.NewGaugeMetric("id2", -3.3),
 				},
@@ -302,7 +302,7 @@ func TestMockStorage_Set(t *testing.T) {
 
 func TestMockStorage_MakeFaulty(t *testing.T) {
 	type fields struct {
-		data      map[model.MetricKey]model.Metric
+		data      model.MetricSet
 		isFaulty  bool
 		triggerID string
 	}
@@ -316,12 +316,12 @@ func TestMockStorage_MakeFaulty(t *testing.T) {
 	}{
 		{
 			name:   "normal -> faulty",
-			fields: fields{data: map[model.MetricKey]model.Metric{}, isFaulty: false, triggerID: "something"},
+			fields: fields{data: model.NewMetricSet(), isFaulty: false, triggerID: "something"},
 			want:   want{isFaulty: true},
 		},
 		{
 			name:   "faulty -> faulty",
-			fields: fields{data: map[model.MetricKey]model.Metric{}, isFaulty: true, triggerID: "something"},
+			fields: fields{data: model.NewMetricSet(), isFaulty: true, triggerID: "something"},
 			want:   want{isFaulty: true},
 		},
 	}
@@ -339,7 +339,7 @@ func TestMockStorage_MakeFaulty(t *testing.T) {
 
 func TestMockStorage_MakeNormal(t *testing.T) {
 	type fields struct {
-		data      map[model.MetricKey]model.Metric
+		data      model.MetricSet
 		isFaulty  bool
 		triggerID string
 	}
@@ -353,12 +353,12 @@ func TestMockStorage_MakeNormal(t *testing.T) {
 	}{
 		{
 			name:   "normal -> normal",
-			fields: fields{data: map[model.MetricKey]model.Metric{}, isFaulty: false, triggerID: "something"},
+			fields: fields{data: model.NewMetricSet(), isFaulty: false, triggerID: "something"},
 			want:   want{isFaulty: false},
 		},
 		{
 			name:   "faulty -> normal",
-			fields: fields{data: map[model.MetricKey]model.Metric{}, isFaulty: true, triggerID: "something"},
+			fields: fields{data: model.NewMetricSet(), isFaulty: true, triggerID: "something"},
 			want:   want{isFaulty: false},
 		},
 	}
@@ -370,6 +370,342 @@ func TestMockStorage_MakeNormal(t *testing.T) {
 				triggerID: tt.fields.triggerID,
 			}
 			assert.Equal(t, tt.want.isFaulty, s.MakeNormal().isFaulty)
+		})
+	}
+}
+
+func TestMockStorage_GetMulti(t *testing.T) {
+	type fields struct {
+		data      model.MetricSet
+		isFaulty  bool
+		triggerID string
+	}
+	type args struct {
+		keys model.MetricKeySet
+	}
+	type want struct {
+		got     []model.Metric
+		wantErr func(testing.TB, error)
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"empty storage, empty keys requested": {
+			fields: fields{
+				data: model.NewMetricSet(),
+			},
+			args: args{keys: model.NewMetricKeySet()},
+			want: want{
+				got: []model.Metric{},
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"empty storage, multiple keys requested": {
+			fields: fields{
+				data: model.NewMetricSet(),
+			},
+			args: args{keys: model.NewMetricKeySet(
+				model.NewMetricKey(model.MetricTypeCounter, "id1"),
+				model.NewMetricKey(model.MetricTypeCounter, "id2"),
+			)},
+			want: want{
+				got: []model.Metric{},
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, single key requested": {
+			fields: fields{
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.NewGaugeMetric("id4", 1.5),
+				),
+			},
+			args: args{keys: model.NewMetricKeySet(
+				model.NewMetricKey(model.MetricTypeCounter, "id2"),
+			)},
+			want: want{
+				got: []model.Metric{
+					model.NewCounterMetric("id2", 15),
+				},
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, multiple keys requested": {
+			fields: fields{
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+				),
+			},
+			args: args{keys: model.NewMetricKeySet(
+				model.NewMetricKey(model.MetricTypeCounter, "id5"),
+				model.NewMetricKey(model.MetricTypeGauge, "id4"),
+			)},
+			want: want{
+				got: []model.Metric{
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id5", -15),
+				},
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, multiple keys requested, non-existent metrics skipped": {
+			fields: fields{
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+				),
+			},
+			args: args{keys: model.NewMetricKeySet(
+				model.NewMetricKey(model.MetricTypeCounter, "id5"),
+				model.NewMetricKey(model.MetricTypeGauge, "id4"),
+				model.NewMetricKey(model.MetricTypeCounter, "id3"),
+				model.NewMetricKey(model.MetricTypeGauge, "id2"),
+			)},
+			want: want{
+				got: []model.Metric{
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id5", -15),
+				},
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, multiple keys requested, empty metrics skipped": {
+			fields: fields{
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.Metric{Type: model.MetricTypeGauge, ID: "id4"},
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+				),
+			},
+			args: args{keys: model.NewMetricKeySet(
+				model.NewMetricKey(model.MetricTypeCounter, "id5"),
+				model.NewMetricKey(model.MetricTypeGauge, "id4"),
+			)},
+			want: want{
+				got: []model.Metric{
+					model.NewCounterMetric("id5", -15),
+				},
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, multiple keys requested, faulty metrics cause error and partial result": {
+			fields: fields{
+				isFaulty:  true,
+				triggerID: "never-again",
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.NewCounterMetric("never-again", 17),
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+				),
+			},
+			args: args{keys: model.NewMetricKeySet(
+				model.NewMetricKey(model.MetricTypeCounter, "id5"),
+				model.NewMetricKey(model.MetricTypeGauge, "id4"),
+				model.NewMetricKey(model.MetricTypeCounter, "never-again"),
+			)},
+			want: want{
+				got: []model.Metric{
+					model.NewCounterMetric("id5", -15),
+				},
+				wantErr: func(t testing.TB, err error) {
+					require.ErrorIs(t, err, ErrFaultyStorage)
+				},
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &MockStorage{
+				data:      tt.fields.data,
+				isFaulty:  tt.fields.isFaulty,
+				triggerID: tt.fields.triggerID,
+			}
+			got, err := s.GetMulti(t.Context(), tt.args.keys)
+			tt.want.wantErr(t, err)
+			assert.ElementsMatch(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestMockStorage_SetMulti(t *testing.T) {
+	type fields struct {
+		data      model.MetricSet
+		isFaulty  bool
+		triggerID string
+	}
+	type args struct {
+		metrics model.MetricSet
+	}
+	type want struct {
+		got     model.MetricSet
+		wantErr func(testing.TB, error)
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"empty storage, empty metrics, nothing happens": {
+			fields: fields{
+				data: model.NewMetricSet(),
+			},
+			args: args{metrics: model.NewMetricSet()},
+			want: want{
+				got: model.NewMetricSet(),
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"empty storage, single metric": {
+			fields: fields{
+				data: model.NewMetricSet(),
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewCounterMetric("id1", 5),
+			)},
+			want: want{
+				got: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+				),
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"empty storage, multiple metrics": {
+			fields: fields{
+				data: model.NewMetricSet(),
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewCounterMetric("id1", 5),
+				model.NewCounterMetric("id2", 15),
+				model.NewGaugeMetric("id3", 0.5),
+				model.NewGaugeMetric("id4", 1.5),
+				model.NewCounterMetric("id5", -15),
+				model.NewGaugeMetric("id6", -0.5),
+			)},
+			want: want{
+				got: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+				),
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, multiple metrics, existing overwritten": {
+			fields: fields{
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id7", -18),
+				),
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewCounterMetric("id1", 5),
+				model.NewCounterMetric("id2", -15),
+				model.NewGaugeMetric("id3", 0.5),
+				model.NewGaugeMetric("id4", -1.5),
+				model.NewCounterMetric("id5", -15),
+				model.NewGaugeMetric("id6", -0.5),
+			)},
+			want: want{
+				got: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", -15),
+					model.NewGaugeMetric("id3", 0.5),
+					model.NewGaugeMetric("id4", -1.5),
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+					model.NewCounterMetric("id7", -18),
+				),
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"non-empty storage, multiple metrics, faulty metrics partial update": {
+			fields: fields{
+				isFaulty:  true,
+				triggerID: "never-again",
+				data: model.NewMetricSet(
+					model.NewCounterMetric("id2", 15),
+					model.NewGaugeMetric("id4", 1.5),
+					model.NewCounterMetric("id7", -18),
+				),
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewCounterMetric("id1", 5),
+				model.NewCounterMetric("id2", -15),
+				model.NewGaugeMetric("never-again", 0.5),
+				model.NewGaugeMetric("id4", -1.5),
+				model.NewCounterMetric("id5", -15),
+				model.NewGaugeMetric("id6", -0.5),
+			)},
+			want: want{
+				got: model.NewMetricSet(
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", -15),
+					model.NewGaugeMetric("id4", -1.5),
+					model.NewCounterMetric("id5", -15),
+					model.NewGaugeMetric("id6", -0.5),
+					model.NewCounterMetric("id7", -18),
+				),
+				wantErr: func(t testing.TB, err error) {
+					require.ErrorIs(t, err, ErrFaultyStorage)
+				},
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			s := &MockStorage{
+				data:      tt.fields.data,
+				isFaulty:  tt.fields.isFaulty,
+				triggerID: tt.fields.triggerID,
+			}
+			err := s.SetMulti(t.Context(), tt.args.metrics)
+			tt.want.wantErr(t, err)
+			assert.Equal(t, tt.want.got, s.data)
 		})
 	}
 }

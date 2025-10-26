@@ -2,21 +2,20 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
-type memStorageData map[model.MetricKey]model.Metric
-
 type memStorage struct {
-	data memStorageData
+	data model.MetricSet
 	mu   sync.RWMutex
 }
 
-// NewMemStorage initialises an empty memory storage
+// NewMemStorage initializes an empty memory storage
 func NewMemStorage() *memStorage {
-	return &memStorage{data: make(memStorageData)}
+	return &memStorage{data: model.NewMetricSet()}
 }
 
 // Get retrieves a metric by its hash from in-memory map.
@@ -62,4 +61,30 @@ func (s *memStorage) Set(_ context.Context, metric model.Metric) error {
 
 	s.data[metric.Key()] = metric
 	return nil
+}
+
+// GetMulti retrieves multiple metrics in a single go (essentially calling [Get] for each metric).
+func (s *memStorage) GetMulti(ctx context.Context, keys model.MetricKeySet) ([]model.Metric, error) {
+	var errFinal error
+	metrics := make([]model.Metric, 0, len(keys))
+	for key := range keys {
+		m, err := s.Get(ctx, key)
+		if err == ErrMetricNotFound {
+			continue
+		}
+		errFinal = errors.Join(errFinal, err)
+		if !m.Empty() {
+			metrics = append(metrics, m)
+		}
+	}
+	return metrics, errFinal
+}
+
+// SetMulti stores multiple metrics in a single go (essentially calling [Set] for each metric).
+func (s *memStorage) SetMulti(ctx context.Context, metrics model.MetricSet) error {
+	var errFinal error
+	for _, m := range metrics {
+		errFinal = errors.Join(errFinal, s.Set(ctx, m))
+	}
+	return errFinal
 }

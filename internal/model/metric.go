@@ -188,6 +188,9 @@ func NewMetricSet(metrics ...Metric) MetricSet {
 func NewMetricSetWithStrategy(strategy MetricAggregateStrategy, metrics ...Metric) MetricSet {
 	unique := make(MetricSet, len(metrics))
 	for _, m := range metrics {
+		if m.Empty() {
+			continue
+		}
 		prev, ok := unique[m.Key()]
 		switch strategy {
 		case MetricAggregateStrategyFirstValueWins:
@@ -220,4 +223,13 @@ func (ms MetricSet) GroupByType() map[MetricType]MetricSet {
 		group[m.Type][m.Key()] = m
 	}
 	return group
+}
+
+// Keys return only metric keys in a [MetricKeySet] form.
+func (ms MetricSet) Keys() MetricKeySet {
+	keys := make(MetricKeySet, len(ms))
+	for key := range ms {
+		keys[key] = struct{}{}
+	}
+	return keys
 }

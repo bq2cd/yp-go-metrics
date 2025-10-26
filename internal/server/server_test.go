@@ -105,6 +105,23 @@ func (m *mockMetricSnapshotter) C() <-chan struct{} {
 	return m.notifyCh
 }
 
+type mockStorageBatchWriter struct {
+	mock.Mock
+}
+
+func newMockStorageBatchWriter() *mockStorageBatchWriter {
+	return &mockStorageBatchWriter{}
+}
+
+func (m *mockStorageBatchWriter) WriteBatch(ctx context.Context, batch service.MetricBatch) service.MetricBatchTx {
+	m.Called(ctx, batch)
+	return nil
+}
+
+func (m *mockStorageBatchWriter) StartProcessing(ctx context.Context) {
+	m.Called(ctx)
+}
+
 func createTempFile(t *testing.T, pattern string) string {
 	f, err := os.CreateTemp("", pattern)
 	require.NoError(t, err)
@@ -119,6 +136,7 @@ func TestNew(t *testing.T) {
 		cfg         config.Config
 		router      http.Handler
 		snapshotter service.MetricSnapshotter
+		batchWriter service.StorageBatchWriter
 	}
 	tests := []struct {
 		name      string
@@ -135,6 +153,7 @@ func TestNew(t *testing.T) {
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
 				assert.Nil(t, s.snapshotter)
+				assert.Nil(t, s.batchWriter)
 				assert.NotNil(t, s.lnFactory)
 				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
 			},
@@ -147,6 +166,7 @@ func TestNew(t *testing.T) {
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
 				assert.Nil(t, s.snapshotter)
+				assert.Nil(t, s.batchWriter)
 				assert.NotNil(t, s.lnFactory)
 				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
 			},
@@ -159,6 +179,7 @@ func TestNew(t *testing.T) {
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
 				assert.Nil(t, s.snapshotter)
+				assert.Nil(t, s.batchWriter)
 				assert.NotNil(t, s.lnFactory)
 				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
 			},
@@ -171,6 +192,7 @@ func TestNew(t *testing.T) {
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Equal(t, args.router, s.router)
 				assert.Nil(t, s.snapshotter)
+				assert.Nil(t, s.batchWriter)
 				assert.NotNil(t, s.lnFactory)
 				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
 			},
@@ -183,6 +205,20 @@ func TestNew(t *testing.T) {
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Equal(t, args.router, s.router)
 				assert.Equal(t, args.snapshotter, s.snapshotter)
+				assert.Nil(t, s.batchWriter)
+				assert.NotNil(t, s.lnFactory)
+				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
+			},
+		},
+		{
+			name: "ctx + router + snapshotter",
+			args: args{ctx: context.Background(), router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter()},
+			assertion: func(t assert.TestingT, args args, s *server) {
+				assert.Equal(t, args.ctx, s.context)
+				assert.Equal(t, config.Config{}, s.config)
+				assert.Equal(t, args.router, s.router)
+				assert.Equal(t, args.snapshotter, s.snapshotter)
+				assert.Equal(t, args.batchWriter, s.batchWriter)
 				assert.NotNil(t, s.lnFactory)
 				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
 			},
@@ -190,7 +226,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, New(tt.args.ctx, tt.args.logger, tt.args.cfg, tt.args.router, tt.args.snapshotter))
+			tt.assertion(t, tt.args, New(tt.args.ctx, tt.args.logger, tt.args.cfg, tt.args.router, tt.args.snapshotter, tt.args.batchWriter))
 		})
 	}
 }
@@ -200,6 +236,7 @@ func Test_server_Run(t *testing.T) {
 		config      config.Config
 		router      *mockRouter
 		snapshotter *mockMetricSnapshotter
+		batchWriter *mockStorageBatchWriter
 		lnFactory   ListenerFactory
 	}
 	type innerTest struct {
@@ -224,6 +261,7 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout: 100 * time.Millisecond},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -250,6 +288,7 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout: 100 * time.Millisecond},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -275,6 +314,7 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout: 200 * time.Millisecond},
 						router:      &mockRouter{timeout: 2_000 * time.Millisecond},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -303,6 +343,7 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout: 100 * time.Millisecond},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &faultyListenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -335,6 +376,7 @@ func Test_server_Run(t *testing.T) {
 						},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -363,6 +405,7 @@ func Test_server_Run(t *testing.T) {
 						},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -396,6 +439,7 @@ func Test_server_Run(t *testing.T) {
 						},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -433,7 +477,8 @@ func Test_server_Run(t *testing.T) {
 							}()
 							return m
 						}(),
-						lnFactory: &listenerFactory{},
+						batchWriter: newMockStorageBatchWriter(),
+						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -466,6 +511,7 @@ func Test_server_Run(t *testing.T) {
 						},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -495,6 +541,7 @@ func Test_server_Run(t *testing.T) {
 						},
 						router:      &mockRouter{},
 						snapshotter: newMockMetricSnapshotter(),
+						batchWriter: newMockStorageBatchWriter(),
 						lnFactory:   &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
@@ -533,11 +580,13 @@ func Test_server_Run(t *testing.T) {
 						config:      tt.fields.config,
 						router:      tt.fields.router,
 						snapshotter: tt.fields.snapshotter,
+						batchWriter: tt.fields.batchWriter,
 						lnFactory:   tt.fields.lnFactory,
 					}
 
 					tt.fields.router.On("ServeHTTP", mock.Anything, mock.Anything).Return()
 					tt.expectSnapshotter(t, tt.fields.snapshotter)
+					tt.fields.batchWriter.On("StartProcessing", ctx).Return().Once()
 
 					errCh := make(chan error, 1)
 					go func() {
@@ -551,6 +600,7 @@ func Test_server_Run(t *testing.T) {
 
 					tt.assertRouter(t, tt.fields.router, req, errCh)
 					tt.assertSnapshotter(t, tt.fields.snapshotter)
+					tt.fields.batchWriter.AssertExpectations(t)
 				})
 			}
 		})

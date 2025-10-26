@@ -42,7 +42,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				metrics:   service.NewMetricStorer(storagetest.NewMockStorage()),
+				metrics:   newMetricStorer(t, storagetest.NewMockStorage()),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
@@ -57,7 +57,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "empty metric key",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
@@ -75,7 +75,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "invalid content-type",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
@@ -93,7 +93,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "invalid json",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
@@ -111,7 +111,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "metric not found",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
@@ -129,7 +129,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "faulty storage",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				).MakeFaulty()),
@@ -147,7 +147,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "metric found",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
@@ -165,7 +165,7 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "json encoder error",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
