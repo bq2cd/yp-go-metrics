@@ -3,8 +3,8 @@ package source
 import (
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source/extra"
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source/memstats"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/extra"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/memstats"
 	"github.com/stretchr/testify/assert"
 )
 

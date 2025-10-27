@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )

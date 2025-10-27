@@ -6,9 +6,9 @@ import (
 	"maps"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source"
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source/extra"
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source/memstats"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/extra"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/memstats"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"

@@ -2,30 +2,77 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"sync"
+	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	"github.com/go-resty/resty/v2"
+	"github.com/bq2cd/yp-go-metrics/pkg/periodictask"
 )
 
-// Run is an app entry point to launch an agent process.
-func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
-	logger.Info().
-		Dur("poll_interval", cfg.PollInterval).
-		Dur("report_interval", cfg.ReportInterval).
-		Str("upstream", cfg.UpstreamURL.String()).
-		Msg("will send metrics at configured intervals")
+type agent struct {
+	config    config.Config
+	collector Collector
+	reporter  Reporter
+}
 
-	collector := agent.NewCollector(source.DefaultSources(), repository.NewMemStorage())
+// New creates an instance of an agent process which runs
+// metrics collector and reporter.
+func New(cfg config.Config, collector Collector, reporter Reporter) *agent {
+	return &agent{config: cfg, collector: collector, reporter: reporter}
+}
 
-	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
-	sender := agent.NewSenderJSON(client)
-	reporter := agent.NewReporter(sender, repository.NewMemStorage())
+// runPeriodicTask executes given task function at a given interval
+// with optionally different initial delay before the first execution.
+// This is a blocking call and is typically used in a goroutine.
+// Supports cancellation via context.
+func runPeriodicTask(ctx context.Context, interval time.Duration, taskFn func(context.Context) error, initialDelay time.Duration) error {
+	t := periodictask.NewTimerTask(interval, taskFn, initialDelay)
+	return t.Run(ctx)
+}
 
-	ag := agent.New(cfg, collector, reporter)
+func (a *agent) doReport(ctx context.Context) error {
+	var errFinal error
+	metrics, err := a.collector.Snapshot(ctx)
+	errFinal = errors.Join(errFinal, err, a.reporter.Report(ctx, metrics))
+	return errFinal
+}
 
-	return ag.Run(ctx)
+// Run launches main loop of the agent worker:
+// collecting metrics and reporting them back to a server.
+func (a *agent) Run(ctx context.Context) error {
+	var (
+		errRun error
+		wg     sync.WaitGroup
+	)
+
+	errCh := make(chan error, 2)
+
+	// launch poller (with first poll happening without delay)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errCh <- runPeriodicTask(ctx, a.config.PollInterval, a.collector.Collect, 0)
+	}()
+
+	// launch reporter
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errCh <- runPeriodicTask(ctx, a.config.ReportInterval, a.doReport, a.config.ReportInterval)
+	}()
+
+	// wait for poller and reporter in a goroutine
+	// in order to consume from errCh in the main thread.
+	// NB. both goroutines will stop when a.context is cancelled.
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	for err := range errCh {
+		errRun = errors.Join(errRun, err)
+	}
+
+	return errRun
 }
