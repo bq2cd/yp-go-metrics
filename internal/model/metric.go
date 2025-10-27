@@ -225,11 +225,43 @@ func (ms MetricSet) GroupByType() map[MetricType]MetricSet {
 	return group
 }
 
-// Keys return only metric keys in a [MetricKeySet] form.
+// Empty returns true if metric set contains no metrics.
+func (ms MetricSet) Empty() bool {
+	return len(ms) == 0
+}
+
+// Upsert adds provided metric to the set or overrides
+// existing if it has the matching key.
+// Empty metric is ignored
+func (ms MetricSet) Upsert(m Metric) {
+	if m.Empty() {
+		return
+	}
+	ms[m.Key()] = m
+}
+
+// Merge adds metrics from `other` into the current set
+// and overrides any existing metrics with matching keys.
+func (ms MetricSet) Merge(other MetricSet) {
+	for _, m := range other {
+		ms.Upsert(m)
+	}
+}
+
+// Keys returns only metric keys in a [MetricKeySet] form.
 func (ms MetricSet) Keys() MetricKeySet {
 	keys := make(MetricKeySet, len(ms))
 	for key := range ms {
 		keys[key] = struct{}{}
 	}
 	return keys
+}
+
+// Values returns only metrics as a slice
+func (ms MetricSet) Values() []Metric {
+	values := make([]Metric, 0, len(ms))
+	for _, m := range ms {
+		values = append(values, m)
+	}
+	return values
 }

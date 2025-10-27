@@ -1011,3 +1011,81 @@ func TestMetricSet_Keys(t *testing.T) {
 		})
 	}
 }
+
+func TestMetricSet_Empty(t *testing.T) {
+	type want struct {
+		got bool
+	}
+	type testcase struct {
+		ms   MetricSet
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.ms.Empty()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestMetricSet_Upsert(t *testing.T) {
+	type args struct {
+		m Metric
+	}
+	type want struct {
+	}
+	type testcase struct {
+		ms   MetricSet
+		args args
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tt.ms.Upsert(tt.args.m)
+		})
+	}
+}
+
+func TestMetricSet_Merge(t *testing.T) {
+	type args struct {
+		other MetricSet
+	}
+	type want struct {
+	}
+	type testcase struct {
+		ms   MetricSet
+		args args
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tt.ms.Merge(tt.args.other)
+		})
+	}
+}
+
+func TestMetricSet_Values(t *testing.T) {
+	type want struct {
+		got []Metric
+	}
+	type testcase struct {
+		ms   MetricSet
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.ms.Values()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

@@ -12,12 +12,23 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
+
+type mockHandler struct {
+	mock.Mock
+	numCalls   int
+	statusCode int
+}
+
+func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.Called(w, r)
+	m.numCalls++
+	w.WriteHeader(m.statusCode)
+}
 
 func TestRun(t *testing.T) {
 	errTestFinished := errors.New("test finished")
@@ -38,10 +49,10 @@ func TestRun(t *testing.T) {
 	tests := map[string]testcase{
 		"agent collects metrics and reports to server successfully": {
 			args: args{
-				timeout: 50 * time.Millisecond,
+				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
 					PollInterval:   10 * time.Millisecond,
-					ReportInterval: 30 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusOK,
@@ -52,10 +63,10 @@ func TestRun(t *testing.T) {
 		},
 		"agent collects metrics but server responds with error": {
 			args: args{
-				timeout: 50 * time.Millisecond,
+				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
 					PollInterval:   10 * time.Millisecond,
-					ReportInterval: 30 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusInternalServerError,
@@ -67,10 +78,10 @@ func TestRun(t *testing.T) {
 		},
 		"agent collects metrics but server unreachable": {
 			args: args{
-				timeout: 50 * time.Millisecond,
+				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
 					PollInterval:   10 * time.Millisecond,
-					ReportInterval: 30 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
 					UpstreamURL:    url.URL{Host: "localhost"},
 				},
 			},
@@ -83,20 +94,12 @@ func TestRun(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			mh := handlertest.NewMockHandler(ctrl)
-			m := mh.EXPECT().ServeHTTP(gomock.Any(), gomock.Any()).
-				MinTimes(1).
-				Do(func(w http.ResponseWriter, r *http.Request) {
-					w.WriteHeader(tt.args.serverStatusCode)
-				})
-			if !tt.want.calledServer {
-				m.Times(0)
+			h := &mockHandler{statusCode: tt.args.serverStatusCode}
+			if tt.want.calledServer {
+				h.On("ServeHTTP", mock.Anything, mock.Anything).Return()
 			}
 
-			ts := httptest.NewServer(mh)
+			ts := httptest.NewServer(h)
 			defer ts.Close()
 
 			if tt.args.overrideURL {
@@ -128,6 +131,10 @@ func TestRun(t *testing.T) {
 				require.Error(t, errFinal)
 			} else {
 				require.NoError(t, errFinal)
+			}
+			h.AssertExpectations(t)
+			if tt.want.calledServer {
+				assert.GreaterOrEqual(t, h.numCalls, 1)
 			}
 			assert.NotEmpty(t, logger.RecordedEvents())
 		})

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -57,7 +56,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 		want   want
 	}{
 		{
-			name: "send counter without value",
+			name: "send counter without value, newly reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(),
@@ -74,7 +73,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send counter without value 2",
+			name: "send counter without value, previously reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
@@ -91,7 +90,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send gauge without value",
+			name: "send gauge without value, newly reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(),
@@ -108,7 +107,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send counter",
+			name: "send counter, newly reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(),
@@ -123,7 +122,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send counter 2",
+			name: "send counter, previously reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
@@ -138,7 +137,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send counter 3",
+			name: "send counter, previously reported with the same value",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5)),
@@ -153,7 +152,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send gauge",
+			name: "send gauge, newly reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(),
@@ -168,7 +167,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "send gauge 2",
+			name: "send gauge, previously reported",
 			fields: fields{
 				sender:   &mockSender{},
 				reported: storagetest.NewMockStorage(model.NewGaugeMetric("id1", 3.8)),
@@ -183,10 +182,12 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "sender error",
+			name: "sender error, newly reported",
 			fields: fields{
 				sender: &mockSender{
-					wantErr: func(m model.Metric) error { return errors.New("something went wrong") },
+					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
+						return nil, errors.New("something went wrong")
+					},
 				},
 				reported: storagetest.NewMockStorage(),
 			},
@@ -200,10 +201,12 @@ func Test_reporter_reportSingle(t *testing.T) {
 			},
 		},
 		{
-			name: "sender error 2",
+			name: "sender error, previously reported",
 			fields: fields{
 				sender: &mockSender{
-					wantErr: func(m model.Metric) error { return errors.New("something went wrong") },
+					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
+						return nil, errors.New("something went wrong")
+					},
 				},
 				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 10)),
 			},
@@ -223,7 +226,7 @@ func Test_reporter_reportSingle(t *testing.T) {
 				sender:   tt.fields.sender,
 				reported: tt.fields.reported,
 			}
-			tt.fields.sender.On("Send", tt.want.metricSent).Return(mock.AnythingOfType("error"))
+			tt.fields.sender.On("SendBatch", t.Context(), model.NewMetricSet(tt.want.metricSent)).Return(mock.AnythingOfType("error"))
 			metric := tt.args.metric.Copy()
 
 			err := r.reportSingle(t.Context(), metric)
@@ -248,8 +251,8 @@ func Test_reporter_reportSingle(t *testing.T) {
 
 func TestNewReporter(t *testing.T) {
 	type args struct {
-		sender  Sender
-		storage repository.Storage
+		sender  *mockSender
+		storage *storagetest.MockStorage
 	}
 	tests := []struct {
 		name      string
@@ -393,7 +396,7 @@ func Test_reporter_Report(t *testing.T) {
 				storedMetrics: []model.Metric{},
 			},
 			assertion: func(t *testing.T, err error) {
-				assert.Error(t, err)
+				assert.NoError(t, err)
 			},
 		},
 		{
@@ -440,7 +443,7 @@ func Test_reporter_Report(t *testing.T) {
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -10), model.NewCounterMetric("id1", 7)},
 			},
 			want: want{
-				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -15), model.NewCounterMetric("id1", 17)},
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 7)},
 				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 7)},
 			},
 			assertion: func(t *testing.T, err error) {
@@ -468,11 +471,17 @@ func Test_reporter_Report(t *testing.T) {
 			name: "sender error on single metric",
 			fields: fields{
 				sender: &mockSender{
-					wantErr: func(m model.Metric) error {
-						if m.Type == model.MetricTypeGauge && m.ID == "id1" {
-							return errors.New("no luck here")
+					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
+						sent := model.NewMetricSet()
+						var err error
+						for _, m := range metrics {
+							if m.Type == model.MetricTypeGauge && m.ID == "id1" {
+								err = errors.New("no luck here")
+								continue
+							}
+							sent.Upsert(m)
 						}
-						return nil
+						return sent, err
 					},
 				},
 				reported: storagetest.NewMockStorage(),
@@ -481,7 +490,7 @@ func Test_reporter_Report(t *testing.T) {
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
 			},
 			want: want{
-				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id2", -3.01)},
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
 				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id2", -3.01)},
 			},
 			assertion: func(t *testing.T, err error) {
@@ -495,14 +504,16 @@ func Test_reporter_Report(t *testing.T) {
 				sender:   tt.fields.sender,
 				reported: tt.fields.reported,
 			}
-			sender := tt.fields.sender.On("Send", mock.AnythingOfType("model.Metric")).Return(mock.AnythingOfType("error"))
+			if len(tt.want.sentMetrics) > 0 {
+				tt.fields.sender.On("SendBatch", t.Context(), mock.MatchedBy(func(metrics model.MetricSet) bool {
+					return assert.Equal(t, model.NewMetricSet(tt.want.sentMetrics...), metrics)
+				})).Return(mock.Anything, mock.AnythingOfType("error"))
+			}
 
 			err := r.Report(t.Context(), tt.args.metrics)
 
 			tt.assertion(t, err)
-			for _, m := range tt.want.sentMetrics {
-				sender.Parent.AssertCalled(t, "Send", m)
-			}
+			tt.fields.sender.AssertExpectations(t)
 			for _, m := range tt.want.storedMetrics {
 				got, err := tt.fields.reported.Get(t.Context(), m.Key())
 				require.NoError(t, err)

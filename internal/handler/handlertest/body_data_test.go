@@ -543,3 +543,26 @@ func TestBodyData_AssertEqual(t *testing.T) {
 		})
 	}
 }
+
+func TestNewBodyDataFromMetrics(t *testing.T) {
+	type args struct {
+		t       testing.TB
+		metrics []model.Metric
+	}
+	type want struct {
+		got BodyData
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := NewBodyDataFromMetrics(tt.args.t, tt.args.metrics)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

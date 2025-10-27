@@ -18,13 +18,13 @@ type Reporter interface {
 }
 
 type reporter struct {
-	sender   Sender
-	reported repository.Storage
+	sender   SenderBatch
+	reported repository.StorageMulti
 }
 
 // NewReporter creates an instance of the default reporter with
 // specified internal storage.
-func NewReporter(sender Sender, storage repository.Storage) *reporter {
+func NewReporter(sender SenderBatch, storage repository.StorageMulti) *reporter {
 	return &reporter{sender: sender, reported: storage}
 }
 
@@ -34,7 +34,7 @@ func (r *reporter) getSendableMetric(ctx context.Context, metric model.Metric) m
 		// This includes cases where metric was not found or a storage error;
 		// to avoid dropping metrics in case of storage error, we prefer to send
 		// the full value instead.
-		// This behaviour can be changed in the future if needed.
+		// This behavior can be changed in the future if needed.
 		return metric
 	}
 
@@ -55,31 +55,49 @@ func (r *reporter) getSendableMetric(ctx context.Context, metric model.Metric) m
 	return metric
 }
 
+func (r *reporter) getSendableMetrics(ctx context.Context, orig model.MetricSet) model.MetricSet {
+	sendable := model.NewMetricSet()
+
+	for _, m := range orig {
+		sendable.Upsert(r.getSendableMetric(ctx, m))
+	}
+
+	return sendable
+}
+
+func (r *reporter) storeReported(ctx context.Context, orig, sent model.MetricSet) error {
+	reported := model.NewMetricSet()
+	for _, s := range sent {
+		if m, ok := orig[s.Key()]; ok {
+			reported.Upsert(m)
+		}
+	}
+	return r.reported.SetMulti(ctx, reported)
+}
+
 func (r *reporter) reportSingle(ctx context.Context, metric model.Metric) error {
 	if metric.Empty() {
 		return ErrReporterEmptyMetric
 	}
-	sendable := r.getSendableMetric(ctx, metric)
+	return r.reportBatch(ctx, []model.Metric{metric})
+}
 
-	err := r.sender.Send(sendable)
-	if err != nil {
-		return err
+func (r *reporter) reportBatch(ctx context.Context, metrics []model.Metric) error {
+	orig := model.NewMetricSet(metrics...)
+
+	sendable := r.getSendableMetrics(ctx, orig)
+	if sendable.Empty() {
+		return nil
 	}
 
-	// There is a chance of discrepancy here if the underlying storage would
-	// fail to store the metric.
-	// If that happens, we would report full value instead of delta.
-	// On the other hand, if we store metric in memory and restart the agent,
-	// we will still report the full value on the first report.
-	// This is something we would need to address at a later stage.
-	return r.reported.Set(ctx, metric)
+	sent, err := r.sender.SendBatch(ctx, sendable)
+
+	return errors.Join(err,
+		r.storeReported(ctx, orig, sent),
+	)
 }
 
 // Report sends incoming metrics to an upstream.
 func (r *reporter) Report(ctx context.Context, metrics []model.Metric) error {
-	var errFinal error
-	for _, m := range metrics {
-		errFinal = errors.Join(errFinal, r.reportSingle(ctx, m))
-	}
-	return errFinal
+	return r.reportBatch(ctx, metrics)
 }

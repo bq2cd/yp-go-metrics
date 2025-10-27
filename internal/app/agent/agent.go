@@ -22,7 +22,7 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	collector := agent.NewCollector(source.DefaultSources(), repository.NewMemStorage())
 
 	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
-	sender := agent.NewSenderJSON(ctx, client)
+	sender := agent.NewSenderJSON(client)
 	reporter := agent.NewReporter(sender, repository.NewMemStorage())
 
 	ag := agent.New(ctx, cfg, collector, reporter)
