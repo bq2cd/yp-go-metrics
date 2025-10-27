@@ -35,7 +35,6 @@ func (f *listenerFactory) Create(ctx context.Context, addr string) (net.Listener
 
 type server struct {
 	logger      log.Logger
-	context     context.Context
 	config      config.Config
 	router      http.Handler
 	snapshotter service.MetricSnapshotter
@@ -45,14 +44,13 @@ type server struct {
 
 // New creates an instance of a server process that runs
 // an HTTP server and other background tasks.
-func New(ctx context.Context, logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter, batchWriter service.StorageBatchWriter) *server {
+func New(logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter, batchWriter service.StorageBatchWriter) *server {
 	l := logger
 	if l == nil {
 		l = log.NewNoopLogger()
 	}
 	return &server{
 		logger:      l.With(log.Str("subsystem", "server")),
-		context:     ctx,
 		config:      cfg,
 		router:      router,
 		snapshotter: snapshotter,
@@ -61,10 +59,10 @@ func New(ctx context.Context, logger log.Logger, cfg config.Config, router http.
 	}
 }
 
-func (s *server) listenAndServe() error {
+func (s *server) listenAndServe(ctx context.Context) error {
 	s.logger.Info().Str("address", s.config.ListenAddress).Msg("listening for incoming connections")
 
-	ln, err := s.lnFactory.Create(s.context, s.config.ListenAddress)
+	ln, err := s.lnFactory.Create(ctx, s.config.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %v: %w", s.config.ListenAddress, err)
 	}
@@ -94,7 +92,7 @@ func (s *server) listenAndServe() error {
 	select {
 	case err := <-errCh:
 		return err
-	case <-s.context.Done():
+	case <-ctx.Done():
 		s.logger.Info().Dur("timeout", s.config.ShutdownTimeout).Msg("shutting down gracefully")
 		ctx, cancel := context.WithTimeout(baseCtx, s.config.ShutdownTimeout)
 		defer cancel()
@@ -102,7 +100,7 @@ func (s *server) listenAndServe() error {
 	}
 }
 
-func (s *server) tryLoadMetrics() {
+func (s *server) tryLoadMetrics(ctx context.Context) {
 	if !s.config.MetricStoreLoadOnStartup {
 		return
 	}
@@ -118,13 +116,13 @@ func (s *server) tryLoadMetrics() {
 		return
 	}
 	// snapshotter will close the reader
-	err = s.snapshotter.LoadClose(s.context, f)
+	err = s.snapshotter.LoadClose(ctx, f)
 	if err != nil {
 		l.Error().Err("error", err).Msg("failed to load metrics")
 	}
 }
 
-func (s *server) dumpMetrics() error {
+func (s *server) dumpMetrics(ctx context.Context) error {
 	if s.config.MetricStoreFilePath == "" {
 		return nil
 	}
@@ -136,7 +134,7 @@ func (s *server) dumpMetrics() error {
 		return fmt.Errorf("failed to open temporary file (%s): %w", tmpfname, err)
 	}
 	// snapshotter will close the writer
-	err = s.snapshotter.DumpClose(s.context, tmpf)
+	err = s.snapshotter.DumpClose(ctx, tmpf)
 	if err != nil {
 		return fmt.Errorf("failed to dump metrics: %w", err)
 	}
@@ -155,42 +153,42 @@ func (s *server) dumpMetrics() error {
 	return nil
 }
 
-func (s *server) createPeriodicTask(f func() error) periodictask.Task {
+func (s *server) createPeriodicTask(f func(context.Context) error) periodictask.Task {
 	var t periodictask.Task
 	if s.config.MetricStoreInterval == 0 {
-		taskFn := func(_ context.Context, _ struct{}) error { return f() }
-		t = periodictask.NewChanTask(s.context, s.snapshotter.C(), taskFn)
+		taskFn := func(ctx context.Context, _ struct{}) error { return f(ctx) }
+		t = periodictask.NewChanTask(s.snapshotter.C(), taskFn)
 	} else {
-		taskFn := func(_ context.Context) error { return f() }
-		t = periodictask.NewTimerTask(s.context, s.config.MetricStoreInterval, taskFn, s.config.MetricStoreInterval)
+		taskFn := func(ctx context.Context) error { return f(ctx) }
+		t = periodictask.NewTimerTask(s.config.MetricStoreInterval, taskFn, s.config.MetricStoreInterval)
 	}
 	return t
 }
 
-func (s *server) launchHTTPServer(wg *sync.WaitGroup, errCh chan error) {
+func (s *server) launchHTTPServer(ctx context.Context, wg *sync.WaitGroup, errCh chan error) {
 	s.logger.Info().Msg("launching http server")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- s.listenAndServe()
+		errCh <- s.listenAndServe(ctx)
 	}()
 }
 
-func (s *server) launchBatchWriter(wg *sync.WaitGroup) {
+func (s *server) launchBatchWriter(ctx context.Context, wg *sync.WaitGroup) {
 	s.logger.Info().Msg("launching storage batch writer")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.batchWriter.StartProcessing(s.context)
+		s.batchWriter.StartProcessing(ctx)
 	}()
 }
 
-func (s *server) launchMetricDumper(wg *sync.WaitGroup, errCh chan error) {
+func (s *server) launchMetricDumper(ctx context.Context, wg *sync.WaitGroup, errCh chan error) {
 	s.logger.Info().Msg("launching metric dumper")
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		errCh <- s.createPeriodicTask(s.dumpMetrics).Run()
+		errCh <- s.createPeriodicTask(s.dumpMetrics).Run(ctx)
 	}()
 }
 
@@ -198,18 +196,18 @@ func (s *server) launchMetricDumper(wg *sync.WaitGroup, errCh chan error) {
 // (1) listening on provided address and serving incoming HTTP requests;
 // (2) processing batch metric writes via [service.StorageBatchWriter];
 // (2) periodically dumping received metrics to disk (if configured);
-func (s *server) Run() error {
+func (s *server) Run(ctx context.Context) error {
 	s.logger.Info().Any("config", s.config).Msg("starting with config")
 
 	wg := new(sync.WaitGroup)
 	errCh := make(chan error, 2)
 
-	s.launchBatchWriter(wg)
+	s.launchBatchWriter(ctx, wg)
 
-	s.tryLoadMetrics()
+	s.tryLoadMetrics(ctx)
 
-	s.launchHTTPServer(wg, errCh)
-	s.launchMetricDumper(wg, errCh)
+	s.launchHTTPServer(ctx, wg, errCh)
+	s.launchMetricDumper(ctx, wg, errCh)
 
 	go func() {
 		wg.Wait()
@@ -224,7 +222,7 @@ func (s *server) Run() error {
 	// if metrics were not being dumped on every write,
 	// perform final dump (aka "flush") before shutdown.
 	if s.config.MetricStoreInterval > 0 {
-		errFinal = errors.Join(errFinal, s.dumpMetrics())
+		errFinal = errors.Join(errFinal, s.dumpMetrics(ctx))
 	}
 
 	return errFinal

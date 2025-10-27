@@ -30,7 +30,6 @@ func (m *mockTimerTask) doWork(ctx context.Context) error {
 
 func TestNewTimerTask(t *testing.T) {
 	type args struct {
-		ctx          context.Context
 		interval     time.Duration
 		taskFn       TaskTimerFn
 		initialDelay time.Duration
@@ -43,13 +42,11 @@ func TestNewTimerTask(t *testing.T) {
 		{
 			name: "default",
 			args: args{
-				ctx:          context.Background(),
 				interval:     1 * time.Millisecond,
 				taskFn:       func(ctx context.Context) error { return nil },
 				initialDelay: 0,
 			},
 			assertion: func(t *testing.T, args args, got *timerTask) {
-				assert.Equal(t, args.ctx, got.context)
 				assert.Equal(t, args.interval, got.interval)
 				assert.Equal(t, reflect.ValueOf(args.taskFn), reflect.ValueOf(got.taskFn))
 				assert.Equal(t, args.initialDelay, got.initialDelay)
@@ -58,7 +55,7 @@ func TestNewTimerTask(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewTimerTask(tt.args.ctx, tt.args.interval, tt.args.taskFn, tt.args.initialDelay))
+			tt.assertion(t, tt.args, NewTimerTask(tt.args.interval, tt.args.taskFn, tt.args.initialDelay))
 		})
 	}
 }
@@ -213,13 +210,12 @@ func Test_timerTask_Run(t *testing.T) {
 
 			tt.args.mockTask.On("doWork", mock.Anything).Return(mock.AnythingOfType("error")).Times(tt.want.calls)
 			tr := &timerTask{
-				context:      ctx,
 				taskFn:       tt.args.mockTask.doWork,
 				interval:     tt.args.interval,
 				initialDelay: tt.args.initialDelay,
 			}
 
-			err := tr.Run()
+			err := tr.Run(ctx)
 
 			tt.args.mockTask.AssertExpectations(t)
 			tt.assertion(t, tt.args.mockTask, err)

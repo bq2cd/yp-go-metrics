@@ -44,7 +44,6 @@ func (m *mockChanTask[T]) doWork(ctx context.Context, v T) error {
 
 func TestNewChanTask(t *testing.T) {
 	type args struct {
-		ctx      context.Context
 		incoming <-chan any
 		taskFn   TaskChanFn[any]
 	}
@@ -56,12 +55,10 @@ func TestNewChanTask(t *testing.T) {
 		{
 			name: "any",
 			args: args{
-				ctx:      context.Background(),
 				incoming: make(<-chan any),
 				taskFn:   func(ctx context.Context, v any) error { return nil },
 			},
 			assertion: func(t *testing.T, args args, got *chanTask[any]) {
-				assert.Equal(t, args.ctx, got.context)
 				assert.Equal(t, reflect.ValueOf(args.incoming), reflect.ValueOf(got.incoming))
 				assert.Equal(t, reflect.ValueOf(args.taskFn), reflect.ValueOf(got.taskFn))
 			},
@@ -69,7 +66,7 @@ func TestNewChanTask(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewChanTask(tt.args.ctx, tt.args.incoming, tt.args.taskFn))
+			tt.assertion(t, tt.args, NewChanTask(tt.args.incoming, tt.args.taskFn))
 		})
 	}
 }
@@ -165,14 +162,13 @@ func Test_chanTask_Run(t *testing.T) {
 
 			tt.args.mockTask.On("doWork", mock.Anything, mock.Anything).Return(mock.AnythingOfType("error"))
 			tr := &chanTask[any]{
-				context:  ctx,
 				incoming: tt.args.incoming,
 				taskFn:   tt.args.mockTask.doWork,
 			}
 
 			errCh := make(chan error, 1)
 			go func() {
-				errCh <- tr.Run()
+				errCh <- tr.Run(ctx)
 			}()
 			go func() {
 				for i := range math.MaxUint16 {

@@ -31,7 +31,6 @@ func (m *mockPeriodicTask) doWork(ctx context.Context) error {
 
 func TestNew(t *testing.T) {
 	type args struct {
-		ctx       context.Context
 		cfg       config.Config
 		collector Collector
 		reporter  Reporter
@@ -43,7 +42,6 @@ func TestNew(t *testing.T) {
 		{
 			name: "default initialisation",
 			args: args{
-				ctx:       context.Background(),
 				cfg:       config.Config{},
 				collector: &collector{},
 				reporter:  &reporter{},
@@ -52,7 +50,6 @@ func TestNew(t *testing.T) {
 		{
 			name: "mock initialisation",
 			args: args{
-				ctx:       context.Background(),
 				cfg:       config.Config{},
 				collector: &mockCollector{},
 				reporter:  &mockReporter{},
@@ -61,8 +58,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := New(tt.args.ctx, tt.args.cfg, tt.args.collector, tt.args.reporter)
-			assert.Equal(t, tt.args.ctx, got.context)
+			got := New(tt.args.cfg, tt.args.collector, tt.args.reporter)
 			assert.Equal(t, tt.args.cfg, got.config)
 			assert.Equal(t, tt.args.collector, got.collector)
 			assert.Equal(t, tt.args.reporter, got.reporter)
@@ -190,7 +186,6 @@ func Test_agent_Run(t *testing.T) {
 			defer cancel()
 
 			a := &agent{
-				context:   ctx,
 				config:    tt.fields.config,
 				collector: tt.fields.collector,
 				reporter:  tt.fields.reporter,
@@ -201,7 +196,7 @@ func Test_agent_Run(t *testing.T) {
 				On("Snapshot", mock.Anything).Return(tt.want.metrics, nil)
 			mReporter := tt.fields.reporter.On("Report", mock.Anything, tt.want.metrics).Return(nil)
 
-			err := a.Run()
+			err := a.Run(ctx)
 			require.NoError(t, err)
 
 			mCollector.Parent.AssertExpectations(t)
@@ -259,7 +254,6 @@ func Test_agent_doReport(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &agent{
-				context:   t.Context(),
 				config:    config.Config{},
 				collector: tt.fields.collector,
 				reporter:  tt.fields.reporter,

@@ -25,7 +25,7 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	sender := agent.NewSenderJSON(client)
 	reporter := agent.NewReporter(sender, repository.NewMemStorage())
 
-	ag := agent.New(ctx, cfg, collector, reporter)
+	ag := agent.New(cfg, collector, reporter)
 
-	return ag.Run()
+	return ag.Run(ctx)
 }

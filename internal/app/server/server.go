@@ -34,9 +34,9 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot create router: %w", err)
 	}
 
-	srv := server.New(ctx, logger, cfg, router, snapshotter, writer)
+	srv := server.New(logger, cfg, router, snapshotter, writer)
 
-	return srv.Run()
+	return srv.Run(ctx)
 }
 
 func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (repository.StorageMulti, service.StoragePinger, error) {

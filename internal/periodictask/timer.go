@@ -9,22 +9,20 @@ import (
 type TaskTimerFn func(context.Context) error
 
 type timerTask struct {
-	context      context.Context
 	taskFn       TaskTimerFn
 	interval     time.Duration
 	initialDelay time.Duration
 }
 
-func NewTimerTask(ctx context.Context, interval time.Duration, taskFn TaskTimerFn, initialDelay time.Duration) *timerTask {
+func NewTimerTask(interval time.Duration, taskFn TaskTimerFn, initialDelay time.Duration) *timerTask {
 	return &timerTask{
-		context:      ctx,
 		taskFn:       taskFn,
 		interval:     interval,
 		initialDelay: initialDelay,
 	}
 }
 
-func (t *timerTask) Run() error {
+func (t *timerTask) Run(ctx context.Context) error {
 	var (
 		errFinal error
 	)
@@ -35,11 +33,11 @@ func (t *timerTask) Run() error {
 loop:
 	for {
 		select {
-		case <-t.context.Done():
+		case <-ctx.Done():
 			timer.Stop()
 			break loop
 		case <-timer.C:
-			errFinal = errors.Join(errFinal, t.taskFn(t.context))
+			errFinal = errors.Join(errFinal, t.taskFn(ctx))
 			next := start.Add(t.interval * ((time.Since(start) / t.interval) + 1))
 			timer.Reset(time.Until(next))
 		}

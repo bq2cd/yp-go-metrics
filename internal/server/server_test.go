@@ -132,7 +132,6 @@ func createTempFile(t *testing.T, pattern string) string {
 func TestNew(t *testing.T) {
 	type args struct {
 		logger      log.Logger
-		ctx         context.Context
 		cfg         config.Config
 		router      http.Handler
 		snapshotter service.MetricSnapshotter
@@ -149,7 +148,6 @@ func TestNew(t *testing.T) {
 			assertion: func(t assert.TestingT, args args, s *server) {
 				assert.NotNil(t, s.logger)
 				assert.Equal(t, log.NewNoopLogger(), s.logger)
-				assert.Nil(t, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Nil(t, s.router)
 				assert.Nil(t, s.snapshotter)
@@ -172,23 +170,9 @@ func TestNew(t *testing.T) {
 			},
 		},
 		{
-			name: "ctx only",
-			args: args{ctx: context.Background()},
+			name: "router only",
+			args: args{router: http.NewServeMux()},
 			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, args.ctx, s.context)
-				assert.Equal(t, config.Config{}, s.config)
-				assert.Nil(t, s.router)
-				assert.Nil(t, s.snapshotter)
-				assert.Nil(t, s.batchWriter)
-				assert.NotNil(t, s.lnFactory)
-				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
-			},
-		},
-		{
-			name: "ctx + router",
-			args: args{ctx: context.Background(), router: http.NewServeMux()},
-			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, args.ctx, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Equal(t, args.router, s.router)
 				assert.Nil(t, s.snapshotter)
@@ -198,10 +182,9 @@ func TestNew(t *testing.T) {
 			},
 		},
 		{
-			name: "ctx + router + snapshotter",
-			args: args{ctx: context.Background(), router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter()},
+			name: "router + snapshotter",
+			args: args{router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter()},
 			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, args.ctx, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Equal(t, args.router, s.router)
 				assert.Equal(t, args.snapshotter, s.snapshotter)
@@ -211,10 +194,9 @@ func TestNew(t *testing.T) {
 			},
 		},
 		{
-			name: "ctx + router + snapshotter",
-			args: args{ctx: context.Background(), router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter()},
+			name: "router + snapshotter + batchWriter",
+			args: args{router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter(), batchWriter: newMockStorageBatchWriter()},
 			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, args.ctx, s.context)
 				assert.Equal(t, config.Config{}, s.config)
 				assert.Equal(t, args.router, s.router)
 				assert.Equal(t, args.snapshotter, s.snapshotter)
@@ -226,7 +208,7 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, New(tt.args.ctx, tt.args.logger, tt.args.cfg, tt.args.router, tt.args.snapshotter, tt.args.batchWriter))
+			tt.assertion(t, tt.args, New(tt.args.logger, tt.args.cfg, tt.args.router, tt.args.snapshotter, tt.args.batchWriter))
 		})
 	}
 }
@@ -576,7 +558,6 @@ func Test_server_Run(t *testing.T) {
 
 					s := &server{
 						logger:      log.NewNoopLogger(),
-						context:     ctx,
 						config:      tt.fields.config,
 						router:      tt.fields.router,
 						snapshotter: tt.fields.snapshotter,
@@ -590,7 +571,7 @@ func Test_server_Run(t *testing.T) {
 
 					errCh := make(chan error, 1)
 					go func() {
-						errCh <- s.Run()
+						errCh <- s.Run(ctx)
 					}()
 
 					time.Sleep(10 * time.Millisecond)
@@ -634,7 +615,6 @@ func Test_listenerFactory_Create(t *testing.T) {
 func Test_server_listenAndServe(t *testing.T) {
 	type fields struct {
 		logger      log.Logger
-		context     context.Context
 		config      config.Config
 		router      http.Handler
 		snapshotter service.MetricSnapshotter
@@ -651,13 +631,12 @@ func Test_server_listenAndServe(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &server{
 				logger:      tt.fields.logger,
-				context:     tt.fields.context,
 				config:      tt.fields.config,
 				router:      tt.fields.router,
 				snapshotter: tt.fields.snapshotter,
 				lnFactory:   tt.fields.lnFactory,
 			}
-			tt.assertion(t, s.listenAndServe())
+			tt.assertion(t, s.listenAndServe(t.Context()))
 		})
 	}
 }
@@ -665,7 +644,6 @@ func Test_server_listenAndServe(t *testing.T) {
 func Test_server_dumpMetrics(t *testing.T) {
 	type fields struct {
 		logger      log.Logger
-		context     context.Context
 		config      config.Config
 		router      http.Handler
 		snapshotter service.MetricSnapshotter
@@ -682,13 +660,12 @@ func Test_server_dumpMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &server{
 				logger:      tt.fields.logger,
-				context:     tt.fields.context,
 				config:      tt.fields.config,
 				router:      tt.fields.router,
 				snapshotter: tt.fields.snapshotter,
 				lnFactory:   tt.fields.lnFactory,
 			}
-			tt.assertion(t, s.dumpMetrics())
+			tt.assertion(t, s.dumpMetrics(t.Context()))
 		})
 	}
 }
@@ -696,14 +673,13 @@ func Test_server_dumpMetrics(t *testing.T) {
 func Test_server_createPeriodicTask(t *testing.T) {
 	type fields struct {
 		logger      log.Logger
-		context     context.Context
 		config      config.Config
 		router      http.Handler
 		snapshotter service.MetricSnapshotter
 		lnFactory   ListenerFactory
 	}
 	type args struct {
-		f func() error
+		f func(context.Context) error
 	}
 	tests := []struct {
 		name   string
@@ -717,7 +693,6 @@ func Test_server_createPeriodicTask(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &server{
 				logger:      tt.fields.logger,
-				context:     tt.fields.context,
 				config:      tt.fields.config,
 				router:      tt.fields.router,
 				snapshotter: tt.fields.snapshotter,
@@ -731,7 +706,6 @@ func Test_server_createPeriodicTask(t *testing.T) {
 func Test_server_tryLoadMetrics(t *testing.T) {
 	type fields struct {
 		logger      log.Logger
-		context     context.Context
 		config      config.Config
 		router      http.Handler
 		snapshotter service.MetricSnapshotter
@@ -747,13 +721,12 @@ func Test_server_tryLoadMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &server{
 				logger:      tt.fields.logger,
-				context:     tt.fields.context,
 				config:      tt.fields.config,
 				router:      tt.fields.router,
 				snapshotter: tt.fields.snapshotter,
 				lnFactory:   tt.fields.lnFactory,
 			}
-			s.tryLoadMetrics()
+			s.tryLoadMetrics(t.Context())
 		})
 	}
 }
