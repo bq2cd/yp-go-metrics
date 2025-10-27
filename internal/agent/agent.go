@@ -7,7 +7,7 @@ import (
 	"time"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/periodictask"
+	"github.com/bq2cd/yp-go-metrics/pkg/periodictask"
 )
 
 type agent struct {

@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type App[C any] struct {

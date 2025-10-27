@@ -6,8 +6,8 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/agent/source"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/go-resty/resty/v2"
 )
 

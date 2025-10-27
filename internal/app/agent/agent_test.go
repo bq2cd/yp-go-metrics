@@ -12,7 +12,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

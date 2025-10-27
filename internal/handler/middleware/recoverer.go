@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 // Recoverer is a middleware that implements recovery from panics.

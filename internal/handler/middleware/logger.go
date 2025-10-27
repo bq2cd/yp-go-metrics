@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 // Logger is a middleware that implements request and response

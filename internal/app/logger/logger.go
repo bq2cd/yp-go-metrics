@@ -1,7 +1,7 @@
 package logger
 
 import (
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 )

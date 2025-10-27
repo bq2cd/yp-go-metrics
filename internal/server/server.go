@@ -10,9 +10,9 @@ import (
 	"sync"
 
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
-	"github.com/bq2cd/yp-go-metrics/internal/periodictask"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/periodictask"
 )
 
 // ListenerFactory abstracts a way to create a new listener.
