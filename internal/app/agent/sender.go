@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	"github.com/go-resty/resty/v2"
 	"github.com/goccy/go-json"
 )
@@ -63,12 +65,13 @@ func (s *senderPlain) Send(ctx context.Context, metric model.Metric) error {
 }
 
 // NewSenderJSON creates an instance of a sender that reports metrics encoded in JSON.
-func NewSenderJSON(client *resty.Client) *senderJSON {
-	return &senderJSON{client: client, shouldCompress: true}
+func NewSenderJSON(client *resty.Client, retrierFactory retrymgr.RetrierFactory) *senderJSON {
+	return &senderJSON{client: client, retrierFactory: retrierFactory, shouldCompress: true}
 }
 
 type senderJSON struct {
 	client         *resty.Client
+	retrierFactory retrymgr.RetrierFactory
 	shouldCompress bool
 }
 
@@ -95,6 +98,46 @@ func (s *senderJSON) setBody(req *resty.Request, r io.Reader) error {
 	return nil
 }
 
+func (s *senderJSON) sendSingleRequest(ctx context.Context, method, url string, body []byte) (*resty.Response, error) {
+	req := s.client.R().
+		SetContext(ctx).
+		SetHeader(httpheaders.HeaderKeyContentType, httpheaders.ContentTypeApplicationJSON.String())
+
+	req.Method = method
+	req.URL = url
+
+	err := s.setBody(req, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("cannot compress request body: %w", err)
+	}
+	resp, err := req.Send()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrSenderRequestFailed, err)
+	}
+	if !resp.IsSuccess() {
+		return resp, fmt.Errorf("expected success, got status %v: %w", resp.Status(), ErrSenderResponseNotOK)
+	}
+	return resp, nil
+}
+
+func (s *senderJSON) sendWithRetries(ctx context.Context, method, url string, body []byte) (*resty.Response, error) {
+	return retrymgr.NewRetrier[*resty.Response](s.retrierFactory).Do(
+		ctx, "send_metrics_json",
+		func(ctx context.Context) (*resty.Response, error) {
+			return s.sendSingleRequest(ctx, method, url, body)
+		},
+		func(err error) bool {
+			if errors.Is(err, ErrSenderRequestFailed) {
+				return true
+			}
+			if errors.Is(err, ErrSenderResponseNotOK) {
+				return true
+			}
+			return false
+		},
+	)
+}
+
 func (s *senderJSON) Send(ctx context.Context, metric model.Metric) error {
 	if metric.Empty() {
 		return ErrSenderEmptyMetric
@@ -105,22 +148,8 @@ func (s *senderJSON) Send(ctx context.Context, metric model.Metric) error {
 		return fmt.Errorf("json encoder failed: %w", err)
 	}
 
-	req := s.client.R().SetContext(ctx).SetHeader(httpheaders.HeaderKeyContentType, httpheaders.ContentTypeApplicationJSON.String())
-
-	if err := s.setBody(req, &buf); err != nil {
-		return fmt.Errorf("compression failed: %w", err)
-	}
-
-	resp, err := req.Post("/update/")
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrSenderRequestFailed, err)
-	}
-
-	if !resp.IsSuccess() {
-		return fmt.Errorf("expected success, got status %v: %w", resp.Status(), ErrSenderResponseNotOK)
-	}
-
-	return nil
+	_, err := s.sendWithRetries(ctx, http.MethodPost, "/update/", buf.Bytes())
+	return err
 }
 
 func (s *senderJSON) SendBatch(ctx context.Context, metrics model.MetricSet) (model.MetricSet, error) {
@@ -133,24 +162,16 @@ func (s *senderJSON) SendBatch(ctx context.Context, metrics model.MetricSet) (mo
 		return model.NewMetricSet(), fmt.Errorf("json encoder failed: %w", err)
 	}
 
-	updated := make([]model.Metric, 0, len(metrics))
-
-	req := s.client.R().SetContext(ctx).SetHeader(httpheaders.HeaderKeyContentType, httpheaders.ContentTypeApplicationJSON.String()).SetResult(updated)
-
-	if err := s.setBody(req, &buf); err != nil {
-		return model.NewMetricSet(), fmt.Errorf("compression failed: %w", err)
-	}
-
-	resp, err := req.Post("/updates/")
+	resp, err := s.sendWithRetries(ctx, http.MethodPost, "/updates/", buf.Bytes())
 	if err != nil {
-		return model.NewMetricSet(), fmt.Errorf("%w: %w", ErrSenderRequestFailed, err)
+		return model.NewMetricSet(), err
 	}
 
-	if !resp.IsSuccess() {
-		return model.NewMetricSet(), fmt.Errorf("expected success, got status %v: %w", resp.Status(), ErrSenderResponseNotOK)
+	updated := make([]model.Metric, 0, len(metrics))
+	err = json.Unmarshal(resp.Body(), &updated)
+	if err != nil {
+		return model.NewMetricSet(), fmt.Errorf("cannot unmarshal response (%v): %w", string(resp.Body()), err)
 	}
 
-	result := resp.Result().(*[]model.Metric)
-
-	return model.NewMetricSet(*result...), nil
+	return model.NewMetricSet(updated...), nil
 }

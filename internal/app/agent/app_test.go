@@ -11,7 +11,10 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
+	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -26,7 +29,10 @@ type mockHandler struct {
 func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.Called(w, r)
 	m.numCalls++
+	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
 	w.WriteHeader(m.statusCode)
+	_ = json.NewEncoder(w).Encode([]model.Metric{})
+
 }
 
 func TestRun(t *testing.T) {
@@ -50,8 +56,8 @@ func TestRun(t *testing.T) {
 			args: args{
 				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   10 * time.Millisecond,
-					ReportInterval: 50 * time.Millisecond,
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 75 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusOK,
@@ -100,6 +106,8 @@ func TestRun(t *testing.T) {
 
 			ts := httptest.NewServer(h)
 			defer ts.Close()
+
+			time.Sleep(25 * time.Millisecond)
 
 			if tt.args.overrideURL {
 				upstreamURL, err := url.Parse(ts.URL)

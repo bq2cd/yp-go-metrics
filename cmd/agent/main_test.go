@@ -14,6 +14,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -246,8 +247,9 @@ func (m *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	m.Called()
 	m.mu.Unlock()
-	w.Header().Set("content-type", "test/plain; charset=utf-8")
+	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
 	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`[]`))
 }
 
 func Test_run(t *testing.T) {

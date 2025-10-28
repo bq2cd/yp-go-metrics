@@ -3,6 +3,7 @@ package retrymgr
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
@@ -62,7 +63,7 @@ func (r *retrier[T]) Do(ctx context.Context, taskName string, taskFn RetryableFn
 
 		errSleep := r.sleeper.Sleep(ctx, delay)
 		if errSleep != nil {
-			err = errors.Join(err, errSleep)
+			err = errors.Join(err, fmt.Errorf("sleeper error (attempt=%d, delay=%v): %w", attempts, delay, errSleep))
 			l.Info().Err("error", errSleep).Msg("aborting execution due to sleeper error")
 			return
 		}

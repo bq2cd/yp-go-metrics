@@ -13,12 +13,16 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
 	"github.com/go-resty/resty/v2"
 	"github.com/goccy/go-json"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 type mockSender struct {
@@ -269,8 +273,12 @@ func TestNewSenderPlain(t *testing.T) {
 }
 
 func TestNewSenderJSON(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	type args struct {
-		client *resty.Client
+		client         *resty.Client
+		retrierFactory retrymgr.RetrierFactory
 	}
 	tests := []struct {
 		name      string
@@ -279,15 +287,23 @@ func TestNewSenderJSON(t *testing.T) {
 	}{
 		{
 			name: "default",
-			args: args{client: resty.New()},
+			args: args{
+				client: resty.New(),
+				retrierFactory: func() retrymgr.RetrierFactory {
+					return retrymgr.NewRetrierFactory(log.NewNoopLogger(), retrymgrtest.NewMockSleeper(ctrl), func() retrymgr.Strategy {
+						return retrymgrtest.NewMockStrategy(ctrl)
+					})
+				}(),
+			},
 			assertion: func(t *testing.T, args args, got *senderJSON) {
 				assert.Equal(t, args.client, got.client)
+				assert.Equal(t, args.retrierFactory, got.retrierFactory)
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewSenderJSON(tt.args.client))
+			tt.assertion(t, tt.args, NewSenderJSON(tt.args.client, tt.args.retrierFactory))
 		})
 	}
 }
@@ -313,6 +329,7 @@ func Test_senderJSON_Send(t *testing.T) {
 		httpCall    string
 		requestBody string
 		checkErr    func(*testing.T, error)
+		numRetries  int
 	}
 	tests := []struct {
 		name      string
@@ -420,6 +437,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				httpCall:    "POST http://localhost:1234/update/",
 				requestBody: `{ "id": "id1", "type": "counter", "delta": 5}`,
 				checkErr:    func(t *testing.T, err error) { assert.ErrorIs(t, err, ErrSenderResponseNotOK) },
+				numRetries:  3,
 			},
 		},
 		{
@@ -442,6 +460,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				httpCall:    "POST http://localhost:1234/update/",
 				requestBody: `{ "id": "id1", "type": "counter", "delta": 5}`,
 				checkErr:    func(t *testing.T, err error) { assert.Errorf(t, err, "request cancelled") },
+				numRetries:  3,
 			},
 		},
 		{
@@ -464,6 +483,7 @@ func Test_senderJSON_Send(t *testing.T) {
 				httpCall:    "POST http://localhost:1234/update/",
 				requestBody: `{ "id": "id1", "type": "counter", "delta": 5}`,
 				checkErr:    func(t *testing.T, err error) { assert.Errorf(t, err, "context deadline exceeded") },
+				numRetries:  1,
 			},
 		},
 		{
@@ -513,29 +533,50 @@ func Test_senderJSON_Send(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			retrierFactory := retrymgr.NewRetrierFactory(log.NewNoopLogger(),
+				func() retrymgr.Sleeper {
+					s := retrymgrtest.NewMockSleeper(ctrl)
+					s.EXPECT().Sleep(gomock.Any(), 1*time.Millisecond).Return(nil).Times(tt.want.numRetries)
+					return s
+				}(),
+				func() retrymgr.Strategy {
+					s := retrymgrtest.NewMockStrategy(ctrl)
+					s.EXPECT().Name().Return("mock_strategy")
+					if tt.want.numRetries > 0 {
+						s.EXPECT().NextDelay().Return(1*time.Millisecond, true).Times(tt.want.numRetries)
+						s.EXPECT().NextDelay().Return(time.Duration(0), false).Times(1)
+					}
+					return s
+				},
+			)
+
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
 
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
 			s := &senderJSON{
 				client:         tt.fields.client,
+				retrierFactory: retrierFactory,
 				shouldCompress: shouldCompress,
 			}
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			defer httpmock.Reset()
 
-			var rbody bytes.Buffer
+			rbody := bytes.NewBuffer(nil)
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
-				_, err := io.Copy(&rbody, r.Body)
+				rbody.Reset()
+				_, err := io.Copy(rbody, r.Body)
 				require.NoError(t, err)
 				time.Sleep(tt.responder.timeout)
 				return httpmock.NewJsonResponse(tt.responder.status, tt.responder.data)
 			})
 
 			metric := tt.args.metric.Copy()
-
 			err := s.Send(ctx, metric)
 
 			defer func() {
@@ -545,7 +586,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			if tt.want.httpCall != "" {
 				calls := httpmock.GetCallCountInfo()
 				assert.Contains(t, calls, tt.want.httpCall)
-				assert.Equal(t, 1, calls[tt.want.httpCall])
+				assert.Equal(t, tt.want.numRetries+1, calls[tt.want.httpCall])
 			}
 			tt.want.checkErr(t, err)
 			if tt.want.requestBody == "" {
@@ -553,7 +594,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			}
 			var body string
 			if shouldCompress {
-				rgz, err := gzip.NewReader(&rbody)
+				rgz, err := gzip.NewReader(rbody)
 				require.NoError(t, err)
 				b, err := io.ReadAll(rgz)
 				require.NoError(t, err)
@@ -616,6 +657,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 		requestBody string
 		got         model.MetricSet
 		checkErr    func(*testing.T, error)
+		numRetries  int
 	}
 	type testcase struct {
 		fields    fields
@@ -829,6 +871,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 				requestBody: `[{ "id": "id1", "type": "counter", "delta": 5}]`,
 				got:         model.NewMetricSet(),
 				checkErr:    func(t *testing.T, err error) { require.Errorf(t, err, "context deadline exceeded") },
+				numRetries:  1,
 			},
 		},
 		"server timeout": {
@@ -856,6 +899,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 				requestBody: `[{ "id": "id1", "type": "counter", "delta": 5}]`,
 				got:         model.NewMetricSet(),
 				checkErr:    func(t *testing.T, err error) { require.Errorf(t, err, "request canceled") },
+				numRetries:  3,
 			},
 		},
 		"server error": {
@@ -879,10 +923,31 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 				requestBody: `[{ "id": "id1", "type": "counter", "delta": 5}]`,
 				got:         model.NewMetricSet(),
 				checkErr:    func(t *testing.T, err error) { require.ErrorIs(t, err, ErrSenderResponseNotOK) },
+				numRetries:  3,
 			},
 		},
 	}
 	for name, tt := range tests {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		retrierFactory := retrymgr.NewRetrierFactory(log.NewNoopLogger(),
+			func() retrymgr.Sleeper {
+				s := retrymgrtest.NewMockSleeper(ctrl)
+				s.EXPECT().Sleep(gomock.Any(), 1*time.Millisecond).Return(nil).Times(tt.want.numRetries)
+				return s
+			}(),
+			func() retrymgr.Strategy {
+				s := retrymgrtest.NewMockStrategy(ctrl)
+				s.EXPECT().Name().Return("mock_strategy")
+				if tt.want.numRetries > 0 {
+					s.EXPECT().NextDelay().Return(1*time.Millisecond, true).Times(tt.want.numRetries)
+					s.EXPECT().NextDelay().Return(time.Duration(0), false).Times(1)
+				}
+				return s
+			},
+		)
+
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
@@ -890,24 +955,26 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
 			s := &senderJSON{
 				client:         tt.fields.client,
+				retrierFactory: retrierFactory,
 				shouldCompress: shouldCompress,
 			}
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			defer httpmock.Reset()
 
-			var rbody bytes.Buffer
+			rbody := bytes.NewBuffer(nil)
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
-				_, err := io.Copy(&rbody, r.Body)
+				rbody.Reset()
+				_, err := io.Copy(rbody, r.Body)
 				require.NoError(t, err)
 				time.Sleep(tt.responder.timeout)
 				return httpmock.NewJsonResponse(tt.responder.status, tt.responder.data)
 			})
 
 			// Act
-			got, err := s.SendBatch(ctx, tt.args.metrics)
 			orig := tt.args.metrics
+			got, err := s.SendBatch(ctx, tt.args.metrics)
 
 			// Assert
 			tt.want.checkErr(t, err)
@@ -917,14 +984,14 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			if tt.want.httpCall != "" {
 				calls := httpmock.GetCallCountInfo()
 				assert.Contains(t, calls, tt.want.httpCall)
-				assert.Equal(t, 1, calls[tt.want.httpCall])
+				assert.Equal(t, tt.want.numRetries+1, calls[tt.want.httpCall])
 			}
 			if tt.want.requestBody == "" {
 				return
 			}
 			var body string
 			if shouldCompress {
-				rgz, err := gzip.NewReader(&rbody)
+				rgz, err := gzip.NewReader(rbody)
 				require.NoError(t, err)
 				b, err := io.ReadAll(rgz)
 				require.NoError(t, err)
