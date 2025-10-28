@@ -13,6 +13,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -44,11 +45,13 @@ func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (rep
 		return nil, nil, fmt.Errorf("cannot create DB config: %w", err)
 	}
 
-	if err := applyMigrations(ctx, logger, dbCfg); err != nil {
+	retrierFactory := retrymgr.NewRetrierFactory(logger, retrymgr.NewSleeper(), retrymgr.NewStrategy1s3s5s)
+
+	if err := applyMigrationsWithRetries(ctx, logger, dbCfg, retrierFactory); err != nil {
 		return nil, nil, fmt.Errorf("cannot apply DB migrations: %w", err)
 	}
 
-	sqlStorage, err := sqlstorage.New(dbCfg)
+	sqlStorage, err := sqlstorage.New(dbCfg, retrierFactory)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot create SQL storage: %w", err)
 	}

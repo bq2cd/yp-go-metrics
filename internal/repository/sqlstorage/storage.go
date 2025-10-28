@@ -11,6 +11,9 @@ import (
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 )
@@ -33,17 +36,18 @@ type sqlExecer interface {
 }
 
 type sqlStorage struct {
-	db *sqlx.DB
+	db             *sqlx.DB
+	retrierFactory retrymgr.RetrierFactory
 }
 
 // New creates an instance of the storage backed by an SQL database.
 // Currently, only PostgreSQL is supported.
-func New(cfg dbconfig.Config) (*sqlStorage, error) {
+func New(cfg dbconfig.Config, retrierFactory retrymgr.RetrierFactory) (*sqlStorage, error) {
 	db, err := sqlx.Open(string(cfg.Driver()), cfg.DSN())
 	if err != nil {
 		return nil, err
 	}
-	return &sqlStorage{db: db}, nil
+	return &sqlStorage{db: db, retrierFactory: retrierFactory}, nil
 }
 
 // Ping returns an error if the underlying database is not reachable.
@@ -75,7 +79,7 @@ func (s *sqlStorage) GetMulti(ctx context.Context, keys model.MetricKeySet) ([]m
 		idsByType[key.Type] = append(idsByType[key.Type], key.ID)
 	}
 
-	return s.getMultiByType(ctx, idsByType)
+	return s.getMultiByTypeWithRetries(ctx, idsByType)
 }
 
 // GetAll returns all metrics in the database.
@@ -85,7 +89,19 @@ func (s *sqlStorage) GetAll(ctx context.Context) ([]model.Metric, error) {
 		idsByType[t] = nil // get all metrics
 	}
 
-	return s.getMultiByType(ctx, idsByType)
+	return s.getMultiByTypeWithRetries(ctx, idsByType)
+}
+
+func (s *sqlStorage) getMultiByTypeWithRetries(ctx context.Context, idsByType map[model.MetricType][]string) ([]model.Metric, error) {
+	return retrymgr.NewRetrier[[]model.Metric](s.retrierFactory).Do(
+		ctx, "sql_storage_get_multi",
+		func(ctx context.Context) ([]model.Metric, error) {
+			return s.getMultiByType(ctx, idsByType)
+		},
+		func(err error) bool {
+			return false
+		},
+	)
 }
 
 func (s *sqlStorage) getMultiByType(ctx context.Context, idsByType map[model.MetricType][]string) ([]model.Metric, error) {
@@ -134,6 +150,28 @@ func (s *sqlStorage) Set(ctx context.Context, metric model.Metric) error {
 
 // SetMulti stores given metrics in the database.
 func (s *sqlStorage) SetMulti(ctx context.Context, metrics model.MetricSet) error {
+	return s.setMultiWithRetries(ctx, metrics)
+}
+
+func (s *sqlStorage) setMultiWithRetries(ctx context.Context, metrics model.MetricSet) error {
+	_, err := retrymgr.NewRetrier[any](s.retrierFactory).Do(
+		ctx, "sql_storage_set_multi",
+		func(ctx context.Context) (any, error) {
+			err := s.setMulti(ctx, metrics)
+			return nil, err
+		},
+		func(err error) bool {
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) {
+				return false
+			}
+			return pgerrcode.IsConnectionException(pgErr.Code)
+		},
+	)
+	return err
+}
+
+func (s *sqlStorage) setMulti(ctx context.Context, metrics model.MetricSet) error {
 	// FIXME: temporary hack to work around `sqlmock` limitations
 	// when it is expecting the queries to be called in the same
 	// order expectations are arranged.

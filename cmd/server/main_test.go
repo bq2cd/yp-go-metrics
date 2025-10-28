@@ -26,9 +26,11 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest/mockretrierfactory"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 var (
@@ -560,6 +562,9 @@ func Test_main_subprocess(t *testing.T) {
 func Test_main(t *testing.T) {
 	skipIfGithubActions(t)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	addrFactory := servertest.NewListenAddressFactory(t)
 	tempFactory := servertest.NewTempFileFactory(t)
 	defer tempFactory.RemoveAll()
@@ -572,6 +577,8 @@ func Test_main(t *testing.T) {
 	}
 	tests := []struct {
 		name          string
+		timeout       time.Duration
+		warmupDelay   time.Duration
 		args          []string
 		env           map[string]string
 		want          want
@@ -579,9 +586,11 @@ func Test_main(t *testing.T) {
 		assertStopped func(*testing.T, map[string]string)
 	}{
 		{
-			name: "address via args",
-			args: []string{"-a", addrFactory.New()},
-			env:  map[string]string{},
+			name:        "address via args",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-a", addrFactory.New()},
+			env:         map[string]string{},
 			want: want{
 				exitCode: 0,
 			},
@@ -595,8 +604,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "address via env",
-			args: []string{},
+			name:        "address via env",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{},
 			env: map[string]string{
 				"ADDRESS": addrFactory.New(),
 			},
@@ -613,8 +624,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "dump metrics on every write",
-			args: []string{"-i=0"},
+			name:        "dump metrics on every write",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-i=0"},
 			env: map[string]string{
 				"ADDRESS":           addrFactory.New(),
 				"FILE_STORAGE_PATH": tempFactory.Create("test-metrics-dump-*"),
@@ -637,8 +650,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "load metrics on startup",
-			args: []string{"-i=999", "-r"},
+			name:        "load metrics on startup",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-i=999", "-r"},
 			env: map[string]string{
 				"ADDRESS": addrFactory.New(),
 				"FILE_STORAGE_PATH": func() string {
@@ -666,8 +681,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "server uses postgresql database when configured",
-			args: []string{"-i=0"},
+			name:        "server uses postgresql database when configured",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-i=0"},
 			env: map[string]string{
 				"ADDRESS": addrFactory.New(),
 				"DATABASE_DSN": func() string {
@@ -747,7 +764,87 @@ func Test_main(t *testing.T) {
 				require.NoError(t, err)
 				cfg, err := dbconfig.New(*dbURL)
 				require.NoError(t, err)
-				storage, err := sqlstorage.New(cfg)
+				retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+				retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+				storage, err := sqlstorage.New(cfg, retrierFactory)
+				require.NoError(t, err)
+				metrics, err := storage.GetAll(t.Context())
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, metrics)
+
+				// snapshot check
+				f, err := os.Open(env["FILE_STORAGE_PATH"])
+				require.NoError(t, err)
+				var snapshotMetrics []model.Metric
+				err = json.NewDecoder(f).Decode(&snapshotMetrics)
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, snapshotMetrics)
+			},
+		},
+		{
+			name:        "server retries queries to postgresql on connection errors",
+			timeout:     5_000 * time.Millisecond,
+			warmupDelay: 4_000 * time.Millisecond,
+			args:        []string{"-i=0"},
+			env: map[string]string{
+				"ADDRESS": addrFactory.New(),
+				"DATABASE_DSN": func() string {
+					dbCfg := servertest.LaunchEmbeddedPostgresWithDelay(t, "server-test-user", "server-test-password", "server-test-db", 100*time.Millisecond)
+					return dbCfg.DSN()
+				}(),
+				"FILE_STORAGE_PATH": tempFactory.Create("test-postgres-metrics-dump-*"),
+			},
+			want: want{
+				exitCode: 0,
+			},
+			assertRunning: func(t *testing.T, addr string) {
+				// populate metrics
+				for _, m := range []model.Metric{
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id2", -123),
+					model.NewGaugeMetric("id10", 1.23),
+					model.NewGaugeMetric("id20", -1.23),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/update/", addr), handlertest.NewBodyDataFromMetric(t, m), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					responses.Store(m.Key(), resp)
+				}
+
+				// wait
+				time.Sleep(50 * time.Millisecond)
+
+				// retrieve metrics
+				for _, k := range []model.MetricKey{
+					model.NewMetricKey(model.MetricTypeCounter, "id1"),
+					model.NewMetricKey(model.MetricTypeCounter, "id2"),
+					model.NewMetricKey(model.MetricTypeGauge, "id10"),
+					model.NewMetricKey(model.MetricTypeGauge, "id20"),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/value/", addr), handlertest.NewBodyDataFromMetricKey(t, k), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					up, ok := responses.Load(k)
+					require.Truef(t, ok, "missing response for metric key %v", k)
+					up.(*handlertest.Response).Body.AssertEqual(resp.Body)
+				}
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
+				wantMetrics := []model.Metric{
+					model.NewGaugeMetric("id10", 1.23),
+					model.NewGaugeMetric("id20", -1.23),
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id2", -123),
+				}
+
+				// db check
+				dbURL, err := url.Parse(env["DATABASE_DSN"])
+				require.NoError(t, err)
+				cfg, err := dbconfig.New(*dbURL)
+				require.NoError(t, err)
+				retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+				retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+				storage, err := sqlstorage.New(cfg, retrierFactory)
 				require.NoError(t, err)
 				metrics, err := storage.GetAll(t.Context())
 				require.NoError(t, err)
@@ -780,19 +877,19 @@ func Test_main(t *testing.T) {
 			require.NoError(t, err)
 
 			go func() {
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(tt.timeout)
 				_ = syscall.Kill(cmd.Process.Pid, syscall.SIGINT)
 			}()
 
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(tt.warmupDelay)
 			tt.assertRunning(t, addrFactory.Get(tid))
 
 			_ = cmd.Wait()
 
-			tt.assertStopped(t, tt.env)
-
 			t.Logf("subprocess stdout:\n%s\n", stdout.String())
 			t.Logf("subprocess stderr:\n%s\n", stderr.String())
+
+			tt.assertStopped(t, tt.env)
 
 			if tt.want.exitCode == 0 {
 				require.NoError(t, err)

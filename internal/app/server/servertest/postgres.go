@@ -43,8 +43,35 @@ func createTemporaryDataDir(t *testing.T, dbname string) string {
 	return tmpdir
 }
 
+// LaunchEmbeddedPostgresWithDelay starts a temporary PostgreSQL instance with empty data directory after specified delay.
+func LaunchEmbeddedPostgresWithDelay(t *testing.T, user, password, dbname string, delay time.Duration) dbconfig.Config {
+	addr := NewListenAddress(t, GetRandomListenAddress(t))
+	time.AfterFunc(delay, func() { launchEmbeddedPostgres(t, user, password, dbname, addr) })
+	return generateDBConfig(t, user, password, dbname, addr)
+}
+
 // LaunchEmbeddedPostgres starts a temporary PostgreSQL instance with empty data directory.
 func LaunchEmbeddedPostgres(t *testing.T, user, password, dbname string) dbconfig.Config {
+	addr := NewListenAddress(t, GetRandomListenAddress(t))
+	launchEmbeddedPostgres(t, user, password, dbname, addr)
+	return generateDBConfig(t, user, password, dbname, addr)
+}
+
+func generateDBConfig(t *testing.T, user, password, dbname string, addr ListenAddress) dbconfig.Config {
+	t.Helper()
+
+	dbCfg, err := dbconfig.New(url.URL{
+		Scheme: "postgres",
+		Host:   addr.String(),
+		User:   url.UserPassword(user, password),
+		Path:   "/" + dbname,
+	})
+	require.NoError(t, err)
+
+	return dbCfg
+}
+
+func launchEmbeddedPostgres(t *testing.T, user, password, dbname string, addr ListenAddress) {
 	t.Helper()
 
 	user = ensureNotEmpty(user)
@@ -56,7 +83,6 @@ func LaunchEmbeddedPostgres(t *testing.T, user, password, dbname string) dbconfi
 
 	tmpdir := createTemporaryDataDir(t, dbname)
 	logger := bytes.NewBuffer(nil)
-	addr := NewListenAddress(t, GetRandomListenAddress(t))
 	postgres := embeddedpostgres.NewDatabase(
 		embeddedpostgres.DefaultConfig().
 			BinariesPath(filepath.Join(homeDir, ".embedded-postgres-go/binaries/v17")).
@@ -71,7 +97,7 @@ func LaunchEmbeddedPostgres(t *testing.T, user, password, dbname string) dbconfi
 	)
 
 	start := time.Now()
-	t.Logf("staring embedded postgres...")
+	t.Logf("staring embedded postgres on %v ...", addr)
 	err = postgres.Start()
 	t.Logf("embedded postgres started after %v: %v", time.Since(start), err)
 	if err != nil {
@@ -85,14 +111,4 @@ func LaunchEmbeddedPostgres(t *testing.T, user, password, dbname string) dbconfi
 		t.Logf("embedded postgres stopped: %v", err)
 		require.NoError(t, err)
 	})
-
-	dbCfg, err := dbconfig.New(url.URL{
-		Scheme: "postgres",
-		Host:   addr.String(),
-		User:   url.UserPassword(user, password),
-		Path:   "/" + dbname,
-	})
-	require.NoError(t, err)
-
-	return dbCfg
 }

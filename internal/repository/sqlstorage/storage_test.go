@@ -14,10 +14,14 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest/mockretrierfactory"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -48,6 +52,7 @@ func TestNew(t *testing.T) {
 				assertStorage: func(t *testing.T, got *sqlStorage, err error) {
 					require.NoError(t, err)
 					assert.NotNil(t, got)
+					assert.NotNil(t, got.retrierFactory)
 				},
 			},
 		},
@@ -74,14 +79,20 @@ func TestNew(t *testing.T) {
 				assertStorage: func(t *testing.T, got *sqlStorage, err error) {
 					require.NoError(t, err)
 					assert.NotNil(t, got)
+					assert.NotNil(t, got.retrierFactory)
 				},
 			},
 		}}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+
 			cfg, err := dbconfig.New(tt.args.dbURL)
+
 			tt.want.assertConfig(t, &cfg, err)
-			got, err := New(cfg)
+			got, err := New(cfg, retrierFactory)
 			tt.want.assertStorage(t, got, err)
 		})
 	}
@@ -123,13 +134,18 @@ func Test_sqlStorage_Ping(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+
 			db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
 			require.NoError(t, err)
 			defer db.Close()
 
 			mock.ExpectPing().WillDelayFor(tt.fields.mockDelay).WillReturnError(tt.fields.mockErr)
 			s := &sqlStorage{
-				db: sqlx.NewDb(db, databaseDriver),
+				db:             sqlx.NewDb(db, databaseDriver),
+				retrierFactory: retrierFactory,
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.args.timeout)
@@ -173,13 +189,18 @@ func Test_sqlStorage_Close(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+
 			db, mock, err := sqlmock.New()
 			require.NoError(t, err)
 			defer db.Close()
 
 			mock.ExpectClose().WillReturnError(tt.fields.mockErr)
 			s := &sqlStorage{
-				db: sqlx.NewDb(db, databaseDriver),
+				db:             sqlx.NewDb(db, databaseDriver),
+				retrierFactory: retrierFactory,
 			}
 
 			// Act
@@ -372,6 +393,11 @@ func Test_sqlStorage_Get(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+			retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+
 			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 			require.NoError(t, err)
 			defer db.Close()
@@ -384,7 +410,8 @@ func Test_sqlStorage_Get(t *testing.T) {
 					WillReturnRows(tt.fields.mockRows())
 			}
 			s := &sqlStorage{
-				db: sqlx.NewDb(db, databaseDriver),
+				db:             sqlx.NewDb(db, databaseDriver),
+				retrierFactory: retrierFactory,
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -628,6 +655,11 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+			retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+
 			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 			require.NoError(t, err)
 			defer db.Close()
@@ -646,7 +678,8 @@ func Test_sqlStorage_GetAll(t *testing.T) {
 			}
 
 			s := &sqlStorage{
-				db: sqlx.NewDb(db, databaseDriver),
+				db:             sqlx.NewDb(db, databaseDriver),
+				retrierFactory: retrierFactory,
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -819,6 +852,11 @@ func Test_sqlStorage_Set(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+			retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+
 			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 			require.NoError(t, err)
 			defer db.Close()
@@ -840,7 +878,8 @@ func Test_sqlStorage_Set(t *testing.T) {
 				mock.ExpectCommit()
 			}
 			s := &sqlStorage{
-				db: sqlx.NewDb(db, databaseDriver),
+				db:             sqlx.NewDb(db, databaseDriver),
+				retrierFactory: retrierFactory,
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -872,7 +911,8 @@ func Test_sqlStorage_SetMulti(t *testing.T) {
 		metrics model.MetricSet
 	}
 	type want struct {
-		wantErr func(testing.TB, error)
+		wantErr    func(testing.TB, error)
+		numRetries int
 	}
 	type testcase struct {
 		timeout       time.Duration
@@ -1046,10 +1086,53 @@ func Test_sqlStorage_SetMulti(t *testing.T) {
 				},
 			},
 		},
+		"database returns retryable error on update/insert": {
+			timeout: 100 * time.Millisecond,
+			fieldsCounter: fields{
+				expectTxBegin:  true,
+				expectTxCommit: true,
+				expectQuery:    true,
+				mockErr:        &pgconn.PgError{Code: pgerrcode.ConnectionFailure, Message: "oops"},
+				mockDelay:      5 * time.Millisecond,
+				mockQuery:      getExpectedInsertQuery(model.MetricTypeCounter, 3),
+				mockArgs:       []driver.Value{"id1", 123, "id2", -123, "id3", 456},
+				mockResult:     driver.RowsAffected(2),
+			},
+			fieldsGauge: fields{
+				expectTxBegin:  false,
+				expectTxCommit: false,
+				expectQuery:    false,
+			},
+			args: args{metrics: model.NewMetricSet(
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewCounterMetric("id3", 456),
+			)},
+			want: want{
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+				numRetries: 2,
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+			retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+
+			if tt.want.numRetries > 0 {
+				calls := []any{}
+				for range tt.want.numRetries {
+					calls = append(calls, retrierFactory.Strategy.EXPECT().NextDelay().Return(1*time.Millisecond, true))
+					calls = append(calls, retrierFactory.Sleeper.EXPECT().Sleep(gomock.Any(), 1*time.Millisecond).Return(nil))
+				}
+				gomock.InOrder(calls...)
+			}
+
 			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
 			require.NoError(t, err)
 			defer db.Close()
@@ -1062,6 +1145,20 @@ func Test_sqlStorage_SetMulti(t *testing.T) {
 					WithArgs(tt.fieldsCounter.mockArgs...).
 					WillDelayFor(tt.fieldsCounter.mockDelay).
 					WillReturnError(tt.fieldsCounter.mockErr).
+					WillReturnResult(tt.fieldsCounter.mockResult)
+			}
+			for i := range tt.want.numRetries {
+				var errFinal error
+				if i < tt.want.numRetries-1 {
+					errFinal = tt.fieldsCounter.mockErr
+				} else {
+					errFinal = nil
+				}
+				mock.ExpectBegin()
+				mock.ExpectExec(tt.fieldsCounter.mockQuery).
+					WithArgs(tt.fieldsCounter.mockArgs...).
+					WillDelayFor(tt.fieldsCounter.mockDelay).
+					WillReturnError(errFinal).
 					WillReturnResult(tt.fieldsCounter.mockResult)
 			}
 			if tt.fieldsCounter.expectTxCommit {
@@ -1083,7 +1180,8 @@ func Test_sqlStorage_SetMulti(t *testing.T) {
 			}
 
 			s := &sqlStorage{
-				db: sqlx.NewDb(db, databaseDriver),
+				db:             sqlx.NewDb(db, databaseDriver),
+				retrierFactory: retrierFactory,
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
@@ -1121,8 +1219,14 @@ func Test_sqlStorage_GetMulti(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+			retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+
 			s := &sqlStorage{
-				db: tt.fields.db,
+				db:             tt.fields.db,
+				retrierFactory: retrierFactory,
 			}
 			got, err := s.GetMulti(tt.args.ctx, tt.args.keys)
 			require.Equal(t, tt.want.err, err)
