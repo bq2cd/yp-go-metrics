@@ -85,9 +85,9 @@ func Test_agent_Run(t *testing.T) {
 	}{
 		{
 			name:    "normal flow",
-			timeout: 23 * time.Millisecond,
+			timeout: 50 * time.Millisecond,
 			fields: fields{
-				config: config.Config{PollInterval: 5 * time.Millisecond, ReportInterval: 10 * time.Millisecond},
+				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 23 * time.Millisecond},
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
@@ -101,13 +101,13 @@ func Test_agent_Run(t *testing.T) {
 		},
 		{
 			name:    "slow reporter",
-			timeout: 28 * time.Millisecond,
+			timeout: 50 * time.Millisecond,
 			fields: fields{
-				config: config.Config{PollInterval: 6 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
+				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 23 * time.Millisecond},
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{timeout: 20 * time.Millisecond},
+				reporter: &mockReporter{timeout: 40 * time.Millisecond},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -117,57 +117,41 @@ func Test_agent_Run(t *testing.T) {
 		},
 		{
 			name:    "slow reporter 2",
-			timeout: 28 * time.Millisecond,
+			timeout: 50 * time.Millisecond,
 			fields: fields{
-				config: config.Config{PollInterval: 6 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
+				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 12 * time.Millisecond},
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{timeout: 35 * time.Millisecond},
+				reporter: &mockReporter{timeout: 30 * time.Millisecond},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				numCallsCollect: 5,
-				numCallsReport:  1,
-			},
-		},
-		{
-			name:    "slow reporter 3",
-			timeout: 28 * time.Millisecond,
-			fields: fields{
-				config: config.Config{PollInterval: 6 * time.Millisecond, ReportInterval: 8 * time.Millisecond},
-				collector: &mockCollector{
-					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
-				},
-				reporter: &mockReporter{timeout: 35 * time.Millisecond},
-			},
-			want: want{
-				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
-				numCallsCollect: 5,
-				numCallsReport:  1,
-			},
-		},
-		{
-			name:    "poll interval > report interval",
-			timeout: 25 * time.Millisecond,
-			fields: fields{
-				config: config.Config{PollInterval: 20 * time.Millisecond, ReportInterval: 10 * time.Millisecond},
-				collector: &mockCollector{
-					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
-				},
-				reporter: &mockReporter{},
-			},
-			want: want{
-				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
-				numCallsCollect: 2,
 				numCallsReport:  2,
 			},
 		},
 		{
-			name:    "poll interval == report interval",
-			timeout: 25 * time.Millisecond,
+			name:    "slow reporter 3",
+			timeout: 80 * time.Millisecond,
 			fields: fields{
-				config: config.Config{PollInterval: 10 * time.Millisecond, ReportInterval: 10 * time.Millisecond},
+				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 12 * time.Millisecond},
+				collector: &mockCollector{
+					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				},
+				reporter: &mockReporter{timeout: 20 * time.Millisecond},
+			},
+			want: want{
+				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				numCallsCollect: 7,
+				numCallsReport:  3,
+			},
+		},
+		{
+			name:    "poll interval > report interval",
+			timeout: 50 * time.Millisecond,
+			fields: fields{
+				config: config.Config{PollInterval: 20 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
 				collector: &mockCollector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
@@ -176,7 +160,23 @@ func Test_agent_Run(t *testing.T) {
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				numCallsCollect: 3,
-				numCallsReport:  2,
+				numCallsReport:  3,
+			},
+		},
+		{
+			name:    "poll interval == report interval",
+			timeout: 50 * time.Millisecond,
+			fields: fields{
+				config: config.Config{PollInterval: 15 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
+				collector: &mockCollector{
+					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				},
+				reporter: &mockReporter{},
+			},
+			want: want{
+				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
+				numCallsCollect: 4,
+				numCallsReport:  3,
 			},
 		},
 	}
