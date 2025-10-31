@@ -51,7 +51,7 @@ func (cw *compressorResponseWriter) Close(l log.Logger) {
 	}
 	err := cw.compressor.Close()
 	if err != nil {
-		l.Error().Err("error", err).Msg("compressor close failed")
+		l.Error().WithErr(err).Msg("compressor close failed")
 	}
 }
 
@@ -109,7 +109,7 @@ func (m *compressorMiddleware) shouldCompress(r *http.Request) bool {
 func (m *compressorMiddleware) wrapResponseWriter(w http.ResponseWriter) (*compressorResponseWriter, bool) {
 	wgz, err := m.compressorFactory.Create(w)
 	if err != nil {
-		m.logger.Error().Err("error", err).Msg("compressed writer creation failed")
+		m.logger.Error().WithErr(err).Msg("compressed writer creation failed")
 		return nil, false
 	}
 

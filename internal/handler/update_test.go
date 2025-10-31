@@ -9,6 +9,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,81 +40,81 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric operation\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/badType/someID", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric operation\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/badType/someID/1.23", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric type\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/someID/1.23", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric operation\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/someID/123/bla", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric operation\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter//456", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric operation\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s BAD_REQUEST",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter//456/", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusBadRequest, body: "unknown metric operation\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		// Not Found
 		{
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/badType", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/badType/", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "", contentType: ""},
 		},
 		{
 			name:   "POST %s NOT_FOUND",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/ /456", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusNotFound, body: "missing metric id\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusNotFound, body: "", contentType: ""},
 		},
 		// Internal error
 		{
 			name:   "POST %s INTERNAL_ERROR",
 			fields: fields{metrics: &faultyMetricService{}},
 			args:   args{method: http.MethodPost, url: "/update/counter/id1/123", contentType: "text/plain", body: http.NoBody},
-			want:   want{code: http.StatusInternalServerError, body: "cannot store metric\n", contentType: "text/plain; charset=utf-8"},
+			want:   want{code: http.StatusInternalServerError, body: "", contentType: ""},
 		},
 		// OK
 		{
@@ -161,8 +162,10 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf(tt.name, tt.args.url), func(t *testing.T) {
+			logger := log.NewTestLogger()
 			h := &updateHandler{
-				metrics: tt.fields.metrics,
+				baseHandler: baseHandler{logger: logger},
+				metrics:     tt.fields.metrics,
 			}
 			ts := httptest.NewServer(h)
 			defer ts.Close()

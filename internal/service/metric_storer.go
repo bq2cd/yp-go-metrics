@@ -11,7 +11,9 @@ import (
 var (
 	// ErrMetricNotFound wraps [repository.ErrMetricNotFound] to avoid exposure of [repository]
 	// to a caller.
-	ErrMetricNotFound = errors.New("metric not found")
+	ErrMetricNotFound   = errors.New("metric not found")
+	ErrMetricIsEmpty    = errors.New("metric is empty")
+	ErrMetricKeyIsEmpty = errors.New("metric key is empty")
 )
 
 //go:generate go tool mockgen -destination=servicetest/mock_metric_storer.go -package servicetest github.com/bq2cd/yp-go-metrics/internal/service MetricStorer
@@ -38,8 +40,11 @@ func NewMetricStorer(reader repository.StorageMultiReader, writer StorageBatchWr
 
 // StoreSingle updates or replaces a single metric.
 func (s *metricStorer) StoreSingle(ctx context.Context, metric model.Metric) error {
+	if metric.Key().Empty() {
+		return ErrMetricKeyIsEmpty
+	}
 	if metric.Empty() {
-		return nil
+		return ErrMetricIsEmpty
 	}
 	return s.StoreBatch(ctx, []model.Metric{metric})
 }
@@ -55,6 +60,9 @@ func (s *metricStorer) StoreBatch(ctx context.Context, metrics []model.Metric) e
 // RetrieveSingle obtains a metric from the underlying storage by given key
 // or returns error if metric is not found or storage has failed.
 func (s *metricStorer) RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error) {
+	if key.Empty() {
+		return model.Metric{}, ErrMetricKeyIsEmpty
+	}
 	metrics, err := s.RetrieveBatch(ctx, []model.MetricKey{key})
 	if err != nil {
 		return model.Metric{}, err

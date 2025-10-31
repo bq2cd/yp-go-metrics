@@ -12,8 +12,8 @@ type defaultHandler struct {
 func (h *defaultHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 	default:
-		http.Error(w, "invalid method", http.StatusMethodNotAllowed)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }

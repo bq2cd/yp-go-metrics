@@ -7,6 +7,10 @@ import (
 	"sort"
 )
 
+const (
+	errorDefaultKey = "error"
+)
+
 // FieldType encodes value type inside the Field.
 type FieldType int8
 

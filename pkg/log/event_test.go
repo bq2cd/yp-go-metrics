@@ -331,3 +331,36 @@ func Test_eventBuilder_addField(t *testing.T) {
 		})
 	}
 }
+
+func Test_eventBuilder_WithErr(t *testing.T) {
+	type fields struct {
+		logger loggerImpl
+		level  Level
+		fields FieldSet
+	}
+	type args struct {
+		err error
+	}
+	type want struct {
+		got EventBuilder
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			e := &eventBuilder{
+				logger: tt.fields.logger,
+				level:  tt.fields.level,
+				fields: tt.fields.fields,
+			}
+			got := e.WithErr(tt.args.err)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

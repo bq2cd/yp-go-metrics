@@ -50,8 +50,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusNotFound,
-				body:        `metric not found`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -68,8 +68,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        `empty metric type or id`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -86,8 +86,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        `invalid content type`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -104,8 +104,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
-				body:        `cannot decode metric`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -122,8 +122,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusNotFound,
-				body:        `metric not found`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -140,8 +140,8 @@ func Test_valueJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusInternalServerError,
-				body:        `cannot retrieve metric`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{

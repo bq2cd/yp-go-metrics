@@ -6,6 +6,7 @@ type EventBuilder interface {
 	EventFieldAdder
 
 	With(fields ...Field) EventBuilder
+	WithErr(err error) EventBuilder
 	Msg(msg string)
 	Send()
 }
@@ -46,6 +47,12 @@ func (e *eventBuilder) With(fields ...Field) EventBuilder {
 		level:  e.level,
 		fields: append(append(newFields, e.fields...), fields...),
 	}
+}
+
+// WithErr appends provided error under `error` field.
+// If a custom field name is needed, use [Err] method.
+func (e *eventBuilder) WithErr(err error) EventBuilder {
+	return e.Err(errorDefaultKey, err)
 }
 
 // Msg sends current log event to the underlying logging implementation.

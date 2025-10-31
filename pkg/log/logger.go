@@ -19,6 +19,7 @@ type Logger interface {
 	Debug() EventBuilder
 
 	With(fields ...Field) Logger
+	WithErr(err error) Logger
 	Sync() error
 }
 
@@ -54,6 +55,10 @@ func (l *baseLogger) With(fields ...Field) Logger {
 	return &baseLogger{
 		impl: l.impl.with(fields...),
 	}
+}
+
+func (l *baseLogger) WithErr(err error) Logger {
+	return l.With(Err(errorDefaultKey, err))
 }
 
 func (l *baseLogger) Sync() error {

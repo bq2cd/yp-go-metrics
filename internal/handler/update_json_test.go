@@ -139,8 +139,8 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusNotFound,
-				body:        `cannot retrieve metric`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -174,8 +174,8 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        `invalid content type`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -191,8 +191,8 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
-				body:        `cannot decode metric`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -208,8 +208,8 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        `empty metric type or id`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
@@ -225,8 +225,8 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusInsufficientStorage,
-				body:        `cannot store metric`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		{
