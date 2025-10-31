@@ -156,3 +156,25 @@ func TestContentType_UTF8(t *testing.T) {
 		})
 	}
 }
+
+func TestGetContentType(t *testing.T) {
+	type args struct {
+		header http.Header
+	}
+	type want struct {
+		got ContentType
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := GetContentType(tt.args.header)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

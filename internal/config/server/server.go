@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,7 @@ type Config struct {
 	MetricStoreInterval      time.Duration
 	MetricStoreFilePath      string
 	MetricStoreLoadOnStartup bool
+	DatabaseURL              url.URL
 }
 
 // Option is function that take pointer to config as an argument,
@@ -102,6 +104,30 @@ func MetricStoreLoadOnStartup(action bool) Option {
 	}
 }
 
+// DatabaseURL sets a URL for a database connection.
+func DatabaseURL(dsn string) Option {
+	return func(c *Config) error {
+		if dsn == "" {
+			return nil
+		}
+		uri, err := url.Parse(dsn)
+		if err != nil {
+			return fmt.Errorf("cannot parse url: %w", err)
+		}
+		if !(uri.Scheme == "postgres" || uri.Scheme == "postgresql") {
+			return fmt.Errorf("scheme must be postgres or postgresql")
+		}
+		if uri.Hostname() == "" {
+			return fmt.Errorf("must specify host")
+		}
+		if uri.Port() == "" {
+			return fmt.Errorf("must specify port")
+		}
+		c.DatabaseURL = *uri
+		return nil
+	}
+}
+
 // Validate performs logical validation of the config and returns
 // an error if some values do not make sense (logically).
 func (c *Config) Validate() error {
@@ -123,6 +149,9 @@ func (c *Config) Validate() error {
 	}
 	if c.MetricStoreLoadOnStartup && c.MetricStoreFilePath == "" {
 		return fmt.Errorf("must specify metric store path when loading on startup: %w", ErrInvalidConfig)
+	}
+	if err := DatabaseURL(c.DatabaseURL.String())(tmp); err != nil {
+		return fmt.Errorf("%w: %w", err, ErrInvalidConfig)
 	}
 	return nil
 }

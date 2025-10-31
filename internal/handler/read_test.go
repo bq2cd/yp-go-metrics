@@ -10,7 +10,6 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +43,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 			name:   "GET %s INTERNAL_ERROR",
 			fields: fields{metrics: &faultyMetricService{}},
 			args:   args{method: http.MethodGet, url: "/", body: http.NoBody},
-			want:   want{code: http.StatusInternalServerError, body: "", contentType: httpheaders.ContentTypeTextPlain.UTF8()},
+			want:   want{code: http.StatusInternalServerError, body: "cannot retrieve metrics", contentType: httpheaders.ContentTypeTextPlain.UTF8()},
 			assertion: func(t *testing.T, want want, body string) {
 				assert.Equal(t, want.body, strings.TrimRight(body, "\n"))
 			},
@@ -52,7 +51,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		// OK
 		{
 			name:   "GET %s OK (no metrics)",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage())},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodGet, url: "/", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: httpheaders.ContentTypeTextHTML},
 			assertion: func(t *testing.T, want want, body string) {
@@ -62,7 +61,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name:   "GET %s OK (single metric)",
-			fields: fields{metrics: service.NewMetricStorer(storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage(model.NewCounterMetric("id1", 123)))},
 			args:   args{method: http.MethodGet, url: "/", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "id1 123", contentType: httpheaders.ContentTypeTextHTML},
 			assertion: func(t *testing.T, want want, body string) {
@@ -71,20 +70,12 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 		},
 		{
 			name: "GET %s OK (multiple metrics)",
-			fields: fields{metrics: service.NewMetricStorer(
-				func() repository.Storage {
-					s := repository.NewMemStorage()
-					for _, m := range []model.Metric{
-						model.NewCounterMetric("id1", 123),
-						model.NewCounterMetric("id2", -123),
-						model.NewGaugeMetric("id1", 1.23),
-						model.NewGaugeMetric("id2", -1.23),
-					} {
-						require.NoError(t, s.Set(m))
-					}
-					return s
-				}(),
-			)},
+			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage(
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id1", 1.23),
+				model.NewGaugeMetric("id2", -1.23),
+			))},
 			args: args{method: http.MethodGet, url: "/", contentType: "text/plain", body: http.NoBody},
 			want: want{code: http.StatusOK, body: "id1 123\nid2 -123\nid1 1.23\nid2 -1.23", contentType: httpheaders.ContentTypeTextHTML},
 			assertion: func(t *testing.T, want want, body string) {

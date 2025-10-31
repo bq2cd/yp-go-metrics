@@ -9,6 +9,7 @@ import (
 )
 
 type updateHandler struct {
+	baseHandler
 	metrics service.MetricStorer
 }
 
@@ -23,20 +24,20 @@ func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case model.MetricTypeGauge:
 			// ok
 		default:
-			http.Error(w, "", http.StatusBadRequest)
+			http.Error(w, "unknown metric type", http.StatusBadRequest)
 			return
 		}
 	case urlpath.ErrMissingMetricID:
-		http.Error(w, "", http.StatusNotFound)
+		http.Error(w, "missing metric id", http.StatusNotFound)
 		return
 	default:
-		http.Error(w, "", http.StatusBadRequest)
+		http.Error(w, "unknown metric operation", http.StatusBadRequest)
 		return
 	}
 
-	err = h.metrics.StoreSingle(metric)
+	err = h.metrics.StoreSingle(r.Context(), metric)
 	if err != nil {
-		http.Error(w, "failed to update metric", http.StatusInternalServerError)
+		http.Error(w, "cannot store metric", http.StatusInternalServerError)
 		return
 	}
 

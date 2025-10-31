@@ -7,15 +7,12 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/bq2cd/yp-go-metrics/internal/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/agent/source"
+	launcher "github.com/bq2cd/yp-go-metrics/internal/app/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/app/cli"
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	"github.com/bq2cd/yp-go-metrics/internal/app/logger"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/go-resty/resty/v2"
 )
 
 const (
@@ -28,20 +25,6 @@ type cliOptions struct {
 	UpstreamURL    string `env:"ADDRESS"`
 	PollInterval   uint   `env:"POLL_INTERVAL"`
 	ReportInterval uint   `env:"REPORT_INTERVAL"`
-}
-
-func runAgent(ctx context.Context, cfg config.Config) error {
-	log.Printf("sending metrics to %s every %v (poll interval %v)", cfg.UpstreamURL.String(), cfg.ReportInterval, cfg.PollInterval)
-
-	collector := agent.NewCollector(source.DefaultSources(), repository.NewMemStorage())
-
-	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
-	sender := agent.NewSenderJSON(ctx, client)
-	reporter := agent.NewReporter(sender, repository.NewMemStorage())
-
-	ag := agent.NewAgent(ctx, cfg, collector, reporter)
-
-	return ag.Run()
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -78,21 +61,12 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 }
 
 func run(ctx context.Context, args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("agent", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-
-	cfg, err := parseArgs(fs, args, envparser.NewParser())
-	if err != nil {
-		return fmt.Errorf("unable to parse args: %w", err)
+	app := cli.App[config.Config]{
+		Name:          "agent",
+		ParseArgs:     parseArgs,
+		LaunchProcess: launcher.Run,
 	}
-
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	err = runAgent(ctx, cfg)
-	<-ctx.Done()
-
-	return err
+	return app.Run(ctx, logger.NewProduction(), args, stderr)
 }
 
 func main() {

@@ -5,19 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	stdlog "log"
+	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
+	"github.com/bq2cd/yp-go-metrics/internal/app/cli"
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
-	applogger "github.com/bq2cd/yp-go-metrics/internal/app/logger"
+	logger "github.com/bq2cd/yp-go-metrics/internal/app/logger"
+	launcher "github.com/bq2cd/yp-go-metrics/internal/app/server"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
-	"github.com/bq2cd/yp-go-metrics/internal/handler"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"github.com/bq2cd/yp-go-metrics/internal/server"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
 )
 
 const (
@@ -34,17 +29,7 @@ type cliOptions struct {
 	MetricStoreInterval      uint   `env:"STORE_INTERVAL"`
 	MetricStoreFilePath      string `env:"FILE_STORAGE_PATH"`
 	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
-}
-
-func runServer(logger log.Logger, ctx context.Context, cfg config.Config) error {
-	storage := repository.NewMemStorage()
-	storer := service.NewMetricStorer(storage)
-	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
-	router := handler.NewRouter(logger, snapshotter, nil)
-
-	srv := server.NewServer(logger, ctx, cfg, router, snapshotter)
-
-	return srv.Run()
+	DatabaseDSN              string `env:"DATABASE_DSN"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -55,6 +40,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.UintVar(&opts.MetricStoreInterval, "i", defaultMetricStoreIntervalSec, "dump metrics on disk each interval (in seconds)")
 	fs.StringVar(&opts.MetricStoreFilePath, "f", defaultMetricStoreFilePath, "path to file for dumping metrics")
 	fs.BoolVar(&opts.MetricStoreLoadOnStartup, "r", defaultMetricStoreLoadOnStartup, "restore metrics from file on startup")
+	fs.StringVar(&opts.DatabaseDSN, "d", "", "database dsn (only postgres is supported)")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
@@ -70,6 +56,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.MetricStoreInterval(opts.MetricStoreInterval),
 		config.MetricStoreFilePath(opts.MetricStoreFilePath),
 		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
+		config.DatabaseURL(opts.DatabaseDSN),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)
@@ -83,28 +70,17 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 }
 
 func run(ctx context.Context, args []string, stderr io.Writer) error {
-	fs := flag.NewFlagSet("server", flag.ContinueOnError)
-	fs.SetOutput(stderr)
-
-	cfg, err := parseArgs(fs, args, envparser.NewParser())
-	if err != nil {
-		return fmt.Errorf("failed to parse args: %w", err)
+	app := cli.App[config.Config]{
+		Name:          "server",
+		ParseArgs:     parseArgs,
+		LaunchProcess: launcher.Run,
 	}
-
-	logger := applogger.NewProduction()
-
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	err = runServer(logger, ctx, cfg)
-	<-ctx.Done()
-
-	return err
+	return app.Run(ctx, logger.NewProduction(), args, stderr)
 }
 
 func main() {
 	err := run(context.Background(), os.Args[1:], os.Stderr)
 	if err != nil {
-		stdlog.Fatalf("failed to start server: %v", err)
+		log.Fatalf("failed to start server: %v", err)
 	}
 }

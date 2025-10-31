@@ -1,105 +1,82 @@
 package service
 
 import (
+	"context"
 	"errors"
-	"fmt"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )
 
+var (
+	// ErrMetricNotFound wraps [repository.ErrMetricNotFound] to avoid exposure of [repository]
+	// to a caller.
+	ErrMetricNotFound = errors.New("metric not found")
+)
+
+//go:generate go tool mockgen -destination=servicetest/mock_metric_storer.go -package servicetest github.com/bq2cd/yp-go-metrics/internal/service MetricStorer
+
 // MetricStorer defines an interface to work with metrics.
 // E.g. store, retrieve, delete, etc.
 type MetricStorer interface {
-	StoreSingle(metric model.Metric) error
-	StoreBatch(metrics []model.Metric) error
-	RetrieveSingle(key model.MetricKey) (model.Metric, error)
-	RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error)
-	RetrieveAll() ([]model.Metric, error)
+	StoreSingle(ctx context.Context, metric model.Metric) error
+	StoreBatch(ctx context.Context, metrics []model.Metric) error
+	RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error)
+	RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error)
+	RetrieveAll(ctx context.Context) ([]model.Metric, error)
 }
 
 type metricStorer struct {
-	storage repository.Storage
+	reader repository.StorageMultiReader
+	writer StorageBatchWriter
 }
 
 // NewMetricStorer creates an instance of the metrics service.
-func NewMetricStorer(storage repository.Storage) *metricStorer {
-	return &metricStorer{storage: storage}
+func NewMetricStorer(reader repository.StorageMultiReader, writer StorageBatchWriter) *metricStorer {
+	return &metricStorer{reader: reader, writer: writer}
 }
 
 // StoreSingle updates or replaces a single metric.
-func (s *metricStorer) StoreSingle(metric model.Metric) error {
+func (s *metricStorer) StoreSingle(ctx context.Context, metric model.Metric) error {
 	if metric.Empty() {
 		return nil
 	}
-	switch metric.Type {
-	case model.MetricTypeCounter:
-		prev, err := s.storage.Get(metric.Key())
-		if err == repository.ErrMetricNotFound {
-			return s.storage.Set(metric)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to retrieve existing metric: %w", err)
-		}
-		metric = metric.Copy()
-		*metric.Delta += *prev.Delta
-	default:
-		// pass
-	}
-	return s.storage.Set(metric)
+	return s.StoreBatch(ctx, []model.Metric{metric})
 }
 
 // StoreBatch updates or replaces a slice of metrics.
 // This method essentially calls StoreSingle method for each metric.
-func (s *metricStorer) StoreBatch(metrics []model.Metric) error {
-	var errFinal error
-
-	for i := range metrics {
-		err := s.StoreSingle(metrics[i])
-		errFinal = errors.Join(errFinal, err)
-	}
-
-	return errFinal
+func (s *metricStorer) StoreBatch(ctx context.Context, metrics []model.Metric) error {
+	tx := s.writer.WriteBatch(ctx, metrics)
+	err := <-tx.Result()
+	return err
 }
 
 // RetrieveSingle obtains a metric from the underlying storage by given key
 // or returns error if metric is not found or storage has failed.
-func (s *metricStorer) RetrieveSingle(key model.MetricKey) (model.Metric, error) {
-	m, err := s.storage.Get(key)
-	if err == nil && m.Empty() {
-		// avoid returning empty metrics from underlying storage as
-		// the storage should not store such metrics in the first place,
-		// but in case it did, we will intercept such cases here.
-		return model.Metric{}, repository.ErrMetricNotFound
+func (s *metricStorer) RetrieveSingle(ctx context.Context, key model.MetricKey) (model.Metric, error) {
+	metrics, err := s.RetrieveBatch(ctx, []model.MetricKey{key})
+	if err != nil {
+		return model.Metric{}, err
 	}
-	return m, err
+	if len(metrics) == 0 {
+		return model.Metric{}, ErrMetricNotFound
+	}
+	return metrics[0], nil
 }
 
 // RetrieveBatch obtains a slice of metrics from the underlying storage by given keys
 // or returns an error if storage has failed.
 // This method essentially wraps RetrieveSingle while skipping non-existent metrics.
 // NB. Number of metrics returned might be smaller than the number of the keys requested.
-func (s *metricStorer) RetrieveBatch(keys []model.MetricKey) ([]model.Metric, error) {
-	var errFinal error
-
-	metrics := make([]model.Metric, 0, len(keys))
-
-	for _, k := range keys {
-		m, err := s.storage.Get(k)
-		switch err {
-		case nil:
-			metrics = append(metrics, m)
-		case repository.ErrMetricNotFound:
-			continue
-		default:
-			errFinal = errors.Join(errFinal, err)
-		}
+func (s *metricStorer) RetrieveBatch(ctx context.Context, keys []model.MetricKey) ([]model.Metric, error) {
+	if len(keys) == 0 {
+		return []model.Metric{}, nil
 	}
-
-	return metrics, errFinal
+	return s.reader.GetMulti(ctx, model.NewMetricKeySet(keys...))
 }
 
 // RetrieveAll returns all metrics from the underlying storage.
-func (s *metricStorer) RetrieveAll() ([]model.Metric, error) {
-	return s.storage.GetAll()
+func (s *metricStorer) RetrieveAll(ctx context.Context) ([]model.Metric, error) {
+	return s.reader.GetAll(ctx)
 }

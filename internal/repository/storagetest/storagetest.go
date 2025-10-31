@@ -1,6 +1,7 @@
 package storagetest
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -19,7 +20,7 @@ var (
 
 type MockStorage struct {
 	mu        sync.RWMutex
-	data      map[model.MetricKey]model.Metric
+	data      model.MetricSet
 	isFaulty  bool
 	triggerID string
 }
@@ -27,10 +28,7 @@ type MockStorage struct {
 // NewMockStorage creates an instance of an in-memory storage operating in normal mode.
 // To switch storage into faulty mode, see [MakeFaulty] method.
 func NewMockStorage(metrics ...model.Metric) *MockStorage {
-	data := make(map[model.MetricKey]model.Metric, len(metrics))
-	for _, m := range metrics {
-		data[m.Key()] = m
-	}
+	data := model.NewMetricSet(metrics...)
 	return &MockStorage{
 		data:      data,
 		isFaulty:  false,
@@ -54,7 +52,7 @@ func (s *MockStorage) MakeNormal() *MockStorage {
 // If metric does not exist, [repository.ErrMetricNotFound] error is returned.
 // If storage is faulty and fault is triggered by a special metric ID,
 // then [ErrFaultyStorage] error is returned.
-func (s *MockStorage) Get(k model.MetricKey) (model.Metric, error) {
+func (s *MockStorage) Get(_ context.Context, k model.MetricKey) (model.Metric, error) {
 	if s.isFaulty && k.ID == s.triggerID {
 		return model.Metric{}, fmt.Errorf("get error: %w", ErrFaultyStorage)
 	}
@@ -74,12 +72,12 @@ func (s *MockStorage) Get(k model.MetricKey) (model.Metric, error) {
 // then this metric is not returned.
 // If [ErrFaultyStorage] was returned by [Get], it is immediately
 // returned along with `nil` (empty slice).
-func (s *MockStorage) GetAll() ([]model.Metric, error) {
+func (s *MockStorage) GetAll(ctx context.Context) ([]model.Metric, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]model.Metric, 0, len(s.data))
 	for k := range s.data {
-		m, err := s.Get(k)
+		m, err := s.Get(ctx, k)
 		switch {
 		case err == nil:
 			out = append(out, m)
@@ -95,7 +93,7 @@ func (s *MockStorage) GetAll() ([]model.Metric, error) {
 // Set stores given metric in the underlying storage.
 // If faulty mode is activated and metric's ID matches a trigger ID,
 // then [ErrFaultyStorage] is immediately returned.
-func (s *MockStorage) Set(m model.Metric) error {
+func (s *MockStorage) Set(_ context.Context, m model.Metric) error {
 	if s.isFaulty && m.ID == s.triggerID {
 		return fmt.Errorf("set error: %w", ErrFaultyStorage)
 	}
@@ -103,4 +101,30 @@ func (s *MockStorage) Set(m model.Metric) error {
 	defer s.mu.Unlock()
 	s.data[m.Key()] = m
 	return nil
+}
+
+// GetMulti retrieves multiple metrics in a single go (essentially calling [Get] for each metric).
+func (s *MockStorage) GetMulti(ctx context.Context, keys model.MetricKeySet) ([]model.Metric, error) {
+	var errFinal error
+	metrics := make([]model.Metric, 0, len(keys))
+	for key := range keys {
+		m, err := s.Get(ctx, key)
+		if err == repository.ErrMetricNotFound {
+			continue
+		}
+		errFinal = errors.Join(errFinal, err)
+		if !m.Empty() {
+			metrics = append(metrics, m)
+		}
+	}
+	return metrics, errFinal
+}
+
+// SetMulti stores multiple metrics in a single go (essentially calling [Set] for each metric).
+func (s *MockStorage) SetMulti(ctx context.Context, metrics model.MetricSet) error {
+	var errFinal error
+	for _, m := range metrics {
+		errFinal = errors.Join(errFinal, s.Set(ctx, m))
+	}
+	return errFinal
 }

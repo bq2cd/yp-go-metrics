@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,7 +23,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		responder metricJSONResponder
 	}
 	type args struct {
-		bodyData       testBodyData
+		bodyData       handlertest.BodyData
 		shouldCompress bool
 	}
 	type want struct {
@@ -41,11 +42,11 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "empty storage",
 			fields: fields{
-				metrics:   service.NewMetricStorer(storagetest.NewMockStorage()),
+				metrics:   newMetricStorer(t, storagetest.NewMockStorage()),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -56,13 +57,13 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "add new counter",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -73,14 +74,14 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "update existing counter",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 					model.NewCounterMetric("id1", 10),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -91,14 +92,14 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "add new gauge",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id4", 77),
 					model.NewGaugeMetric("id5", 8.8),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -109,7 +110,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "update existing gauge",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id4", 77),
 					model.NewGaugeMetric("id5", 8.8),
 					model.NewGaugeMetric("id1", 0.8),
@@ -117,7 +118,7 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewGaugeMetric("id1", -7.8)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -128,31 +129,31 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "skip empty metric",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
 			},
 			want: want{
 				code:        http.StatusNotFound,
-				body:        ``,
+				body:        `cannot retrieve metric`,
 				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
 			name: "skip empty metric, return existing",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 					model.NewCounterMetric("id1", -33),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.Metric{ID: "id1", Type: model.MetricTypeCounter}),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -163,89 +164,82 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "invalid content-type",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: func() testBodyData {
-					bd := newTestBodyDataFromMetric(t, model.NewCounterMetric("id1", 7))
-					bd.contentType = httpheaders.ContentTypeTextPlain
-					return bd
-				}(),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 7)).AsType(httpheaders.ContentTypeTextPlain),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        ``,
+				body:        `invalid content type`,
 				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
 			name: "invalid json",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: testBodyData{
-					data:        []byte(`{ id: 1 }`),
-					contentType: httpheaders.ContentTypeApplicationJSON,
-				},
+				bodyData: handlertest.NewBodyDataOfType(t, []byte(`{ id: 1 }`), httpheaders.ContentTypeApplicationJSON),
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
-				body:        ``,
+				body:        `cannot decode metric`,
 				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
 			name: "empty metric key",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				)),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "")),
+				bodyData: handlertest.NewBodyDataFromMetricKey(t, model.NewMetricKey(model.MetricTypeCounter, "")),
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        ``,
+				body:        `empty metric type or id`,
 				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
 			name: "faulty storage",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id5", 88),
 				).MakeFaulty()),
 				responder: &defaultMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric(storagetest.FaultyStorageErrorTrigger, 7)),
 			},
 			want: want{
 				code:        http.StatusInsufficientStorage,
-				body:        ``,
+				body:        `cannot store metric`,
 				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
 			},
 		},
 		{
 			name: "json encoder error",
 			fields: fields{
-				metrics: service.NewMetricStorer(storagetest.NewMockStorage(
+				metrics: newMetricStorer(t, storagetest.NewMockStorage(
 					model.NewCounterMetric("id1", 12),
 					model.NewGaugeMetric("id2", -3.7),
 				)),
 				responder: &faultyMetricJSONResponder{},
 			},
 			args: args{
-				bodyData: newTestBodyDataFromMetric(t, model.NewCounterMetric("id3", 7)),
+				bodyData: handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id3", 7)),
 			},
 			want: want{
 				code:        http.StatusOK,
@@ -264,15 +258,14 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			logger := log.NewTestLogger()
 			h := &updateJSONHandler{
-				logger:    logger,
-				metrics:   tt.fields.metrics,
-				responder: tt.fields.responder,
+				baseHandler: baseHandler{logger: logger},
+				metrics:     tt.fields.metrics,
+				responder:   tt.fields.responder,
 			}
 			ts := httptest.NewServer(h)
 			defer ts.Close()
 
-			req, err := tt.args.bodyData.toRequest(http.MethodPost, ts.URL+"/update", tt.args.shouldCompress)
-			require.NoError(t, err)
+			req := tt.args.bodyData.NewRequest(http.MethodPost, ts.URL+"/update", tt.args.shouldCompress)
 
 			resp, err := ts.Client().Do(req)
 			require.NoError(t, err)
@@ -287,6 +280,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				assert.JSONEq(t, tt.want.body, string(body))
 			} else {
 				assert.Equal(t, tt.want.body, strings.TrimRight(string(body), "\n"))
+			}
+			if tt.assertLogEvents != nil {
+				tt.assertLogEvents(t, logger.RecordedEvents())
 			}
 		})
 	}

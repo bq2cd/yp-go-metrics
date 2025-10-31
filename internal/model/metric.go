@@ -1,5 +1,7 @@
 package model
 
+import "slices"
+
 const (
 	_metricTypeEmpty = MetricType("")
 
@@ -10,12 +12,21 @@ const (
 	MetricTypeGauge = MetricType("gauge")
 )
 
+const (
+	MetricAggregateStrategyLastValueWins MetricAggregateStrategy = iota
+	MetricAggregateStrategyFirstValueWins
+	MetricAggregateStrategyCounterValueAccumulates
+)
+
 type (
 	// MetricType wraps a string into a user type.
 	MetricType string
 
 	// MetricHash wraps a string into a user type.
 	MetricHash string
+
+	// MetricAggregateStrategy defines how to aggregate a list of metrics by a unique [MetricKey].
+	MetricAggregateStrategy int
 )
 
 // MetricKey defines a (type, id) pair to be used as a map key.
@@ -40,6 +51,27 @@ func (k MetricKey) Empty() bool {
 		return true
 	}
 	return false
+}
+
+// Compare simulates [Comparable] interface for [MetricKey] struct.
+func (k MetricKey) Compare(other MetricKey) int {
+	return slices.Compare(
+		[]string{string(k.Type), k.ID},
+		[]string{string(other.Type), other.ID},
+	)
+}
+
+// MetricKeySet represents unique metric keys.
+type MetricKeySet map[MetricKey]struct{}
+
+// NewMetricKeySet create a new [MetricKeySet] from a list of keys.
+// The last seen key wins.
+func NewMetricKeySet(keys ...MetricKey) MetricKeySet {
+	unique := MetricKeySet{}
+	for _, key := range keys {
+		unique[key] = struct{}{}
+	}
+	return unique
 }
 
 // Metric defines a basic data structure to store metric values and metadata.
@@ -82,11 +114,11 @@ func (m *Metric) Key() MetricKey {
 }
 
 // Empty returns true if either of the following is true:
-// - metric id is empty
-// - metric type is empty
-// - metric type is counter and delta is nil
-// - metric type is gauge and value is nil
-// - metric type is custom and both value and delta are nil
+// 1) Metric id is empty.
+// 2) Metric type is empty.
+// 3) Metric type is counter and delta is nil.
+// 4) Metric type is gauge and value is nil.
+// 5) Metric type is custom and both value and delta are nil.
 func (m *Metric) Empty() bool {
 	if m.ID == "" {
 		return true
@@ -129,17 +161,107 @@ func (m *Metric) Copy() Metric {
 	return metric
 }
 
-// MetricSet represents a slice of metrics.
-type MetricSet []Metric
+// AddDelta adds provided value to the metric [Delta] field but only if metric type is [MetricTypeCounter] and new value is not nil.
+func (m *Metric) AddDelta(other *int64) {
+	if m.Type != MetricTypeCounter {
+		return
+	}
+	if other == nil {
+		return
+	}
+	if m.Delta == nil {
+		m.Delta = other
+		return
+	}
+	*m.Delta += *other
+}
 
-// UniqueByKey converts a slice of metrics into a map with
-// `MetricKey` as a key and `Metric` as a value.
-// During conversion, duplicates are eliminated; last seen
-// metric in the slice wins.
-func (ms MetricSet) UniqueByKey() map[MetricKey]Metric {
-	unique := make(map[MetricKey]Metric, len(ms))
-	for _, m := range ms {
+// MetricSet represents a set of unique metrics keyed by their [MetricKey].
+type MetricSet map[MetricKey]Metric
+
+// NewMetricSet converts a list of metrics into unique set of metrics, keyed by [MetricKey] using [MetricAggregateStrategyLastValueWins].
+func NewMetricSet(metrics ...Metric) MetricSet {
+	return NewMetricSetWithStrategy(MetricAggregateStrategyLastValueWins, metrics...)
+}
+
+// NewMetricSetWithStrategy converts a list of metrics into unique set of metrics, keyed by [MetricKey] using provided [MetricAggregateStrategy].
+func NewMetricSetWithStrategy(strategy MetricAggregateStrategy, metrics ...Metric) MetricSet {
+	unique := make(MetricSet, len(metrics))
+	for _, m := range metrics {
+		if m.Empty() {
+			continue
+		}
+		prev, ok := unique[m.Key()]
+		switch strategy {
+		case MetricAggregateStrategyFirstValueWins:
+			if ok {
+				continue
+			}
+		case MetricAggregateStrategyCounterValueAccumulates:
+			switch m.Type {
+			case MetricTypeCounter:
+				if ok {
+					m = m.Copy()
+					m.AddDelta(prev.Delta)
+				}
+			}
+		}
 		unique[m.Key()] = m
 	}
 	return unique
+}
+
+// GroupByType create a separate metric set per metric type and
+// maps them together.
+func (ms MetricSet) GroupByType() map[MetricType]MetricSet {
+	group := make(map[MetricType]MetricSet)
+	for _, m := range ms {
+		_, ok := group[m.Type]
+		if !ok {
+			group[m.Type] = make(MetricSet)
+		}
+		group[m.Type][m.Key()] = m
+	}
+	return group
+}
+
+// Empty returns true if metric set contains no metrics.
+func (ms MetricSet) Empty() bool {
+	return len(ms) == 0
+}
+
+// Upsert adds provided metric to the set or overrides
+// existing if it has the matching key.
+// Empty metric is ignored
+func (ms MetricSet) Upsert(m Metric) {
+	if m.Empty() {
+		return
+	}
+	ms[m.Key()] = m
+}
+
+// Merge adds metrics from `other` into the current set
+// and overrides any existing metrics with matching keys.
+func (ms MetricSet) Merge(other MetricSet) {
+	for _, m := range other {
+		ms.Upsert(m)
+	}
+}
+
+// Keys returns only metric keys in a [MetricKeySet] form.
+func (ms MetricSet) Keys() MetricKeySet {
+	keys := make(MetricKeySet, len(ms))
+	for key := range ms {
+		keys[key] = struct{}{}
+	}
+	return keys
+}
+
+// Values returns only metrics as a slice
+func (ms MetricSet) Values() []Metric {
+	values := make([]Metric, 0, len(ms))
+	for _, m := range ms {
+		values = append(values, m)
+	}
+	return values
 }

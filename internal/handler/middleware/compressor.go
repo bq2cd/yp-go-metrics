@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type compressorResponseWriter struct {
@@ -124,7 +124,7 @@ func (m *compressorMiddleware) wrapResponseWriter(w http.ResponseWriter) (*compr
 
 func (m *compressorMiddleware) Intercept(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	if err := m.decompressRequest(r); err != nil {
-		http.Error(w, "", http.StatusInternalServerError)
+		http.Error(w, "cannot decompress request", http.StatusInternalServerError)
 		return
 	}
 

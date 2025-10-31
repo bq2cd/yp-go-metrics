@@ -21,7 +21,7 @@ func NewMetricJSONDecoder() *metricJSONDecoder {
 
 // DecodeBatch reads JSON from the provided reader and attempts to decode it to the slice of metrics.
 func (d *metricJSONDecoder) DecodeBatch(r io.Reader) ([]model.Metric, error) {
-	metrics := model.MetricSet{}
+	metrics := []model.Metric{}
 	err := json.NewDecoder(r).Decode(&metrics)
 	return metrics, err
 }

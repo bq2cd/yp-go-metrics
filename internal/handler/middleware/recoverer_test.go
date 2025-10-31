@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,7 +68,7 @@ func Test_recovererMiddleware_Intercept(t *testing.T) {
 				resp := rec.Result()
 				defer func() { _ = resp.Body.Close() }()
 				assert.Equal(t, http.StatusOK, resp.StatusCode)
-				assert.Len(t, events, 0)
+				assert.Empty(t, events)
 			},
 		},
 		{
@@ -91,8 +91,8 @@ func Test_recovererMiddleware_Intercept(t *testing.T) {
 				require.Len(t, events, 1)
 				e := events[0]
 
-				assert.Equal(t, e.Level(), log.LevelError)
-				assert.Equal(t, e.Message(), "internal error")
+				assert.Equal(t, log.LevelError, e.Level())
+				assert.Equal(t, "recovered from panic", e.Message())
 				fp := e.Fields().GetFieldByKey("panic")
 
 				require.NotNil(t, fp)

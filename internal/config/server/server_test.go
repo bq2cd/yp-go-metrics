@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,28 +22,22 @@ func TestNew(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			name: "empty",
-			args: args{},
-			want: &Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "empty",
+			args:      args{},
+			want:      &Config{},
+			assertion: assert.NoError,
 		},
 		{
-			name: "listen address",
-			args: args{opts: []Option{ListenAddress("localhost:91")}},
-			want: &Config{ListenAddress: "localhost:91"},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "listen address",
+			args:      args{opts: []Option{ListenAddress("localhost:91")}},
+			want:      &Config{ListenAddress: "localhost:91"},
+			assertion: assert.NoError,
 		},
 		{
-			name: "shutdown timeout",
-			args: args{opts: []Option{ShutdownTimeout(5)}},
-			want: &Config{ShutdownTimeout: 5 * time.Second},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			name:      "shutdown timeout",
+			args:      args{opts: []Option{ShutdownTimeout(5)}},
+			want:      &Config{ShutdownTimeout: 5 * time.Second},
+			assertion: assert.NoError,
 		},
 		{
 			name: "multiple options",
@@ -54,9 +49,7 @@ func TestNew(t *testing.T) {
 				ListenAddress:   "localhost:83",
 				ShutdownTimeout: 3 * time.Second,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "multiple options but some invalid",
@@ -64,10 +57,8 @@ func TestNew(t *testing.T) {
 				ListenAddress("localhost:83"),
 				ShutdownTimeout(0),
 			}},
-			want: nil,
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      nil,
+			assertion: assert.Error,
 		},
 	}
 	for _, tt := range tests {
@@ -91,14 +82,14 @@ func TestListenAddress(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "empty",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.Error(t, err)
 			},
 		},
@@ -107,7 +98,7 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: "localhost:91:invalid"},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.Error(t, err)
 			},
 		},
@@ -116,8 +107,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: "localhost:91"},
 			want:   want{addr: "localhost:91"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -126,8 +117,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: ":91"},
 			want:   want{addr: ":91"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -136,8 +127,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: ":0"},
 			want:   want{addr: ":0"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -146,8 +137,8 @@ func TestListenAddress(t *testing.T) {
 			args:   args{addr: "127.0.0.1:39"},
 			want:   want{addr: "127.0.0.1:39"},
 			config: Config{ListenAddress: ":0"},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.addr, c.ListenAddress)
 			},
 		},
@@ -172,15 +163,15 @@ func TestShutdownTimeout(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "zero",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.Error(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
 			},
 		},
 		{
@@ -188,8 +179,8 @@ func TestShutdownTimeout(t *testing.T) {
 			args:   args{timeoutSec: 35},
 			want:   want{timeout: 35 * time.Second},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.timeout, c.ShutdownTimeout)
 			},
 		},
@@ -198,8 +189,8 @@ func TestShutdownTimeout(t *testing.T) {
 			args:   args{timeoutSec: 35},
 			want:   want{timeout: 35 * time.Second},
 			config: Config{ShutdownTimeout: 10 * time.Second},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.timeout, c.ShutdownTimeout)
 			},
 		},
@@ -219,6 +210,7 @@ func TestConfig_Validate(t *testing.T) {
 		MetricStoreInterval      time.Duration
 		MetricStoreFilePath      string
 		MetricStoreLoadOnStartup bool
+		DatabaseURL              url.URL
 	}
 	tests := []struct {
 		name      string
@@ -226,20 +218,16 @@ func TestConfig_Validate(t *testing.T) {
 		assertion assert.ErrorAssertionFunc
 	}{
 		{
-			name:   "empty",
-			fields: fields{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "empty",
+			fields:    fields{},
+			assertion: assert.Error,
 		},
 		{
 			name: "zero shutdown timeout",
 			fields: fields{
 				ListenAddress: ":0",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			assertion: assert.Error,
 		},
 		{
 			name: "empty store path when loading at startup",
@@ -248,9 +236,16 @@ func TestConfig_Validate(t *testing.T) {
 				ShutdownTimeout:          1 * time.Second,
 				MetricStoreLoadOnStartup: true,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
+			assertion: assert.Error,
+		},
+		{
+			name: "invalid database scheme",
+			fields: fields{
+				ListenAddress:   ":0",
+				ShutdownTimeout: 1 * time.Second,
+				DatabaseURL:     url.URL{Scheme: "mysql", Host: "localhost:5432"},
 			},
+			assertion: assert.Error,
 		},
 		{
 			name: "all good",
@@ -259,9 +254,17 @@ func TestConfig_Validate(t *testing.T) {
 				ShutdownTimeout:     1 * time.Second,
 				MetricStoreFilePath: "test.json",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+			assertion: assert.NoError,
+		},
+		{
+			name: "all good with database",
+			fields: fields{
+				ListenAddress:       ":0",
+				ShutdownTimeout:     1 * time.Second,
+				MetricStoreFilePath: "test.json",
+				DatabaseURL:         url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/db1", RawQuery: "sslmode=verify-full"},
 			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
@@ -272,6 +275,7 @@ func TestConfig_Validate(t *testing.T) {
 				MetricStoreInterval:      tt.fields.MetricStoreInterval,
 				MetricStoreFilePath:      tt.fields.MetricStoreFilePath,
 				MetricStoreLoadOnStartup: tt.fields.MetricStoreLoadOnStartup,
+				DatabaseURL:              tt.fields.DatabaseURL,
 			}
 			tt.assertion(t, c.Validate())
 		})
@@ -290,14 +294,14 @@ func TestMetricStoreInterval(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "zero",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -306,8 +310,8 @@ func TestMetricStoreInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.MetricStoreInterval)
 			},
 		},
@@ -316,8 +320,8 @@ func TestMetricStoreInterval(t *testing.T) {
 			args:   args{intervalSec: 35},
 			want:   want{interval: 35 * time.Second},
 			config: Config{MetricStoreInterval: 10 * time.Second},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
-				assert.NoError(t, err)
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
 				assert.Equal(t, want.interval, c.MetricStoreInterval)
 			},
 		},
@@ -342,14 +346,14 @@ func TestMetricStoreFilePath(t *testing.T) {
 		args      args
 		want      want
 		config    Config
-		assertion func(assert.TestingT, *Config, error, want)
+		assertion func(*testing.T, *Config, error, want)
 	}{
 		{
 			name:   "empty is allowed",
 			args:   args{},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -358,7 +362,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 			args:   args{path: "."},
 			want:   want{},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.Error(t, err)
 			},
 		},
@@ -371,7 +375,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 				return filepath.Join(p, "test.txt")
 			}()},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -380,7 +384,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 			args:   args{path: "/test/me/here/please.txt"},
 			want:   want{path: "/test/me/here/please.txt"},
 			config: Config{},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -389,7 +393,7 @@ func TestMetricStoreFilePath(t *testing.T) {
 			args:   args{path: "/test/me/here/please.txt"},
 			want:   want{path: "/test/me/here/please.txt"},
 			config: Config{MetricStoreFilePath: "/a/default/path"},
-			assertion: func(t assert.TestingT, c *Config, err error, want want) {
+			assertion: func(t *testing.T, c *Config, err error, want want) {
 				assert.NoError(t, err)
 			},
 		},
@@ -406,16 +410,137 @@ func TestMetricStoreLoadOnStartup(t *testing.T) {
 	type args struct {
 		action bool
 	}
-	tests := []struct {
-		name string
-		args args
-		want Option
-	}{
-		// TODO: Add test cases.
+	type want struct {
+		action bool
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, MetricStoreLoadOnStartup(tt.args.action))
+	type testcase struct {
+		args   args
+		want   want
+		config Config
+	}
+	tests := map[string]testcase{
+		"false -> true": {
+			args:   args{action: true},
+			want:   want{action: true},
+			config: Config{},
+		},
+		"true -> false": {
+			args:   args{action: false},
+			want:   want{action: false},
+			config: Config{MetricStoreLoadOnStartup: true},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := MetricStoreLoadOnStartup(tt.args.action)(c)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want.action, c.MetricStoreLoadOnStartup)
+		})
+	}
+}
+
+func TestDatabaseURL(t *testing.T) {
+	type args struct {
+		dsn string
+	}
+	type want struct {
+		url url.URL
+	}
+	type testcase struct {
+		args      args
+		want      want
+		config    Config
+		assertion func(*testing.T, *Config, error, want)
+	}
+	tests := map[string]testcase{
+		"empty dsn is allowed": {
+			args:   args{dsn: ""},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"invalid url fails": {
+			args:   args{dsn: "localhost:" + string([]rune{0x7f}) + "99"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"only postgres/postgresql scheme is allowed": {
+			args:   args{dsn: "mysql://"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"missing host": {
+			args:   args{dsn: "postgres://"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"missing port": {
+			args:   args{dsn: "postgresql://localhost"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"valid url with postgres": {
+			args:   args{dsn: "postgres://localhost:5432"},
+			want:   want{url: url.URL{Scheme: "postgres", Host: "localhost:5432"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"valid url with postgresql": {
+			args:   args{dsn: "postgresql://localhost:5432"},
+			want:   want{url: url.URL{Scheme: "postgresql", Host: "localhost:5432"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"valid url with database": {
+			args:   args{dsn: "postgres://localhost:5432/test-db"},
+			want:   want{url: url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/test-db"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"overrides previous url": {
+			args:   args{dsn: "postgresql://localhost:1234/test-db-1"},
+			want:   want{url: url.URL{Scheme: "postgresql", Host: "localhost:1234", Path: "/test-db-1"}},
+			config: Config{DatabaseURL: url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/test-db"}},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"valid url with username and password": {
+			args:   args{dsn: "postgres://user:password@127.0.0.1:9876/db-11_dev?sslmode=verify-full"},
+			want:   want{url: url.URL{Scheme: "postgres", User: url.UserPassword("user", "password"), Host: "127.0.0.1:9876", Path: "/db-11_dev", RawQuery: "sslmode=verify-full"}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := DatabaseURL(tt.args.dsn)(c)
+			tt.assertion(t, &tt.config, err, tt.want)
+			assert.Equal(t, tt.want.url, c.DatabaseURL)
 		})
 	}
 }

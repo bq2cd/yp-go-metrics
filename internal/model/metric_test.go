@@ -377,8 +377,8 @@ func TestMetric_Copy(t *testing.T) {
 				assert.Equal(t, want, got)
 				*got.Value += 1.5
 				assert.NotEqual(t, want, got)
-				assert.Equal(t, 0.1, *want.Value)
-				assert.Equal(t, 1.6, *got.Value)
+				assert.InEpsilon(t, 0.1, *want.Value, 1e-10)
+				assert.InEpsilon(t, 1.6, *got.Value, 1e-10)
 			},
 		},
 	}
@@ -438,60 +438,654 @@ func TestMetricKey_Empty(t *testing.T) {
 	}
 }
 
-func TestMetricSet_UniqueByKey(t *testing.T) {
-	tests := []struct {
-		name string
-		ms   MetricSet
-		want map[MetricKey]Metric
+func TestNewMetricSetWithStrategy(t *testing.T) {
+	type testcase struct {
+		metrics []Metric
+		want    MetricSet
+	}
+	tests := map[string]struct {
+		strategy MetricAggregateStrategy
+		cases    map[string]testcase
 	}{
-		{
-			name: "empty set",
-			ms:   MetricSet{},
-			want: map[MetricKey]Metric{},
-		},
-		{
-			name: "single metric",
-			ms:   MetricSet{NewCounterMetric("id1", 5)},
-			want: map[MetricKey]Metric{
-				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+		"last value wins": {
+			strategy: MetricAggregateStrategyLastValueWins,
+			cases: map[string]testcase{
+				"empty list": {
+					metrics: []Metric{},
+					want:    MetricSet{},
+				},
+				"single metric": {
+					metrics: []Metric{NewCounterMetric("id1", 5)},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+					},
+				},
+				"multiple metrics without duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
+				"multiple metrics with duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewCounterMetric("id1", 33),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+						NewGaugeMetric("id3", 0.85),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 33),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
+				"empty metrics are skipped": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						{},
+						NewCounterMetric("id2", -10),
+						{Type: MetricTypeGauge},
+						NewCounterMetric("id1", 33),
+						{Type: MetricTypeGauge, ID: "empty1"},
+						NewGaugeMetric("id3", 2.4),
+						func() Metric {
+							var delta int64 = 3
+							return Metric{Type: MetricTypeGauge, ID: "empty2", Delta: &delta}
+						}(),
+						NewGaugeMetric("id4", -1.3),
+						func() Metric {
+							var value = 3.1
+							return Metric{Type: MetricTypeCounter, ID: "empty3", Value: &value}
+						}(),
+						NewGaugeMetric("id3", 0.85),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 33),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
 			},
 		},
-		{
-			name: "multiple metrics",
-			ms: MetricSet{
-				NewCounterMetric("id1", 5),
-				NewCounterMetric("id2", -10),
-				NewGaugeMetric("id3", 2.4),
-				NewGaugeMetric("id4", -1.3),
-			},
-			want: map[MetricKey]Metric{
-				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
-				NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
-				NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
-				NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+		"first value wins": {
+			strategy: MetricAggregateStrategyFirstValueWins,
+			cases: map[string]testcase{
+				"empty list": {
+					metrics: []Metric{},
+					want:    MetricSet{},
+				},
+				"single metric": {
+					metrics: []Metric{NewCounterMetric("id1", 5)},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+					},
+				},
+				"multiple metrics without duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
+				"multiple metrics with duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewCounterMetric("id1", 33),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+						NewGaugeMetric("id3", 0.85),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
+				"empty metrics are skipped": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						{},
+						NewCounterMetric("id2", -10),
+						{Type: MetricTypeGauge},
+						NewCounterMetric("id1", 33),
+						{Type: MetricTypeGauge, ID: "empty1"},
+						NewGaugeMetric("id3", 2.4),
+						func() Metric {
+							var delta int64 = 3
+							return Metric{Type: MetricTypeGauge, ID: "empty2", Delta: &delta}
+						}(),
+						NewGaugeMetric("id4", -1.3),
+						func() Metric {
+							var value = 3.1
+							return Metric{Type: MetricTypeCounter, ID: "empty3", Value: &value}
+						}(),
+						NewGaugeMetric("id3", 0.85),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
 			},
 		},
-		{
-			name: "multiple metrics with duplicate ids",
-			ms: MetricSet{
-				NewCounterMetric("id1", 5),
-				NewCounterMetric("id2", -10),
-				NewCounterMetric("id1", 33),
-				NewGaugeMetric("id3", 2.4),
-				NewGaugeMetric("id4", -1.3),
-				NewGaugeMetric("id3", 0.85),
+		"counter value accumulates": {
+			strategy: MetricAggregateStrategyCounterValueAccumulates,
+			cases: map[string]testcase{
+				"empty list": {
+					metrics: []Metric{},
+					want:    MetricSet{},
+				},
+				"single metric": {
+					metrics: []Metric{NewCounterMetric("id1", 5)},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+					},
+				},
+				"multiple metrics without duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
+				"multiple metrics with duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewCounterMetric("id1", 33),
+						NewCounterMetric("id2", 7),
+						NewCounterMetric("id1", 2),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+						NewGaugeMetric("id3", 0.85),
+						NewGaugeMetric("id4", -4.5),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 40),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -3),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -4.5),
+					},
+				},
+				"empty metrics are skipped": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						{},
+						NewCounterMetric("id2", -10),
+						{Type: MetricTypeGauge},
+						NewCounterMetric("id1", 33),
+						{Type: MetricTypeGauge, ID: "empty1"},
+						NewGaugeMetric("id3", 2.4),
+						func() Metric {
+							var delta int64 = 3
+							return Metric{Type: MetricTypeGauge, ID: "empty2", Delta: &delta}
+						}(),
+						NewGaugeMetric("id4", -1.3),
+						func() Metric {
+							var value = 3.1
+							return Metric{Type: MetricTypeCounter, ID: "empty3", Value: &value}
+						}(),
+						NewGaugeMetric("id3", 0.85),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 38),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
 			},
-			want: map[MetricKey]Metric{
-				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 33),
-				NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
-				NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
-				NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+		},
+		"unknown strategy behaves like last value wins": {
+			strategy: MetricAggregateStrategy(-1),
+			cases: map[string]testcase{
+				"empty list": {
+					metrics: []Metric{},
+					want:    MetricSet{},
+				},
+				"single metric": {
+					metrics: []Metric{NewCounterMetric("id1", 5)},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+					},
+				},
+				"multiple metrics without duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 5),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 2.4),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
+				"multiple metrics with duplicates": {
+					metrics: []Metric{
+						NewCounterMetric("id1", 5),
+						NewCounterMetric("id2", -10),
+						NewCounterMetric("id1", 33),
+						NewGaugeMetric("id3", 2.4),
+						NewGaugeMetric("id4", -1.3),
+						NewGaugeMetric("id3", 0.85),
+					},
+					want: MetricSet{
+						NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 33),
+						NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", -10),
+						NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", 0.85),
+						NewMetricKey(MetricTypeGauge, "id4"):   NewGaugeMetric("id4", -1.3),
+					},
+				},
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, tt.ms.UniqueByKey())
+	for gname, group := range tests {
+		t.Run(gname, func(t *testing.T) {
+			for tname, tc := range group.cases {
+				t.Run(tname, func(t *testing.T) {
+					orig := tc.metrics
+					got := NewMetricSetWithStrategy(group.strategy, tc.metrics...)
+					assert.Equal(t, tc.want, got)
+					assert.Equal(t, orig, tc.metrics)
+				})
+			}
+		})
+	}
+}
+
+func TestMetric_AddDelta(t *testing.T) {
+	getDelta := func(v int64) *int64 { return &v }
+	type fields struct {
+		metric Metric
+	}
+	type args struct {
+		other *int64
+	}
+	type want struct {
+		metric Metric
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"nil delta changes nothing": {
+			fields: fields{metric: NewCounterMetric("id1", 15)},
+			args:   args{other: nil},
+			want:   want{metric: NewCounterMetric("id1", 15)},
+		},
+		"some delta changes nothing for gauge": {
+			fields: fields{metric: NewGaugeMetric("id1", -3.4)},
+			args:   args{other: getDelta(8)},
+			want:   want{metric: NewGaugeMetric("id1", -3.4)},
+		},
+		"some delta added to previous value for counter": {
+			fields: fields{metric: NewCounterMetric("id1", -15)},
+			args:   args{other: getDelta(8)},
+			want:   want{metric: NewCounterMetric("id1", -7)},
+		},
+		"some delta replaces empty value for counter": {
+			fields: fields{metric: Metric{Type: MetricTypeCounter, ID: "id1"}},
+			args:   args{other: getDelta(8)},
+			want:   want{metric: NewCounterMetric("id1", 8)},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			m := tt.fields.metric
+			m.AddDelta(tt.args.other)
+			assert.Equal(t, tt.want.metric, m)
+		})
+	}
+}
+
+func TestNewMetricKeySet(t *testing.T) {
+	type args struct {
+		keys []MetricKey
+	}
+	type want struct {
+		got MetricKeySet
+	}
+	type testcase struct {
+		args args
+		want want
+	}
+	tests := map[string]testcase{
+		"empty list -> empty set": {
+			args: args{keys: []MetricKey{}},
+			want: want{got: MetricKeySet{}},
+		},
+		"single key": {
+			args: args{keys: []MetricKey{NewMetricKey(MetricTypeCounter, "id1")}},
+			want: want{got: MetricKeySet{NewMetricKey(MetricTypeCounter, "id1"): struct{}{}}},
+		},
+		"multiple keys without duplicates": {
+			args: args{keys: []MetricKey{
+				NewMetricKey(MetricTypeCounter, "id1"),
+				NewMetricKey(MetricTypeCounter, "id2"),
+				NewMetricKey(MetricTypeGauge, "id3"),
+				NewMetricKey(MetricTypeGauge, "id4"),
+			}},
+			want: want{got: MetricKeySet{
+				NewMetricKey(MetricTypeCounter, "id1"): struct{}{},
+				NewMetricKey(MetricTypeCounter, "id2"): struct{}{},
+				NewMetricKey(MetricTypeGauge, "id3"):   struct{}{},
+				NewMetricKey(MetricTypeGauge, "id4"):   struct{}{},
+			}},
+		},
+		"multiple keys with duplicates": {
+			args: args{keys: []MetricKey{
+				NewMetricKey(MetricTypeCounter, "id1"),
+				NewMetricKey(MetricTypeCounter, "id2"),
+				NewMetricKey(MetricTypeGauge, "id3"),
+				NewMetricKey(MetricTypeGauge, "id4"),
+				NewMetricKey(MetricTypeCounter, "id1"),
+				NewMetricKey(MetricTypeCounter, "id2"),
+			}},
+			want: want{got: MetricKeySet{
+				NewMetricKey(MetricTypeCounter, "id1"): struct{}{},
+				NewMetricKey(MetricTypeCounter, "id2"): struct{}{},
+				NewMetricKey(MetricTypeGauge, "id3"):   struct{}{},
+				NewMetricKey(MetricTypeGauge, "id4"):   struct{}{},
+			}},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := NewMetricKeySet(tt.args.keys...)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestNewMetricSet(t *testing.T) {
+	// covered by [TestNewMetricSetWithStrategy]
+	t.SkipNow()
+}
+
+func TestMetricSet_GroupByType(t *testing.T) {
+	type want struct {
+		got map[MetricType]MetricSet
+	}
+	type testcase struct {
+		ms   MetricSet
+		want want
+	}
+	tests := map[string]testcase{
+		"empty set": {
+			ms:   MetricSet{},
+			want: want{got: map[MetricType]MetricSet{}},
+		},
+		"single metric": {
+			ms: MetricSet{
+				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 15),
+			},
+			want: want{got: map[MetricType]MetricSet{
+				MetricTypeCounter: {
+					NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 15),
+				},
+			}},
+		},
+		"multiple metrics with single type": {
+			ms: MetricSet{
+				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 15),
+				NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", 25),
+				NewMetricKey(MetricTypeCounter, "id3"): NewCounterMetric("id3", -5),
+			},
+			want: want{got: map[MetricType]MetricSet{
+				MetricTypeCounter: {
+					NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 15),
+					NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", 25),
+					NewMetricKey(MetricTypeCounter, "id3"): NewCounterMetric("id3", -5),
+				},
+			}},
+		},
+		"multiple metrics with various types": {
+			ms: MetricSet{
+				NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 15),
+				NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", 25),
+				NewMetricKey(MetricTypeCounter, "id3"): NewCounterMetric("id3", -5),
+				NewMetricKey(MetricTypeGauge, "id1"):   NewGaugeMetric("id1", 1.5),
+				NewMetricKey(MetricTypeGauge, "id2"):   NewGaugeMetric("id2", 2.5),
+				NewMetricKey(MetricTypeGauge, "id3"):   NewGaugeMetric("id3", -0.5),
+				NewMetricKey(MetricTypeCounter, "id7"): NewCounterMetric("id7", 150),
+				NewMetricKey(MetricTypeCounter, "id8"): NewCounterMetric("id8", 250),
+				NewMetricKey(MetricTypeCounter, "id9"): NewCounterMetric("id9", -50),
+				NewMetricKey(MetricTypeGauge, "id10"):  NewGaugeMetric("id10", 1.05),
+				NewMetricKey(MetricTypeGauge, "id20"):  NewGaugeMetric("id20", 2.05),
+				NewMetricKey(MetricTypeGauge, "id30"):  NewGaugeMetric("id30", -0.05),
+			},
+			want: want{got: map[MetricType]MetricSet{
+				MetricTypeCounter: {
+					NewMetricKey(MetricTypeCounter, "id1"): NewCounterMetric("id1", 15),
+					NewMetricKey(MetricTypeCounter, "id2"): NewCounterMetric("id2", 25),
+					NewMetricKey(MetricTypeCounter, "id3"): NewCounterMetric("id3", -5),
+					NewMetricKey(MetricTypeCounter, "id7"): NewCounterMetric("id7", 150),
+					NewMetricKey(MetricTypeCounter, "id8"): NewCounterMetric("id8", 250),
+					NewMetricKey(MetricTypeCounter, "id9"): NewCounterMetric("id9", -50),
+				},
+				MetricTypeGauge: {
+					NewMetricKey(MetricTypeGauge, "id1"):  NewGaugeMetric("id1", 1.5),
+					NewMetricKey(MetricTypeGauge, "id2"):  NewGaugeMetric("id2", 2.5),
+					NewMetricKey(MetricTypeGauge, "id3"):  NewGaugeMetric("id3", -0.5),
+					NewMetricKey(MetricTypeGauge, "id10"): NewGaugeMetric("id10", 1.05),
+					NewMetricKey(MetricTypeGauge, "id20"): NewGaugeMetric("id20", 2.05),
+					NewMetricKey(MetricTypeGauge, "id30"): NewGaugeMetric("id30", -0.05),
+				},
+			}},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.ms.GroupByType()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestMetricKey_Compare(t *testing.T) {
+	type fields struct {
+		Type MetricType
+		ID   string
+	}
+	type args struct {
+		other MetricKey
+	}
+	type want struct {
+		got int
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"same type, same id -> 0": {
+			fields: fields{Type: MetricTypeCounter, ID: "id1"},
+			args:   args{other: NewMetricKey(MetricTypeCounter, "id1")},
+			want:   want{got: 0},
+		},
+		"same type, id1 < id2 -> -1": {
+			fields: fields{Type: MetricTypeCounter, ID: "id1"},
+			args:   args{other: NewMetricKey(MetricTypeCounter, "id2")},
+			want:   want{got: -1},
+		},
+		"same type, id3 > id2 -> +1": {
+			fields: fields{Type: MetricTypeCounter, ID: "id3"},
+			args:   args{other: NewMetricKey(MetricTypeCounter, "id2")},
+			want:   want{got: +1},
+		},
+		"counter < gauge -> -1": {
+			fields: fields{Type: MetricTypeCounter, ID: "id3"},
+			args:   args{other: NewMetricKey(MetricTypeGauge, "id2")},
+			want:   want{got: -1},
+		},
+		"ztype > gauge -> +1": {
+			fields: fields{Type: MetricType("ztype"), ID: "id3"},
+			args:   args{other: NewMetricKey(MetricTypeGauge, "id2")},
+			want:   want{got: +1},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			k := MetricKey{
+				Type: tt.fields.Type,
+				ID:   tt.fields.ID,
+			}
+			got := k.Compare(tt.args.other)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestMetricSet_Keys(t *testing.T) {
+	type want struct {
+		got MetricKeySet
+	}
+	type testcase struct {
+		ms   MetricSet
+		want want
+	}
+	tests := map[string]testcase{
+		"empty set -> empty keys": {
+			ms:   NewMetricSet(),
+			want: want{got: NewMetricKeySet()},
+		},
+		"single metric -> single key": {
+			ms:   NewMetricSet(NewCounterMetric("id1", 5)),
+			want: want{got: NewMetricKeySet(NewMetricKey(MetricTypeCounter, "id1"))},
+		},
+		"multiple metrics -> multiple keys": {
+			ms: NewMetricSet(
+				NewCounterMetric("id1", 5),
+				NewGaugeMetric("id3", 5.5),
+				NewCounterMetric("id5", -5),
+				NewGaugeMetric("id7", -5.5),
+			),
+			want: want{got: NewMetricKeySet(
+				NewMetricKey(MetricTypeCounter, "id1"),
+				NewMetricKey(MetricTypeGauge, "id3"),
+				NewMetricKey(MetricTypeCounter, "id5"),
+				NewMetricKey(MetricTypeGauge, "id7"),
+			)},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.ms.Keys()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestMetricSet_Empty(t *testing.T) {
+	type want struct {
+		got bool
+	}
+	type testcase struct {
+		ms   MetricSet
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.ms.Empty()
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestMetricSet_Upsert(t *testing.T) {
+	type args struct {
+		m Metric
+	}
+	type want struct {
+	}
+	type testcase struct {
+		ms   MetricSet
+		args args
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tt.ms.Upsert(tt.args.m)
+		})
+	}
+}
+
+func TestMetricSet_Merge(t *testing.T) {
+	type args struct {
+		other MetricSet
+	}
+	type want struct {
+	}
+	type testcase struct {
+		ms   MetricSet
+		args args
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tt.ms.Merge(tt.args.other)
+		})
+	}
+}
+
+func TestMetricSet_Values(t *testing.T) {
+	type want struct {
+		got []Metric
+	}
+	type testcase struct {
+		ms   MetricSet
+		want want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := tt.ms.Values()
+			assert.Equal(t, tt.want.got, got)
 		})
 	}
 }

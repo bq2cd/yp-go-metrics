@@ -7,22 +7,30 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
-	"github.com/bq2cd/yp-go-metrics/internal/log"
-	"github.com/bq2cd/yp-go-metrics/internal/server/servertest"
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest/mockretrierfactory"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 var (
@@ -67,9 +75,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "extra positional args",
@@ -81,65 +87,55 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreFilePath:      filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				MetricStoreLoadOnStartup: true,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
-			name: "unknown args",
-			args: args{args: []string{"-x", "--test"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "unknown args",
+			args:      args{args: []string{"-x", "--test"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, address",
-			args: args{args: []string{"-a"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, address",
+			args:      args{args: []string{"-a"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, address 2",
-			args: args{args: []string{"-a", "host1:host2:host3"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, address 2",
+			args:      args{args: []string{"-a", "host1:host2:host3"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, shutdown timeout",
-			args: args{args: []string{"-t=0"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, shutdown timeout",
+			args:      args{args: []string{"-t=0"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, metric store interval",
-			args: args{args: []string{"-i=-1"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, metric store interval",
+			args:      args{args: []string{"-i=-1"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, metric store path",
-			args: args{args: []string{"-f=" + servertest.GetCwd(t)}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, metric store path",
+			args:      args{args: []string{"-f=" + servertest.GetCwd(t)}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
-			name: "bad args, metric store load at startup",
-			args: args{args: []string{"-r=123"}},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			name:      "bad args, metric store load at startup",
+			args:      args{args: []string{"-r=123"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, invalid database url",
+			args:      args{args: []string{"-d=postgres://"}},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
 			name: "good args, address",
@@ -150,9 +146,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 1",
@@ -163,9 +157,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 2",
@@ -176,9 +168,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 3",
@@ -189,9 +179,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, address 4",
@@ -202,9 +190,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, shutdown timeout",
@@ -215,9 +201,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store interval",
@@ -228,9 +212,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: 12 * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store interval 2",
@@ -241,9 +223,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: 0,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store path",
@@ -254,9 +234,7 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: 12 * time.Second,
 				MetricStoreFilePath: "/some/path/here.txt",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "good args, metric store load at startup",
@@ -268,9 +246,19 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreFilePath:      "/some/path/here.txt",
 				MetricStoreLoadOnStartup: true,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, database url",
+			args: args{args: []string{"-d=postgresql://localhost:1234"}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				DatabaseURL:         url.URL{Scheme: "postgresql", Host: "localhost:1234"},
 			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
@@ -307,9 +295,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides shutdown timeout",
@@ -323,9 +309,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides shutdown timeout 2",
@@ -339,9 +323,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env invalid shutdown timeout",
@@ -349,10 +331,8 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				args: []string{"-a=localhost:9090"},
 				env:  map[string]string{"SHUTDOWN_TIMEOUT": "-5"},
 			},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
 			name: "env invalid address",
@@ -360,10 +340,8 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				args: []string{"-a=localhost:9090"},
 				env:  map[string]string{"ADDRESS": "123:456:789"},
 			},
-			want: config.Config{},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.Error(t, err)
-			},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 		{
 			name: "env overrides metric store interval",
@@ -377,9 +355,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: 18 * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides metric store path",
@@ -393,9 +369,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: 8 * time.Second,
 				MetricStoreFilePath: "/an/override/to/a/different/file.json",
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
-			},
+			assertion: assert.NoError,
 		},
 		{
 			name: "env overrides metric store load on startup",
@@ -410,9 +384,31 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreFilePath:      "/a/path/to/some/file.json",
 				MetricStoreLoadOnStartup: false,
 			},
-			assertion: func(t assert.TestingT, err error, v ...any) bool {
-				return assert.NoError(t, err)
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides database url",
+			args: args{
+				args: []string{"-d=postgres://localhost:1234"},
+				env:  map[string]string{"DATABASE_DSN": "postgres://user:password@localhost:4567/db1"},
 			},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				DatabaseURL:         url.URL{Scheme: "postgres", User: url.UserPassword("user", "password"), Host: "localhost:4567", Path: "/db1"},
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env invalid database url",
+			args: args{
+				args: []string{"-d=postgres://localhost:1234"},
+				env:  map[string]string{"DATABASE_DSN": "mysql://user:password@localhost:4567/db1"},
+			},
+			want:      config.Config{},
+			assertion: assert.Error,
 		},
 	}
 	for _, tt := range tests {
@@ -422,26 +418,6 @@ func Test_parseArgs_withEnv(t *testing.T) {
 			got, err := parseArgs(fs, tt.args.args, envparser.NewParserWithOptions(env.Options{Environment: tt.args.env}))
 			tt.assertion(t, err)
 			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func Test_runServer(t *testing.T) {
-	type args struct {
-		ctx context.Context
-		cfg config.Config
-	}
-	tests := []struct {
-		name      string
-		args      args
-		assertion assert.ErrorAssertionFunc
-	}{
-		// `runServer` is always called by `run`, so there is no
-		// need for a separate test here.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, runServer(log.NewNoopLogger(), tt.args.ctx, tt.args.cfg))
 		})
 	}
 }
@@ -463,7 +439,6 @@ func Test_run(t *testing.T) {
 		assertionResp func(*testing.T, *http.Request, context.CancelFunc)
 		assertionErr  assert.ErrorAssertionFunc
 	}{
-		// TODO: Add test cases.
 		{
 			name: "normal flow",
 			skip: func() (bool, string) {
@@ -486,9 +461,9 @@ func Test_run(t *testing.T) {
 				},
 			},
 			assertionResp: func(t *testing.T, req *http.Request, cancel context.CancelFunc) {
+				defer cancel()
 				err := servertest.MakeRequestDiscardResponse(http.DefaultClient, req)
-				assert.NoError(t, err)
-				cancel()
+				require.NoError(t, err)
 			},
 			assertionErr: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
@@ -586,14 +561,24 @@ func Test_main_subprocess(t *testing.T) {
 
 func Test_main(t *testing.T) {
 	skipIfGithubActions(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	addrFactory := servertest.NewListenAddressFactory(t)
 	tempFactory := servertest.NewTempFileFactory(t)
 	defer tempFactory.RemoveAll()
+
+	requester := handlertest.NewRequester(t, http.DefaultClient)
+	var responses sync.Map
+
 	type want struct {
 		exitCode int
 	}
 	tests := []struct {
 		name          string
+		timeout       time.Duration
+		warmupDelay   time.Duration
 		args          []string
 		env           map[string]string
 		want          want
@@ -601,9 +586,11 @@ func Test_main(t *testing.T) {
 		assertStopped func(*testing.T, map[string]string)
 	}{
 		{
-			name: "address via args",
-			args: []string{"-a", addrFactory.New()},
-			env:  map[string]string{},
+			name:        "address via args",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-a", addrFactory.New()},
+			env:         map[string]string{},
 			want: want{
 				exitCode: 0,
 			},
@@ -617,8 +604,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "address via env",
-			args: []string{},
+			name:        "address via env",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{},
 			env: map[string]string{
 				"ADDRESS": addrFactory.New(),
 			},
@@ -635,8 +624,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "dump metrics on every write",
-			args: []string{"-i=0"},
+			name:        "dump metrics on every write",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-i=0"},
 			env: map[string]string{
 				"ADDRESS":           addrFactory.New(),
 				"FILE_STORAGE_PATH": tempFactory.Create("test-metrics-dump-*"),
@@ -659,8 +650,10 @@ func Test_main(t *testing.T) {
 			},
 		},
 		{
-			name: "load metrics on startup",
-			args: []string{"-i=999", "-r"},
+			name:        "load metrics on startup",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-i=999", "-r"},
 			env: map[string]string{
 				"ADDRESS": addrFactory.New(),
 				"FILE_STORAGE_PATH": func() string {
@@ -678,13 +671,192 @@ func Test_main(t *testing.T) {
 				require.NoError(t, err)
 				httpheaders.ContentTypeApplicationJSON.Apply(req.Header)
 				resp, err := http.DefaultClient.Do(req)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				defer func() { _ = resp.Body.Close() }()
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				assert.JSONEq(t, `{"id": "id1", "type": "counter", "delta": 78}`, string(body))
 			},
 			assertStopped: func(t *testing.T, env map[string]string) {
+			},
+		},
+		{
+			name:        "server uses postgresql database when configured",
+			timeout:     500 * time.Millisecond,
+			warmupDelay: 100 * time.Millisecond,
+			args:        []string{"-i=0"},
+			env: map[string]string{
+				"ADDRESS": addrFactory.New(),
+				"DATABASE_DSN": func() string {
+					dbCfg := servertest.LaunchEmbeddedPostgres(t, "server-test-user", "server-test-password", "server-test-db")
+					return dbCfg.DSN()
+				}(),
+				"FILE_STORAGE_PATH": tempFactory.Create("test-postgres-metrics-dump-*"),
+			},
+			want: want{
+				exitCode: 0,
+			},
+			assertRunning: func(t *testing.T, addr string) {
+				// populate metrics
+				for _, m := range []model.Metric{
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id2", -123),
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id3", -456),
+					model.NewGaugeMetric("id10", 1.23),
+					model.NewGaugeMetric("id20", -1.23),
+					model.NewGaugeMetric("id30", 456),
+					model.NewGaugeMetric("id10", -4.56),
+					model.NewCounterMetric("max_u32", math.MaxUint32),
+					model.NewCounterMetric("max_i64", math.MaxInt64),
+					model.NewGaugeMetric("max_f32", math.MaxFloat32),
+					model.NewGaugeMetric("max_fu32", float64(math.MaxUint32)),
+					model.NewGaugeMetric("max_f64", math.MaxFloat64),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/update/", addr), handlertest.NewBodyDataFromMetric(t, m), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					responses.Store(m.Key(), resp)
+				}
+
+				// wait
+				time.Sleep(50 * time.Millisecond)
+
+				// retrieve metrics
+				for _, k := range []model.MetricKey{
+					model.NewMetricKey(model.MetricTypeCounter, "id1"),
+					model.NewMetricKey(model.MetricTypeCounter, "id2"),
+					model.NewMetricKey(model.MetricTypeCounter, "id3"),
+					model.NewMetricKey(model.MetricTypeGauge, "id10"),
+					model.NewMetricKey(model.MetricTypeGauge, "id20"),
+					model.NewMetricKey(model.MetricTypeGauge, "id30"),
+					model.NewMetricKey(model.MetricTypeCounter, "max_u32"),
+					model.NewMetricKey(model.MetricTypeCounter, "max_i64"),
+					model.NewMetricKey(model.MetricTypeGauge, "max_f32"),
+					model.NewMetricKey(model.MetricTypeGauge, "max_fu32"),
+					model.NewMetricKey(model.MetricTypeGauge, "max_f64"),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/value/", addr), handlertest.NewBodyDataFromMetricKey(t, k), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					up, ok := responses.Load(k)
+					require.Truef(t, ok, "missing response for metric key %v", k)
+					up.(*handlertest.Response).Body.AssertEqual(resp.Body)
+				}
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
+				wantMetrics := []model.Metric{
+					model.NewGaugeMetric("id10", -4.56),
+					model.NewGaugeMetric("id20", -1.23),
+					model.NewGaugeMetric("id30", 456),
+					model.NewCounterMetric("id1", 246),
+					model.NewCounterMetric("id2", -123),
+					model.NewCounterMetric("id3", -456),
+					model.NewCounterMetric("max_u32", math.MaxUint32),
+					model.NewCounterMetric("max_i64", math.MaxInt64),
+					model.NewGaugeMetric("max_f32", math.MaxFloat32),
+					model.NewGaugeMetric("max_fu32", float64(math.MaxUint32)),
+					model.NewGaugeMetric("max_f64", math.MaxFloat64),
+				}
+
+				// db check
+				dbURL, err := url.Parse(env["DATABASE_DSN"])
+				require.NoError(t, err)
+				cfg, err := dbconfig.New(*dbURL)
+				require.NoError(t, err)
+				retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+				retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+				storage, err := sqlstorage.New(cfg, retrierFactory)
+				require.NoError(t, err)
+				metrics, err := storage.GetAll(t.Context())
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, metrics)
+
+				// snapshot check
+				f, err := os.Open(env["FILE_STORAGE_PATH"])
+				require.NoError(t, err)
+				var snapshotMetrics []model.Metric
+				err = json.NewDecoder(f).Decode(&snapshotMetrics)
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, snapshotMetrics)
+			},
+		},
+		{
+			name:        "server retries queries to postgresql on connection errors",
+			timeout:     5_000 * time.Millisecond,
+			warmupDelay: 4_000 * time.Millisecond,
+			args:        []string{"-i=0"},
+			env: map[string]string{
+				"ADDRESS": addrFactory.New(),
+				"DATABASE_DSN": func() string {
+					dbCfg := servertest.LaunchEmbeddedPostgresWithDelay(t, "server-test-user", "server-test-password", "server-test-db", 100*time.Millisecond)
+					return dbCfg.DSN()
+				}(),
+				"FILE_STORAGE_PATH": tempFactory.Create("test-postgres-metrics-dump-*"),
+			},
+			want: want{
+				exitCode: 0,
+			},
+			assertRunning: func(t *testing.T, addr string) {
+				// populate metrics
+				for _, m := range []model.Metric{
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id2", -123),
+					model.NewGaugeMetric("id10", 1.23),
+					model.NewGaugeMetric("id20", -1.23),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/update/", addr), handlertest.NewBodyDataFromMetric(t, m), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					responses.Store(m.Key(), resp)
+				}
+
+				// wait
+				time.Sleep(50 * time.Millisecond)
+
+				// retrieve metrics
+				for _, k := range []model.MetricKey{
+					model.NewMetricKey(model.MetricTypeCounter, "id1"),
+					model.NewMetricKey(model.MetricTypeCounter, "id2"),
+					model.NewMetricKey(model.MetricTypeGauge, "id10"),
+					model.NewMetricKey(model.MetricTypeGauge, "id20"),
+				} {
+					resp, err := requester.Do(http.MethodPost, fmt.Sprintf("http://%s/value/", addr), handlertest.NewBodyDataFromMetricKey(t, k), true)
+					require.NoError(t, err)
+					assert.Equal(t, http.StatusOK, resp.Status)
+					up, ok := responses.Load(k)
+					require.Truef(t, ok, "missing response for metric key %v", k)
+					up.(*handlertest.Response).Body.AssertEqual(resp.Body)
+				}
+			},
+			assertStopped: func(t *testing.T, env map[string]string) {
+				wantMetrics := []model.Metric{
+					model.NewGaugeMetric("id10", 1.23),
+					model.NewGaugeMetric("id20", -1.23),
+					model.NewCounterMetric("id1", 123),
+					model.NewCounterMetric("id2", -123),
+				}
+
+				// db check
+				dbURL, err := url.Parse(env["DATABASE_DSN"])
+				require.NoError(t, err)
+				cfg, err := dbconfig.New(*dbURL)
+				require.NoError(t, err)
+				retrierFactory := mockretrierfactory.NewMockRetrierFactory(ctrl)
+				retrierFactory.Strategy.EXPECT().Name().Return("mock_strategy")
+				storage, err := sqlstorage.New(cfg, retrierFactory)
+				require.NoError(t, err)
+				metrics, err := storage.GetAll(t.Context())
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, metrics)
+
+				// snapshot check
+				f, err := os.Open(env["FILE_STORAGE_PATH"])
+				require.NoError(t, err)
+				var snapshotMetrics []model.Metric
+				err = json.NewDecoder(f).Decode(&snapshotMetrics)
+				require.NoError(t, err)
+				assert.ElementsMatch(t, wantMetrics, snapshotMetrics)
 			},
 		},
 	}
@@ -705,25 +877,25 @@ func Test_main(t *testing.T) {
 			require.NoError(t, err)
 
 			go func() {
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(tt.timeout)
 				_ = syscall.Kill(cmd.Process.Pid, syscall.SIGINT)
 			}()
 
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(tt.warmupDelay)
 			tt.assertRunning(t, addrFactory.Get(tid))
 
 			_ = cmd.Wait()
 
-			tt.assertStopped(t, tt.env)
-
 			t.Logf("subprocess stdout:\n%s\n", stdout.String())
 			t.Logf("subprocess stderr:\n%s\n", stderr.String())
+
+			tt.assertStopped(t, tt.env)
 
 			if tt.want.exitCode == 0 {
 				require.NoError(t, err)
 			} else {
-				require.IsType(t, &exec.ExitError{}, err)
-				status := err.(*exec.ExitError)
+				status, ok := err.(*exec.ExitError)
+				require.True(t, ok)
 				assert.Equal(t, tt.want.exitCode, status.ExitCode())
 			}
 		})
