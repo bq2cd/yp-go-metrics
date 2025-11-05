@@ -9,6 +9,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -134,6 +135,17 @@ func (b *BodyData) NewRequest(method, url string, shouldCompress bool) *http.Req
 	}
 	b.contentType.Apply(req.Header)
 	return req
+}
+
+func (b *BodyData) GetDataSignature(signer hmacsigner.HMACSigner) httpheaders.HashSHA256 {
+	b.T.Helper()
+	require.NotNil(b.T, signer)
+	if !signer.HasKey() {
+		return httpheaders.HashSHA256Empty
+	}
+	signature, err := signer.Sign(b.data)
+	require.NoError(b.T, err)
+	return httpheaders.GetHashSHA256FromBytes(signature)
 }
 
 func (b *BodyData) Len() int {

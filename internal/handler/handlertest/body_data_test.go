@@ -9,8 +9,11 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner/hmacsignertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
 func TestNewBodyData(t *testing.T) {
@@ -562,6 +565,62 @@ func TestNewBodyDataFromMetrics(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := NewBodyDataFromMetrics(tt.args.t, tt.args.metrics)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestBodyData_GetDataSignature(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	type fields struct {
+		data []byte
+	}
+	type args struct {
+		signer hmacsigner.HMACSigner
+	}
+	type want struct {
+		got httpheaders.HashSHA256
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"no signature generated without secret key": {
+			fields: fields{data: []byte(`123`)},
+			args: args{
+				signer: func() hmacsigner.HMACSigner {
+					m := hmacsignertest.NewMockHMACSigner(ctrl)
+					m.EXPECT().HasKey().Return(false)
+					m.EXPECT().Sign(gomock.Any()).Times(0)
+					return m
+				}(),
+			},
+			want: want{got: httpheaders.HashSHA256Empty},
+		},
+		"some signature generated with secret key": {
+			fields: fields{data: []byte(`123`)},
+			args: args{
+				signer: func() hmacsigner.HMACSigner {
+					m := hmacsignertest.NewMockHMACSigner(ctrl)
+					m.EXPECT().HasKey().Return(true)
+					m.EXPECT().Sign([]byte(`123`)).Return([]byte(`some signature`), nil)
+					return m
+				}(),
+			},
+			want: want{got: httpheaders.HashSHA256("736f6d65207369676e6174757265")},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			b := &BodyData{
+				T:    t,
+				data: tt.fields.data,
+			}
+			got := b.GetDataSignature(tt.args.signer)
 			assert.Equal(t, tt.want.got, got)
 		})
 	}

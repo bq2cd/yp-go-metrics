@@ -12,6 +12,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/middleware"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/go-chi/chi/v5"
 	"github.com/goccy/go-json"
@@ -26,11 +27,14 @@ func TestRouter_ServeHTTP(t *testing.T) {
 }
 
 type testHandlerArgs struct {
-	method            string
-	url               string
-	bodyData          handlertest.BodyData
-	shouldCompress    bool
-	acceptedEncodings []httpheaders.ContentEncoding
+	method              string
+	url                 string
+	bodyData            handlertest.BodyData
+	shouldCompress      bool
+	acceptedEncodings   []httpheaders.ContentEncoding
+	shouldSign          bool
+	expectNoHandlerCall bool
+	overrideHash        httpheaders.HashSHA256
 }
 
 type testHandlerWant struct {
@@ -38,11 +42,13 @@ type testHandlerWant struct {
 	contentType     httpheaders.ContentType
 	contentEncoding httpheaders.ContentEncoding
 	body            []byte
+	hash            httpheaders.HashSHA256
 }
 
 type testHandlerCase struct {
-	args testHandlerArgs
-	want testHandlerWant
+	args      testHandlerArgs
+	want      testHandlerWant
+	secretKey []byte
 }
 
 func testRouterServeHTTPHandlers(t *testing.T) {
@@ -318,6 +324,85 @@ func testRouterServeHTTPMiddleware(t *testing.T) {
 				},
 			},
 		},
+		// FIXME:
+		// Such requests should not be accepted, but we are forced to accept them
+		// because of `go-autotests` which do not sign their requests; see
+		// https://github.com/Yandex-Practicum/go-autotests/blob/0591b1dbbcbcf741c41c8eca0718bf676ed7307f/cmd/metricstest_v2/iteration14_test.go#L462
+		"when secret key present, accepts request without signature and signs response": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						shouldSign:          false,
+						expectNoHandlerCall: false,
+					},
+					want: testHandlerWant{
+						status:          http.StatusOK,
+						contentType:     httpheaders.ContentTypeApplicationJSON,
+						contentEncoding: httpheaders.ContentEncodingGzip,
+						body:            []byte(`{"id": "id1", "type": "counter", "delta": 123}`),
+						hash:            httpheaders.HashSHA256("6159e85f20e3dc1f908997d0150102acf21c52efe580ff4b3c24c2076801dc4e"), // https://tools.onecompiler.com/hmac-sha256
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when secret key present, rejects request with incorrect signature": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						shouldSign:          false,
+						overrideHash:        httpheaders.GetHashSHA256FromBytes([]byte(`incorrect signature`)),
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusBadRequest,
+						contentType:     httpheaders.ContentTypeTextPlain.UTF8(),
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte(`signature mismatch` + "\n"),
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when secret key present, validates request signature and signs response": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:            http.MethodPost,
+						url:               "/update",
+						bodyData:          handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:    true,
+						acceptedEncodings: []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						shouldSign:        true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusOK,
+						contentType:     httpheaders.ContentTypeApplicationJSON,
+						contentEncoding: httpheaders.ContentEncodingGzip,
+						body:            []byte(`{"id": "id1", "type": "counter", "delta": 123}`),
+						hash:            httpheaders.HashSHA256("6159e85f20e3dc1f908997d0150102acf21c52efe580ff4b3c24c2076801dc4e"), // https://tools.onecompiler.com/hmac-sha256
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -330,12 +415,12 @@ func testHandlerTable(t *testing.T, handlerID handler.Ident, handlerFn http.Hand
 	for _, tc := range cases {
 		name := fmt.Sprintf("%s %s %s", handlerID, tc.args.method, tc.args.url)
 		t.Run(name, func(t *testing.T) {
-			testHandlerRun(t, handlerID, handlerFn, tc.args, tc.want)
+			testHandlerRun(t, handlerID, handlerFn, tc.args, tc.want, tc.secretKey)
 		})
 	}
 }
 
-func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handler, args testHandlerArgs, want testHandlerWant) {
+func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handler, args testHandlerArgs, want testHandlerWant, secretKey []byte) {
 	t.Helper()
 
 	// Arrange
@@ -350,7 +435,11 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 		m := handlertest.NewMockHandler(ctrl)
 		handlers[id] = m
 		if id == handlerID {
-			m.EXPECT().ServeHTTP(gomock.Any(), gomock.Any()).Do(handlerFn)
+			if args.expectNoHandlerCall {
+				m.EXPECT().ServeHTTP(gomock.Any(), gomock.Any()).Times(0)
+			} else {
+				m.EXPECT().ServeHTTP(gomock.Any(), gomock.Any()).Do(handlerFn)
+			}
 		} else {
 			// We do not expect other handlers to get called, but if
 			// a wrong handler did get called, we would like to know its name to facilitate tests debugging.
@@ -362,7 +451,8 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 		}
 	}
 
-	rtr, err := New(logger, handlers)
+	signer := hmacsigner.NewHMACSigner(secretKey)
+	rtr, err := New(logger, handlers, signer)
 	require.NoError(t, err)
 
 	ts := httptest.NewServer(rtr)
@@ -371,6 +461,12 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 	req := args.bodyData.NewRequest(args.method, ts.URL+args.url, args.shouldCompress)
 	for _, enc := range args.acceptedEncodings {
 		enc.MakeAccepted(req.Header)
+	}
+	if args.shouldSign {
+		args.bodyData.GetDataSignature(signer).Apply(req.Header)
+	}
+	if args.overrideHash != httpheaders.HashSHA256Empty {
+		args.overrideHash.Apply(req.Header)
 	}
 
 	// Act
@@ -385,6 +481,7 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 	assert.Equal(t, args.url, resp.Request.URL.Path)
 	assert.Equal(t, want.status, resp.StatusCode)
 	assert.Truef(t, want.contentEncoding.Matches(resp.Header), "expected %v encoding, got %v", want.contentEncoding, httpheaders.GetContentEncoding(resp.Header))
+	assert.Truef(t, want.hash.Matches(resp.Header), "expected hash %v, got %v", want.hash, httpheaders.GetHashSHA256(resp.Header))
 
 	bodyData.AssertType(want.contentType)
 	bodyData.AssertData(want.body)
@@ -496,6 +593,7 @@ func TestNew(t *testing.T) {
 	type args struct {
 		logger   log.Logger
 		handlers handler.Registry
+		signer   hmacsigner.HMACSigner
 	}
 	type want struct {
 		wantErr bool
@@ -506,19 +604,26 @@ func TestNew(t *testing.T) {
 	}
 	tests := map[string]testcase{
 		"empty handlers fail": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.Registry{}},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.Registry{}, signer: hmacsigner.NewHMACSigner(nil)},
 			want: want{wantErr: true},
 		},
 		"proper handlers pass": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 		"nil logger replaced by noop": {
-			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
+			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+		},
+		"nil signer fails": {
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
+			want: want{wantErr: true},
+		},
+		"proper signer passes": {
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := New(tt.args.logger, tt.args.handlers)
+			got, err := New(tt.args.logger, tt.args.handlers, tt.args.signer)
 			if tt.want.wantErr {
 				require.Error(t, err)
 				assert.Nil(t, got)
