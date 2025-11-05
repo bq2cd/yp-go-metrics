@@ -13,6 +13,8 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner/hmacsignertest"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
@@ -279,6 +281,7 @@ func TestNewSenderJSON(t *testing.T) {
 	type args struct {
 		client         *resty.Client
 		retrierFactory retrymgr.RetrierFactory
+		hmacSigner     hmacsigner.HMACSigner
 	}
 	tests := []struct {
 		name      string
@@ -294,21 +297,43 @@ func TestNewSenderJSON(t *testing.T) {
 						return retrymgrtest.NewMockStrategy(ctrl)
 					})
 				}(),
+				hmacSigner: hmacsigner.NewHMACSigner(nil),
 			},
 			assertion: func(t *testing.T, args args, got *senderJSON) {
 				assert.Equal(t, args.client, got.client)
 				assert.Equal(t, args.retrierFactory, got.retrierFactory)
+				assert.Equal(t, args.hmacSigner, got.hmacSigner)
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewSenderJSON(tt.args.client, tt.args.retrierFactory))
+			tt.assertion(t, tt.args, NewSenderJSON(tt.args.client, tt.args.retrierFactory, tt.args.hmacSigner))
 		})
 	}
 }
 
 func Test_senderJSON_Send(t *testing.T) {
+	t.Run("nothing signed without secret key", func(t *testing.T) {
+		testSenderJSONSendHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
+			m := hmacsignertest.NewMockHMACSigner(ctrl)
+			m.EXPECT().Sign(gomock.Any()).Return(nil, hmacsigner.ErrMissingSecretKey).Times(numCalls)
+			return m
+		}, httpheaders.HashSHA256Empty)
+	})
+
+	t.Run("request body signed with secret key", func(t *testing.T) {
+		testSenderJSONSendHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
+			m := hmacsignertest.NewMockHMACSigner(ctrl)
+			m.EXPECT().Sign(gomock.Any()).Return([]byte(`dummy-hash-bytes`), nil).Times(numCalls)
+			return m
+		}, httpheaders.HashSHA256("64756d6d792d686173682d6279746573"))
+	})
+}
+
+func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner, wantHashHeader httpheaders.HashSHA256) {
+	t.Helper()
+
 	type fields struct {
 		client   *resty.Client
 		deadline time.Duration
@@ -553,12 +578,20 @@ func Test_senderJSON_Send(t *testing.T) {
 				},
 			)
 
+			var hmacSigner *hmacsignertest.MockHMACSigner
+			if tt.want.httpCall != "" {
+				hmacSigner = setupSigner(ctrl, tt.want.numRetries+1)
+			} else {
+				hmacSigner = setupSigner(ctrl, 0)
+			}
+
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
 
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
 			s := &senderJSON{
 				client:         tt.fields.client,
+				hmacSigner:     hmacSigner,
 				retrierFactory: retrierFactory,
 				shouldCompress: shouldCompress,
 			}
@@ -569,6 +602,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
+				require.Truef(t, wantHashHeader.Matches(r.Header), "hash header mismatch")
 				rbody.Reset()
 				_, err := io.Copy(rbody, r.Body)
 				require.NoError(t, err)
@@ -636,6 +670,25 @@ func Test_senderJSON_setBody(t *testing.T) {
 }
 
 func Test_senderJSON_SendBatch(t *testing.T) {
+	t.Run("nothing signed without secret key", func(t *testing.T) {
+		testSenderJSONSendBatchHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
+			m := hmacsignertest.NewMockHMACSigner(ctrl)
+			m.EXPECT().Sign(gomock.Any()).Return(nil, hmacsigner.ErrMissingSecretKey).Times(numCalls)
+			return m
+		}, httpheaders.HashSHA256Empty)
+	})
+	t.Run("request body signed with secret key", func(t *testing.T) {
+		testSenderJSONSendBatchHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
+			m := hmacsignertest.NewMockHMACSigner(ctrl)
+			m.EXPECT().Sign(gomock.Any()).Return([]byte(`dummy-hash-bytes`), nil).Times(numCalls)
+			return m
+		}, httpheaders.HashSHA256("64756d6d792d686173682d6279746573"))
+	})
+}
+
+func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner, wantHashHeader httpheaders.HashSHA256) {
+	t.Helper()
+
 	type fields struct {
 		client   *resty.Client
 		deadline time.Duration
@@ -948,6 +1001,13 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			},
 		)
 
+		var hmacSigner *hmacsignertest.MockHMACSigner
+		if tt.want.httpCall != "" {
+			hmacSigner = setupSigner(ctrl, tt.want.numRetries+1)
+		} else {
+			hmacSigner = setupSigner(ctrl, 0)
+		}
+
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
@@ -956,6 +1016,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			s := &senderJSON{
 				client:         tt.fields.client,
 				retrierFactory: retrierFactory,
+				hmacSigner:     hmacSigner,
 				shouldCompress: shouldCompress,
 			}
 			httpmock.ActivateNonDefault(s.client.GetClient())
@@ -965,6 +1026,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
+				require.Truef(t, wantHashHeader.Matches(r.Header), "hash header mismatch")
 				rbody.Reset()
 				_, err := io.Copy(rbody, r.Body)
 				require.NoError(t, err)

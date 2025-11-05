@@ -12,6 +12,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	"github.com/go-resty/resty/v2"
 	"github.com/goccy/go-json"
@@ -65,13 +66,19 @@ func (s *senderPlain) Send(ctx context.Context, metric model.Metric) error {
 }
 
 // NewSenderJSON creates an instance of a sender that reports metrics encoded in JSON.
-func NewSenderJSON(client *resty.Client, retrierFactory retrymgr.RetrierFactory) *senderJSON {
-	return &senderJSON{client: client, retrierFactory: retrierFactory, shouldCompress: true}
+func NewSenderJSON(client *resty.Client, retrierFactory retrymgr.RetrierFactory, hmacSigner hmacsigner.HMACSigner) *senderJSON {
+	return &senderJSON{
+		client:         client,
+		retrierFactory: retrierFactory,
+		hmacSigner:     hmacSigner,
+		shouldCompress: true,
+	}
 }
 
 type senderJSON struct {
 	client         *resty.Client
 	retrierFactory retrymgr.RetrierFactory
+	hmacSigner     hmacsigner.HMACSigner
 	shouldCompress bool
 }
 
@@ -106,7 +113,18 @@ func (s *senderJSON) sendSingleRequest(ctx context.Context, method, url string, 
 	req.Method = method
 	req.URL = url
 
-	err := s.setBody(req, bytes.NewReader(body))
+	signature, err := s.hmacSigner.Sign(body)
+	switch {
+	case errors.Is(err, hmacsigner.ErrMissingSecretKey):
+		// no secret key, no need to add any headers
+	case err == nil:
+		hash := httpheaders.GetHashSHA256FromBytes(signature)
+		req.SetHeader(httpheaders.HeaderKeyHashSHA256, hash.String())
+	default:
+		return nil, fmt.Errorf("cannot sign request body: %w", err)
+	}
+
+	err = s.setBody(req, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("cannot compress request body: %w", err)
 	}
