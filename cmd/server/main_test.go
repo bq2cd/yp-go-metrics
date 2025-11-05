@@ -138,6 +138,12 @@ func Test_parseArgs(t *testing.T) {
 			assertion: assert.Error,
 		},
 		{
+			name:      "bad args, missing secret key value",
+			args:      args{args: []string{"-k"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
 			name: "good args, address",
 			args: args{args: []string{"-a=host1"}},
 			want: config.Config{
@@ -257,6 +263,30 @@ func Test_parseArgs(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				DatabaseURL:         url.URL{Scheme: "postgresql", Host: "localhost:1234"},
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, empty secret key is valid",
+			args: args{args: []string{"-k="}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				HMACSecretKey:       nil,
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, secret key",
+			args: args{args: []string{"-k=MTIz"}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				HMACSecretKey:       []byte(`123`),
 			},
 			assertion: assert.NoError,
 		},
@@ -409,6 +439,51 @@ func Test_parseArgs_withEnv(t *testing.T) {
 			},
 			want:      config.Config{},
 			assertion: assert.Error,
+		},
+		{
+			name: "env sets secret key",
+			args: args{
+				args: []string{},
+				env:  map[string]string{"KEY": "NDU2"},
+			},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				HMACSecretKey:       []byte(`456`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides secret key",
+			args: args{
+				args: []string{"-k=MTIz"},
+				env:  map[string]string{"KEY": "NDU2"},
+			},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				HMACSecretKey:       []byte(`456`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env does not override secret key with empty value",
+			args: args{
+				args: []string{"-k=MTIz"},
+				env:  map[string]string{"KEY": ""},
+			},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				HMACSecretKey:       []byte(`123`),
+			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {

@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"regexp"
 	"time"
+
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 )
 
 var (
@@ -19,6 +21,7 @@ type Config struct {
 	UpstreamURL    url.URL
 	PollInterval   time.Duration
 	ReportInterval time.Duration
+	HMACSecretKey  []byte
 }
 
 // Option is function that take pointer to config as an argument,
@@ -79,6 +82,14 @@ func PollInterval(intervalSec uint) Option {
 func ReportInterval(intervalSec uint) Option {
 	return func(c *Config) error {
 		return setInterval(intervalSec, &c.ReportInterval)
+	}
+}
+
+// HMACSecretKey sets a secret key to be used HMAC calculation.
+func HMACSecretKey(key string) Option {
+	return func(c *Config) error {
+		c.HMACSecretKey = hmacsigner.LoadSecretKey(key)
+		return nil
 	}
 }
 

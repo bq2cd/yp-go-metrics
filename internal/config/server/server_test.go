@@ -211,6 +211,7 @@ func TestConfig_Validate(t *testing.T) {
 		MetricStoreFilePath      string
 		MetricStoreLoadOnStartup bool
 		DatabaseURL              url.URL
+		HMACSecretKey            []byte
 	}
 	tests := []struct {
 		name      string
@@ -266,6 +267,15 @@ func TestConfig_Validate(t *testing.T) {
 			},
 			assertion: assert.NoError,
 		},
+		{
+			name: "non-empty secret key",
+			fields: fields{
+				ListenAddress:   ":0",
+				ShutdownTimeout: 1 * time.Second,
+				HMACSecretKey:   []byte(`123`),
+			},
+			assertion: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -276,6 +286,7 @@ func TestConfig_Validate(t *testing.T) {
 				MetricStoreFilePath:      tt.fields.MetricStoreFilePath,
 				MetricStoreLoadOnStartup: tt.fields.MetricStoreLoadOnStartup,
 				DatabaseURL:              tt.fields.DatabaseURL,
+				HMACSecretKey:            tt.fields.HMACSecretKey,
 			}
 			tt.assertion(t, c.Validate())
 		})
@@ -541,6 +552,71 @@ func TestDatabaseURL(t *testing.T) {
 			err := DatabaseURL(tt.args.dsn)(c)
 			tt.assertion(t, &tt.config, err, tt.want)
 			assert.Equal(t, tt.want.url, c.DatabaseURL)
+		})
+	}
+}
+
+func TestHMACSecretKey(t *testing.T) {
+	type args struct {
+		key string
+	}
+	type want struct {
+		got []byte
+	}
+	type testcase struct {
+		args      args
+		want      want
+		config    Config
+		assertion func(*testing.T, *Config, error, want)
+	}
+	tests := map[string]testcase{
+		"empty key is okay": {
+			args:   args{key: ""},
+			want:   want{got: nil},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"non-empty plain-text key is accepted": {
+			args:   args{key: `123`},
+			want:   want{got: []byte(`123`)},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"non-empty base64-encoded key is accepted": {
+			args:   args{key: "MTIz"},
+			want:   want{got: []byte(`123`)},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"existing key can be overwritten": {
+			args:   args{key: "MTIz"},
+			want:   want{got: []byte(`123`)},
+			config: Config{HMACSecretKey: []byte(`something`)},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"existing key can be overwritten with empty value": {
+			args:   args{key: ""},
+			want:   want{got: nil},
+			config: Config{HMACSecretKey: []byte(`something`)},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := HMACSecretKey(tt.args.key)(c)
+			tt.assertion(t, c, err, tt.want)
+			assert.Equal(t, tt.want.got, c.HMACSecretKey)
 		})
 	}
 }

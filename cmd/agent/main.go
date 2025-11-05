@@ -25,6 +25,7 @@ type cliOptions struct {
 	UpstreamURL    string `env:"ADDRESS"`
 	PollInterval   uint   `env:"POLL_INTERVAL"`
 	ReportInterval uint   `env:"REPORT_INTERVAL"`
+	HMACSecretKey  string `env:"KEY"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -33,6 +34,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.StringVar(&opts.UpstreamURL, "a", defaultUpstreamURL, "upstream url in the format [http://]HOST[:PORT]")
 	fs.UintVar(&opts.PollInterval, "p", defaultPollIntervalSec, "poll interval in seconds")
 	fs.UintVar(&opts.ReportInterval, "r", defaultReportIntervalSec, "report interval in seconds")
+	fs.StringVar(&opts.HMACSecretKey, "k", "", "secret key for HMAC calculation")
 
 	// parse flags
 	if err := fs.Parse(args); err != nil {
@@ -48,6 +50,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.UpstreamURL(opts.UpstreamURL),
 		config.PollInterval(opts.PollInterval),
 		config.ReportInterval(opts.ReportInterval),
+		config.HMACSecretKey(opts.HMACSecretKey),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

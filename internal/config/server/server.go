@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 )
 
 var (
@@ -22,6 +24,7 @@ type Config struct {
 	MetricStoreFilePath      string
 	MetricStoreLoadOnStartup bool
 	DatabaseURL              url.URL
+	HMACSecretKey            []byte
 }
 
 // Option is function that take pointer to config as an argument,
@@ -124,6 +127,14 @@ func DatabaseURL(dsn string) Option {
 			return fmt.Errorf("must specify port")
 		}
 		c.DatabaseURL = *uri
+		return nil
+	}
+}
+
+// HMACSecretKey sets a secret key to be used HMAC calculation.
+func HMACSecretKey(key string) Option {
+	return func(c *Config) error {
+		c.HMACSecretKey = hmacsigner.LoadSecretKey(key)
 		return nil
 	}
 }
