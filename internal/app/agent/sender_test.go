@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 
@@ -686,6 +687,35 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 	})
 }
 
+type syncBuffer struct {
+	buf *bytes.Buffer
+	mu  sync.RWMutex
+}
+
+func (sb *syncBuffer) Write(data []byte) (int, error) {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.buf.Write(data)
+}
+
+func (sb *syncBuffer) Read(dst []byte) (int, error) {
+	sb.mu.RLock()
+	defer sb.mu.RUnlock()
+	return sb.buf.Read(dst)
+}
+
+func (sb *syncBuffer) String() string {
+	sb.mu.RLock()
+	defer sb.mu.RUnlock()
+	return sb.buf.String()
+}
+
+func (sb *syncBuffer) Reset() {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	sb.buf.Reset()
+}
+
 func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner, wantHashHeader httpheaders.HashSHA256) {
 	t.Helper()
 
@@ -1022,7 +1052,7 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			defer httpmock.Reset()
 
-			rbody := bytes.NewBuffer(nil)
+			rbody := &syncBuffer{buf: bytes.NewBuffer(nil)}
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
