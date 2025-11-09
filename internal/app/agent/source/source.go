@@ -3,6 +3,7 @@ package source
 import (
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/extra"
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/memstats"
+	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/psutil"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
@@ -13,5 +14,5 @@ type Source interface {
 
 // DefaultSources creates a slice of preconfigured metric sources.
 func DefaultSources() []Source {
-	return []Source{memstats.New(), extra.New()}
+	return []Source{memstats.New(), extra.New(), psutil.New()}
 }
