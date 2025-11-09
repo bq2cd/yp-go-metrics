@@ -22,6 +22,7 @@ type Config struct {
 	PollInterval   time.Duration
 	ReportInterval time.Duration
 	HMACSecretKey  []byte
+	SenderPoolSize uint
 }
 
 // Option is function that take pointer to config as an argument,
@@ -89,6 +90,15 @@ func ReportInterval(intervalSec uint) Option {
 func HMACSecretKey(key string) Option {
 	return func(c *Config) error {
 		c.HMACSecretKey = hmacsigner.LoadSecretKey(key)
+		return nil
+	}
+}
+
+// SenderPoolSize sets a desired worker pool size for agent sender goroutines.
+// Default value of `0` means worker pool is disabled.
+func SenderPoolSize(size uint) Option {
+	return func(c *Config) error {
+		c.SenderPoolSize = size
 		return nil
 	}
 }

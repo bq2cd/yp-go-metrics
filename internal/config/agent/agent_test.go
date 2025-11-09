@@ -435,3 +435,58 @@ func TestHMACSecretKey(t *testing.T) {
 		})
 	}
 }
+
+func TestSenderPoolSize(t *testing.T) {
+	type args struct {
+		size uint
+	}
+	type want struct {
+		size    uint
+		wantErr func(testing.TB, error)
+	}
+	type testcase struct {
+		config Config
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"default value is zero": {
+			config: Config{},
+			args:   args{},
+			want: want{
+				size: 0,
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"new value is set": {
+			config: Config{},
+			args:   args{size: 15},
+			want: want{
+				size: 15,
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+		"old value is overridden": {
+			config: Config{SenderPoolSize: 5},
+			args:   args{size: 15},
+			want: want{
+				size: 15,
+				wantErr: func(t testing.TB, err error) {
+					require.NoError(t, err)
+				},
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := SenderPoolSize(tt.args.size)(c)
+			tt.want.wantErr(t, err)
+			assert.Equal(t, tt.want.size, c.SenderPoolSize)
+		})
+	}
+}
