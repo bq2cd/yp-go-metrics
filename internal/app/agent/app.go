@@ -26,9 +26,9 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	retrierFactory := retrymgr.NewRetrierFactory(logger, retrymgr.NewSleeper(), retrymgr.NewStrategy1s3s5s)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
 	sender := NewSenderJSON(client, retrierFactory, hmacSigner)
-	reporter := NewReporter(sender, repository.NewMemStorage())
+	reporter := NewReporter(sender, repository.NewMemStorage(), cfg.SenderPoolSize)
 
-	ag := New(cfg, collector, reporter)
+	ag := New(logger, cfg, collector, reporter)
 
 	return ag.Run(ctx)
 }

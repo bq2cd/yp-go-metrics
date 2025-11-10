@@ -7,6 +7,8 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
+//go:generate go tool mockgen -destination=sourcetest/mock_source.go -package sourcetest github.com/bq2cd/yp-go-metrics/internal/app/agent/source Source
+
 // Source abstracts a source of metrics and its underlying implementation.
 type Source interface {
 	ReadMetrics() ([]model.Metric, error)

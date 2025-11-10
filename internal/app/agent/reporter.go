@@ -6,6 +6,11 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"golang.org/x/sync/errgroup"
+)
+
+const (
+	defaultSenderBatchSize = 10
 )
 
 var (
@@ -14,18 +19,25 @@ var (
 
 // Reporter abstracts a process of sending metrics to a central storage.
 type Reporter interface {
-	Report(ctx context.Context, metrics []model.Metric) error
+	Report(ctx context.Context, inCh <-chan model.Metric) error
 }
 
 type reporter struct {
-	sender   SenderBatch
-	reported repository.StorageMulti
+	sender          SenderBatch
+	reported        repository.StorageMulti
+	senderPoolSize  uint
+	senderBatchSize uint
 }
 
 // NewReporter creates an instance of the default reporter with
 // specified internal storage.
-func NewReporter(sender SenderBatch, storage repository.StorageMulti) *reporter {
-	return &reporter{sender: sender, reported: storage}
+func NewReporter(sender SenderBatch, storage repository.StorageMulti, numWorkers uint) *reporter {
+	return &reporter{
+		sender:          sender,
+		reported:        storage,
+		senderPoolSize:  numWorkers,
+		senderBatchSize: defaultSenderBatchSize,
+	}
 }
 
 func (r *reporter) getSendableMetric(ctx context.Context, metric model.Metric) model.Metric {
@@ -79,12 +91,10 @@ func (r *reporter) reportSingle(ctx context.Context, metric model.Metric) error 
 	if metric.Empty() {
 		return ErrReporterEmptyMetric
 	}
-	return r.reportBatch(ctx, []model.Metric{metric})
+	return r.reportBatch(ctx, model.NewMetricSet(metric))
 }
 
-func (r *reporter) reportBatch(ctx context.Context, metrics []model.Metric) error {
-	orig := model.NewMetricSet(metrics...)
-
+func (r *reporter) reportBatch(ctx context.Context, orig model.MetricSet) error {
 	sendable := r.getSendableMetrics(ctx, orig)
 	if sendable.Empty() {
 		return nil
@@ -97,7 +107,62 @@ func (r *reporter) reportBatch(ctx context.Context, metrics []model.Metric) erro
 	)
 }
 
+func (r *reporter) reportWorker(ctx context.Context, inCh <-chan model.MetricSet) error {
+	for batch := range inCh {
+		err := r.reportBatch(ctx, batch)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *reporter) metricBatcher(ctx context.Context, inCh <-chan model.Metric) <-chan model.MetricSet {
+	outCh := make(chan model.MetricSet)
+
+	go func() {
+		defer close(outCh)
+		batch := model.NewMetricSet()
+		for metric := range inCh {
+			if len(batch) < int(r.senderBatchSize) {
+				// either we have room for a single metric or we have room for at least two.
+				batch.Upsert(metric)
+			}
+			if len(batch) < int(r.senderBatchSize) {
+				// there is still room for next metric, too early to send our batch.
+				continue
+			}
+			// batch is full, sending it.
+			select {
+			case <-ctx.Done():
+				return
+			case outCh <- batch:
+				batch = model.NewMetricSet()
+			}
+		}
+		// send incomplete last batch
+		if len(batch) > 0 {
+			outCh <- batch
+		}
+	}()
+
+	return outCh
+}
+
+func (r *reporter) processBatches(ctx context.Context, inCh <-chan model.MetricSet) error {
+	poolSize := max(r.senderPoolSize, 1)
+
+	erg := new(errgroup.Group)
+	for range poolSize {
+		erg.Go(func() error {
+			return r.reportWorker(ctx, inCh)
+		})
+	}
+	return erg.Wait()
+}
+
 // Report sends incoming metrics to an upstream.
-func (r *reporter) Report(ctx context.Context, metrics []model.Metric) error {
-	return r.reportBatch(ctx, metrics)
+func (r *reporter) Report(ctx context.Context, inCh <-chan model.Metric) error {
+	outCh := r.metricBatcher(ctx, inCh)
+	return r.processBatches(ctx, outCh)
 }

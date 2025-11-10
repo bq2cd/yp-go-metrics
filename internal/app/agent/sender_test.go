@@ -30,12 +30,21 @@ import (
 
 type mockSender struct {
 	mock.Mock
+	delay        time.Duration
 	wantErr      func(model.Metric) error
 	wantBatchErr func(model.MetricSet) (model.MetricSet, error)
 }
 
 func (m *mockSender) Send(ctx context.Context, metric model.Metric) error {
 	m.Called(ctx, metric)
+	if m.delay > 0 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(m.delay):
+			// all good
+		}
+	}
 	if m.wantErr != nil {
 		return m.wantErr(metric)
 	}
@@ -44,6 +53,14 @@ func (m *mockSender) Send(ctx context.Context, metric model.Metric) error {
 
 func (m *mockSender) SendBatch(ctx context.Context, metrics model.MetricSet) (model.MetricSet, error) {
 	m.Called(ctx, metrics)
+	if m.delay > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(m.delay):
+			// all good
+		}
+	}
 	if m.wantBatchErr != nil {
 		return m.wantBatchErr(metrics)
 	}
