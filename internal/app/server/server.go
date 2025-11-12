@@ -112,13 +112,13 @@ func (s *server) tryLoadMetrics(ctx context.Context) {
 	l.Info().Msg("loading metrics from disk")
 	f, err := os.OpenFile(s.config.MetricStoreFilePath, os.O_RDONLY|os.O_CREATE, 0600)
 	if err != nil {
-		l.Error().Err("error", err).Msg("failed to open file")
+		l.Error().WithErr(err).Msg("failed to open file")
 		return
 	}
 	// snapshotter will close the reader
 	err = s.snapshotter.LoadClose(ctx, f)
 	if err != nil {
-		l.Error().Err("error", err).Msg("failed to load metrics")
+		l.Error().WithErr(err).Msg("failed to load metrics")
 	}
 }
 

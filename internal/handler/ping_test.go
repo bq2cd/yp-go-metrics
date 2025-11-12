@@ -47,16 +47,16 @@ func Test_pingHandler_ServeHTTP(t *testing.T) {
 			fields: fields{pingerDelay: 50 * time.Millisecond, pingerErr: nil, timeout: 20 * time.Millisecond},
 			want: want{
 				code:        http.StatusInternalServerError,
-				body:        `database timed out`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		"database is outright unreachable": {
 			fields: fields{pingerDelay: 2 * time.Millisecond, pingerErr: errors.New("connect failed"), timeout: 20 * time.Millisecond},
 			want: want{
 				code:        http.StatusInternalServerError,
-				body:        `database unreachable`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 	}

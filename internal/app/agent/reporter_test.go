@@ -22,11 +22,13 @@ type mockReporter struct {
 	mu      sync.Mutex
 }
 
-func (m *mockReporter) Report(ctx context.Context, metrics []model.Metric) error {
-	m.Called(ctx, metrics)
+func (m *mockReporter) Report(ctx context.Context, inCh <-chan model.Metric) error {
+	m.Called(ctx, inCh)
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.metrics = metrics
+	for metric := range inCh {
+		m.metrics = append(m.metrics, metric)
+	}
 	if m.timeout > 0 {
 		time.Sleep(m.timeout)
 	}
@@ -286,7 +288,11 @@ func TestNewReporter(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, NewReporter(tt.args.sender, tt.args.storage))
+			numWorkers := 3
+			got := NewReporter(tt.args.sender, tt.args.storage, uint(numWorkers))
+			tt.assertion(t, tt.args, got)
+			assert.Equal(t, uint(numWorkers), got.senderPoolSize)
+			assert.Equal(t, uint(defaultSenderBatchSize), got.senderBatchSize)
 		})
 	}
 }
@@ -365,10 +371,13 @@ func Test_reporter_getSendableMetric(t *testing.T) {
 
 func Test_reporter_Report(t *testing.T) {
 	type fields struct {
-		sender   *mockSender
-		reported *storagetest.MockStorage
+		sender     *mockSender
+		reported   *storagetest.MockStorage
+		numWorkers uint
+		batchSize  uint
 	}
 	type args struct {
+		timeout time.Duration
 		metrics []model.Metric
 	}
 	type want struct {
@@ -385,10 +394,12 @@ func Test_reporter_Report(t *testing.T) {
 		{
 			name: "invalid metric",
 			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
 			},
 			args: args{
+				timeout: 100 * time.Millisecond,
 				metrics: []model.Metric{{Type: model.MetricTypeCounter, ID: "id1"}},
 			},
 			want: want{
@@ -402,10 +413,12 @@ func Test_reporter_Report(t *testing.T) {
 		{
 			name: "send single counter",
 			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
 			},
 			args: args{
+				timeout: 100 * time.Millisecond,
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
 			},
 			want: want{
@@ -419,10 +432,12 @@ func Test_reporter_Report(t *testing.T) {
 		{
 			name: "send multiple counters",
 			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
 			},
 			args: args{
+				timeout: 100 * time.Millisecond,
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10)},
 			},
 			want: want{
@@ -436,10 +451,12 @@ func Test_reporter_Report(t *testing.T) {
 		{
 			name: "send multiple counters with the same id",
 			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
 			},
 			args: args{
+				timeout: 100 * time.Millisecond,
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -10), model.NewCounterMetric("id1", 7)},
 			},
 			want: want{
@@ -451,12 +468,35 @@ func Test_reporter_Report(t *testing.T) {
 			},
 		},
 		{
-			name: "send multiple metrics",
+			name: "send multiple counters with the same id (storage already contains previous value)",
 			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
+				sender: &mockSender{},
+				reported: storagetest.NewMockStorage(
+					model.NewCounterMetric("id1", -81),
+				),
+				batchSize: defaultSenderBatchSize,
 			},
 			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id1", -10), model.NewCounterMetric("id1", 7)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 88)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 7)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple metrics",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
 			},
 			want: want{
@@ -484,9 +524,11 @@ func Test_reporter_Report(t *testing.T) {
 						return sent, err
 					},
 				},
-				reported: storagetest.NewMockStorage(),
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
 			},
 			args: args{
+				timeout: 100 * time.Millisecond,
 				metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
 			},
 			want: want{
@@ -497,27 +539,185 @@ func Test_reporter_Report(t *testing.T) {
 				assert.Errorf(t, err, "no luck here")
 			},
 		},
+		{
+			name: "send multiple metrics in multiple batches",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: 2,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewCounterMetric("id2", 10), model.NewGaugeMetric("id1", -5), model.NewGaugeMetric("id2", -3.01)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple metrics in multiple batches (non-aligned)",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: 3,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+			},
+			want: want{
+				sentMetrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+				storedMetrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple metrics in multiple batches in parallel",
+			fields: fields{
+				sender:     &mockSender{delay: 75 * time.Millisecond},
+				reported:   storagetest.NewMockStorage(),
+				batchSize:  2,
+				numWorkers: 3,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+			},
+			want: want{
+				sentMetrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+				storedMetrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send multiple metrics in multiple batches in parallel with slow sender",
+			fields: fields{
+				sender:     &mockSender{delay: 500 * time.Millisecond},
+				reported:   storagetest.NewMockStorage(),
+				batchSize:  2,
+				numWorkers: 3,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+			},
+			want: want{
+				sentMetrics: []model.Metric{
+					model.NewCounterMetric("id1", 5),
+					model.NewCounterMetric("id2", 10),
+					model.NewCounterMetric("id3", -7),
+					model.NewGaugeMetric("id1", -5),
+					model.NewGaugeMetric("id2", -3.01),
+				},
+				storedMetrics: []model.Metric{},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.ErrorContains(t, err, "context deadline exceeded")
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			ctx, cancel := context.WithTimeout(t.Context(), tt.args.timeout)
+			defer cancel()
 			r := &reporter{
-				sender:   tt.fields.sender,
-				reported: tt.fields.reported,
+				sender:          tt.fields.sender,
+				reported:        tt.fields.reported,
+				senderPoolSize:  tt.fields.numWorkers,
+				senderBatchSize: tt.fields.batchSize,
 			}
 			if len(tt.want.sentMetrics) > 0 {
-				tt.fields.sender.On("SendBatch", t.Context(), mock.MatchedBy(func(metrics model.MetricSet) bool {
-					return assert.Equal(t, model.NewMetricSet(tt.want.sentMetrics...), metrics)
-				})).Return(mock.Anything, mock.AnythingOfType("error"))
+				n, r := len(tt.want.sentMetrics)/int(tt.fields.batchSize), len(tt.want.sentMetrics)%int(tt.fields.batchSize)
+				if r != 0 {
+					n++
+				}
+				for i := 0; i < n; i++ {
+					start := i * int(tt.fields.batchSize)
+					end := min(len(tt.want.sentMetrics), (i+1)*int(tt.fields.batchSize))
+					sentMetrics := tt.want.sentMetrics[start:end]
+					tt.fields.sender.On("SendBatch", ctx, model.NewMetricSet(sentMetrics...)).Return(mock.Anything, mock.AnythingOfType("error"))
+				}
 			}
 
-			err := r.Report(t.Context(), tt.args.metrics)
+			// Act
+			inCh := make(chan model.Metric)
+			go func() {
+				defer close(inCh)
+				for _, metric := range tt.args.metrics {
+					inCh <- metric
+				}
+			}()
 
+			err := r.Report(ctx, inCh)
+
+			// Assert
 			tt.assertion(t, err)
 			tt.fields.sender.AssertExpectations(t)
 			for _, m := range tt.want.storedMetrics {
 				got, err := tt.fields.reported.Get(t.Context(), m.Key())
-				require.NoError(t, err)
+				require.NoErrorf(t, err, "expected metric %v", m)
 				assert.Equal(t, m, got)
+			}
+			if len(tt.want.storedMetrics) == 0 {
+				metrics, err := tt.fields.reported.GetAll(t.Context())
+				require.NoError(t, err)
+				assert.Empty(t, metrics)
 			}
 		})
 	}

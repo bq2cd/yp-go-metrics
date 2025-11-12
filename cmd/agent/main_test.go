@@ -119,6 +119,24 @@ func Test_parseArgs(t *testing.T) {
 			},
 		},
 		{
+			name:      "bad args, missing secret key value",
+			args:      args{args: []string{"-k"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, sender pool size negative",
+			args:      args{args: []string{"-l=-2"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, sender pool size missing",
+			args:      args{args: []string{"-l"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
 			name: "good args",
 			args: args{args: []string{"-a=localhost:9090"}},
 			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:9090"}, PollInterval: defaultPollIntervalSec * time.Second, ReportInterval: defaultReportIntervalSec * time.Second},
@@ -141,6 +159,39 @@ func Test_parseArgs(t *testing.T) {
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
 			},
+		},
+		{
+			name: "good args, secret key",
+			args: args{args: []string{"-k=MTIz"}},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				HMACSecretKey:  []byte(`123`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, empty secret key is valid",
+			args: args{args: []string{"-k="}},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				HMACSecretKey:  nil,
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, sender pool size (aka rate limit)",
+			args: args{args: []string{"-l=2"}},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				SenderPoolSize: 2,
+			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {
@@ -218,6 +269,89 @@ func Test_parseArgs_withEnv(t *testing.T) {
 			want: config.Config{},
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.Error(t, err)
+			},
+		},
+		{
+			name: "env overrides secret key",
+			args: args{
+				args: []string{"-k=MTIz"},
+				env:  map[string]string{"KEY": "NDU2"},
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				HMACSecretKey:  []byte(`456`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env sets secret key",
+			args: args{
+				args: []string{},
+				env:  map[string]string{"KEY": "NDU2"},
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				HMACSecretKey:  []byte(`456`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides secret key",
+			args: args{
+				args: []string{"-k=MTIz"},
+				env:  map[string]string{"KEY": "NDU2"},
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				HMACSecretKey:  []byte(`456`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env does not override secret key with empty value",
+			args: args{
+				args: []string{"-k=MTIz"},
+				env:  map[string]string{"KEY": ""},
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				HMACSecretKey:  []byte(`123`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env negative sender pool size (rate limit)",
+			args: args{
+				args: []string{"-l=2"},
+				env:  map[string]string{"RATE_LIMIT": "-3"},
+			},
+			want: config.Config{},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.Error(t, err)
+			},
+		},
+		{
+			name: "env overrides sender pool size (rate limit)",
+			args: args{
+				args: []string{"-l=18"},
+				env:  map[string]string{"RATE_LIMIT": "3"},
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:   defaultPollIntervalSec * time.Second,
+				ReportInterval: defaultReportIntervalSec * time.Second,
+				SenderPoolSize: 3,
+			},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.NoError(t, err)
 			},
 		},
 	}

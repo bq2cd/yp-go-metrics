@@ -32,33 +32,33 @@ func Test_defaultHandler_ServeHTTP(t *testing.T) {
 		{
 			name: "GET %s NOT_ALLOWED",
 			args: args{method: http.MethodGet, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "invalid method\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "", contentType: ""},
 		},
 		{
 			name: "HEAD %s NOT_ALLOWED",
 			args: args{method: http.MethodHead, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "", contentType: ""},
 		},
 		{
 			name: "PUT %s NOT_ALLOWED",
 			args: args{method: http.MethodPut, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "invalid method\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "", contentType: ""},
 		},
 		{
 			name: "DELETE %s NOT_ALLOWED",
 			args: args{method: http.MethodDelete, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusMethodNotAllowed, body: "invalid method\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusMethodNotAllowed, body: "", contentType: ""},
 		},
 		// Bad Request
 		{
 			name: "POST %s BAD_REQUEST",
 			args: args{method: http.MethodPost, url: "/", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusBadRequest, body: "invalid request\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 		{
 			name: "POST %s BAD_REQUEST",
 			args: args{method: http.MethodPost, url: "/bla", contentType: "text/plain", body: http.NoBody},
-			want: want{code: http.StatusBadRequest, body: "invalid request\n", contentType: "text/plain; charset=utf-8"},
+			want: want{code: http.StatusBadRequest, body: "", contentType: ""},
 		},
 	}
 	for _, tt := range tests {

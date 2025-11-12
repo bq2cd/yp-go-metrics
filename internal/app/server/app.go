@@ -12,6 +12,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -29,7 +30,8 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
 
 	handlers := handler.NewRegistry(logger, snapshotter, pinger)
-	router, err := router.New(logger, handlers)
+	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
+	router, err := router.New(logger, handlers, hmacSigner)
 	if err != nil {
 		return fmt.Errorf("cannot create router: %w", err)
 	}

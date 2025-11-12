@@ -19,7 +19,8 @@ type readHandler struct {
 func (h *readHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metrics, err := h.metrics.RetrieveAll(r.Context())
 	if err != nil {
-		http.Error(w, "cannot retrieve metrics", http.StatusInternalServerError)
+		h.logger.Error().WithErr(err).Msg("cannot retrieve metrics from storage")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

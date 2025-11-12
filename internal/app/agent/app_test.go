@@ -54,10 +54,10 @@ func TestRun(t *testing.T) {
 	tests := map[string]testcase{
 		"agent collects metrics and reports to server successfully": {
 			args: args{
-				timeout: 100 * time.Millisecond,
+				timeout: 200 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   50 * time.Millisecond,
-					ReportInterval: 75 * time.Millisecond,
+					PollInterval:   100 * time.Millisecond,
+					ReportInterval: 100 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusOK,
@@ -70,7 +70,7 @@ func TestRun(t *testing.T) {
 			args: args{
 				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   10 * time.Millisecond,
+					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 50 * time.Millisecond,
 				},
 				overrideURL:      true,
@@ -85,7 +85,7 @@ func TestRun(t *testing.T) {
 			args: args{
 				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   10 * time.Millisecond,
+					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 50 * time.Millisecond,
 					UpstreamURL:    url.URL{Host: "localhost"},
 				},

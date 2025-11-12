@@ -12,6 +12,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +44,7 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 			name:   "GET %s INTERNAL_ERROR",
 			fields: fields{metrics: &faultyMetricService{}},
 			args:   args{method: http.MethodGet, url: "/", body: http.NoBody},
-			want:   want{code: http.StatusInternalServerError, body: "cannot retrieve metrics", contentType: httpheaders.ContentTypeTextPlain.UTF8()},
+			want:   want{code: http.StatusInternalServerError, body: "", contentType: httpheaders.ContentTypeEmpty},
 			assertion: func(t *testing.T, want want, body string) {
 				assert.Equal(t, want.body, strings.TrimRight(body, "\n"))
 			},
@@ -86,8 +87,10 @@ func Test_readHandler_ServeHTTP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf(tt.name, tt.args.url), func(t *testing.T) {
+			logger := log.NewTestLogger()
 			h := &readHandler{
-				metrics: tt.fields.metrics,
+				baseHandler: baseHandler{logger: logger},
+				metrics:     tt.fields.metrics,
 			}
 			ts := httptest.NewServer(h)
 			defer ts.Close()

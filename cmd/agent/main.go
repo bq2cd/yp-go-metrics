@@ -19,12 +19,15 @@ const (
 	defaultUpstreamURL       = "localhost:8080"
 	defaultPollIntervalSec   = 2
 	defaultReportIntervalSec = 10
+	defaultSenderPoolSize    = 0 // sender pool is disabled, sending done serially
 )
 
 type cliOptions struct {
 	UpstreamURL    string `env:"ADDRESS"`
 	PollInterval   uint   `env:"POLL_INTERVAL"`
 	ReportInterval uint   `env:"REPORT_INTERVAL"`
+	HMACSecretKey  string `env:"KEY"`
+	SenderPoolSize uint   `env:"RATE_LIMIT"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -33,6 +36,8 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.StringVar(&opts.UpstreamURL, "a", defaultUpstreamURL, "upstream url in the format [http://]HOST[:PORT]")
 	fs.UintVar(&opts.PollInterval, "p", defaultPollIntervalSec, "poll interval in seconds")
 	fs.UintVar(&opts.ReportInterval, "r", defaultReportIntervalSec, "report interval in seconds")
+	fs.StringVar(&opts.HMACSecretKey, "k", "", "secret key for HMAC calculation")
+	fs.UintVar(&opts.SenderPoolSize, "l", defaultSenderPoolSize, "sender pool size (aka rate limit)")
 
 	// parse flags
 	if err := fs.Parse(args); err != nil {
@@ -48,6 +53,8 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.UpstreamURL(opts.UpstreamURL),
 		config.PollInterval(opts.PollInterval),
 		config.ReportInterval(opts.ReportInterval),
+		config.HMACSecretKey(opts.HMACSecretKey),
+		config.SenderPoolSize(opts.SenderPoolSize),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

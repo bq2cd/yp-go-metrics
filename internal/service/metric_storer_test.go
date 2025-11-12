@@ -99,11 +99,13 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 			},
 		},
 		{
-			name:      "empty storage, empty counter ignored",
-			fields:    fields{storage: storagetest.NewMockStorage()},
-			args:      args{metric: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
-			want:      want{metric: model.Metric{}},
-			assertion: assert.NoError,
+			name:   "empty storage, empty counter ignored",
+			fields: fields{storage: storagetest.NewMockStorage()},
+			args:   args{metric: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
+			want:   want{metric: model.Metric{}},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.ErrorIs(t, err, ErrMetricIsEmpty)
+			},
 			assertStoredMetric: func(t *testing.T, s repository.StorageMulti, want want) {
 				got, err := s.Get(t.Context(), want.metric.Key())
 				require.ErrorIs(t, err, repository.ErrMetricNotFound)
@@ -111,11 +113,13 @@ func Test_metricStorer_StoreSingle(t *testing.T) {
 			},
 		},
 		{
-			name:      "non-empty storage, empty counter ignored",
-			fields:    fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
-			args:      args{metric: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
-			want:      want{metric: model.NewCounterMetric("id1", 5)},
-			assertion: assert.NoError,
+			name:   "non-empty storage, empty counter ignored",
+			fields: fields{storage: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5))},
+			args:   args{metric: model.Metric{ID: "id1", Type: model.MetricTypeCounter}},
+			want:   want{metric: model.NewCounterMetric("id1", 5)},
+			assertion: func(t assert.TestingT, err error, v ...any) bool {
+				return assert.ErrorIs(t, err, ErrMetricIsEmpty)
+			},
 			assertStoredMetric: func(t *testing.T, s repository.StorageMulti, want want) {
 				got, err := s.Get(t.Context(), want.metric.Key())
 				require.NoError(t, err)

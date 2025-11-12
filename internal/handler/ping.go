@@ -28,13 +28,13 @@ func (h *pingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			h.logger.Error().Err("error", err).Msg("database unreachable")
-			http.Error(w, "database unreachable", http.StatusInternalServerError)
+			h.logger.Error().WithErr(err).Msg("database unreachable")
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	case <-ctx.Done():
-		h.logger.Error().Dur("timeout", h.timeout).Msg("timeout exceeded")
-		http.Error(w, "database timed out", http.StatusInternalServerError)
+		h.logger.Error().Dur("timeout", h.timeout).Msg("database timed out")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

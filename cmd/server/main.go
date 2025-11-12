@@ -30,6 +30,7 @@ type cliOptions struct {
 	MetricStoreFilePath      string `env:"FILE_STORAGE_PATH"`
 	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
 	DatabaseDSN              string `env:"DATABASE_DSN"`
+	HMACSecretkey            string `env:"KEY"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -41,6 +42,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.StringVar(&opts.MetricStoreFilePath, "f", defaultMetricStoreFilePath, "path to file for dumping metrics")
 	fs.BoolVar(&opts.MetricStoreLoadOnStartup, "r", defaultMetricStoreLoadOnStartup, "restore metrics from file on startup")
 	fs.StringVar(&opts.DatabaseDSN, "d", "", "database dsn (only postgres is supported)")
+	fs.StringVar(&opts.HMACSecretkey, "k", "", "secret key for HMAC calculation")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
@@ -57,6 +59,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.MetricStoreFilePath(opts.MetricStoreFilePath),
 		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
 		config.DatabaseURL(opts.DatabaseDSN),
+		config.HMACSecretKey(opts.HMACSecretkey),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

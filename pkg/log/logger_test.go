@@ -271,3 +271,32 @@ func Test_baseLogger_Sync(t *testing.T) {
 		})
 	}
 }
+
+func Test_baseLogger_WithErr(t *testing.T) {
+	type fields struct {
+		impl loggerImpl
+	}
+	type args struct {
+		err error
+	}
+	type want struct {
+		got Logger
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		// TODO: Add test cases.
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			l := &baseLogger{
+				impl: tt.fields.impl,
+			}
+			got := l.WithErr(tt.args.err)
+			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}

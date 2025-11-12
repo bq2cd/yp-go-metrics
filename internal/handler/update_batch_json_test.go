@@ -233,8 +233,8 @@ func Test_updateBatchJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusUnprocessableEntity,
-				body:        `cannot decode metrics`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		"faulty storage": {
@@ -247,8 +247,8 @@ func Test_updateBatchJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusInsufficientStorage,
-				body:        `cannot store metrics`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		"json encoder error": {

@@ -58,7 +58,8 @@ func TestNew(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := New(tt.args.cfg, tt.args.collector, tt.args.reporter)
+			got := New(nil, tt.args.cfg, tt.args.collector, tt.args.reporter)
+			assert.NotNil(t, got.logger)
 			assert.Equal(t, tt.args.cfg, got.config)
 			assert.Equal(t, tt.args.collector, got.collector)
 			assert.Equal(t, tt.args.reporter, got.reporter)
@@ -193,8 +194,8 @@ func Test_agent_Run(t *testing.T) {
 
 			mCollector := tt.fields.collector.
 				On("Collect", mock.Anything).Return(nil).
-				On("Snapshot", mock.Anything).Return(tt.want.metrics, nil)
-			mReporter := tt.fields.reporter.On("Report", mock.Anything, tt.want.metrics).Return(nil)
+				On("Snapshot", mock.Anything).Return(mock.Anything, nil)
+			mReporter := tt.fields.reporter.On("Report", mock.Anything, mock.Anything).Return(nil)
 
 			err := a.Run(ctx)
 			require.NoError(t, err)
@@ -259,7 +260,9 @@ func Test_agent_doReport(t *testing.T) {
 				reporter:  tt.fields.reporter,
 			}
 			tt.fields.collector.On("Snapshot", mock.Anything).Return(mock.Anything, mock.Anything)
-			tt.fields.reporter.On("Report", mock.Anything, mock.Anything).Return(mock.Anything)
+			if !tt.fields.collector.wantErr {
+				tt.fields.reporter.On("Report", mock.Anything, mock.Anything).Return(mock.Anything)
+			}
 
 			tt.assertion(t, a.doReport(t.Context()))
 

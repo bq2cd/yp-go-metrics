@@ -7,6 +7,7 @@ import (
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/middleware"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/go-chi/chi/v5"
 )
@@ -18,7 +19,7 @@ var (
 )
 
 // Middlewares returns a pre-configured list of middleware handlers.
-func Middlewares(logger log.Logger) []middleware.Middleware {
+func Middlewares(logger log.Logger, signer hmacsigner.HMACSigner) []middleware.Middleware {
 	if logger == nil {
 		logger = log.NewNoopLogger()
 	}
@@ -26,6 +27,7 @@ func Middlewares(logger log.Logger) []middleware.Middleware {
 		middleware.RequestID(),
 		middleware.Compressor(logger),
 		middleware.Logger(logger),
+		middleware.HMACSigner(logger, signer),
 		middleware.Recoverer(logger),
 	}
 }
@@ -121,20 +123,27 @@ type Router struct {
 
 // New returns an instance of the [Router] with preconfigured middlewares and routes.
 // For each route, a handler must exist in the given [handler.Registry].
-func New(logger log.Logger, handlers handler.Registry) (*Router, error) {
+func New(logger log.Logger, handlers handler.Registry, signer hmacsigner.HMACSigner) (*Router, error) {
 	rtr := &Router{
 		mux: chi.NewRouter(),
 	}
 	if logger == nil {
 		logger = log.NewNoopLogger()
 	}
+
+	if signer == nil {
+		return nil, fmt.Errorf("signer cannot be nil")
+	}
+	middlewares := Middlewares(logger.With(log.Str("subsystem", "router")), signer)
+
 	routes, err := Routes(handlers)
 	if err != nil {
 		return nil, fmt.Errorf("cannot obtain routes: %w", err)
 	}
+
 	err = configureChiRouter(
 		rtr.mux,
-		Middlewares(logger.With(log.Str("subsystem", "router"))),
+		middlewares,
 		routes,
 	)
 	if err != nil {

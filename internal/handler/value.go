@@ -9,6 +9,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type valueHandler struct {
@@ -20,24 +21,29 @@ type valueHandler struct {
 func (h *valueHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricOp := urlpath.NewOperationFromURLPath(r.URL.Path)
 	needle, err := metricOp.ToMetric()
+	l := h.logger.With(log.Str("urlpath", r.URL.Path), log.Any("needle", needle))
 	switch err {
 	case urlpath.ErrMissingMetricID:
-		http.Error(w, "missing metric id", http.StatusNotFound)
+		l.Error().Msg("missing metric id")
+		w.WriteHeader(http.StatusNotFound)
 		return
 	case urlpath.ErrMissingMetricValue:
 		// OK
 	default:
-		http.Error(w, "missing metric value", http.StatusBadRequest)
+		l.Error().Msg("missing metric id")
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	metric, err := h.metrics.RetrieveSingle(r.Context(), needle.Key())
 	switch {
 	case errors.Is(err, service.ErrMetricNotFound):
-		http.Error(w, "metric not found", http.StatusNotFound)
+		l.Error().Msg("metric not found")
+		w.WriteHeader(http.StatusNotFound)
 		return
 	case err != nil:
-		http.Error(w, "cannot retrieve metric", http.StatusInternalServerError)
+		l.Error().WithErr(err).Msg("cannot retrieve metric from storage")
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
