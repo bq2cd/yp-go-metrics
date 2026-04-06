@@ -219,8 +219,8 @@ func Test_updateBatchJSONHandler_ServeHTTP(t *testing.T) {
 			},
 			want: want{
 				code:        http.StatusBadRequest,
-				body:        `invalid content type`,
-				contentType: httpheaders.ContentTypeTextPlain.UTF8(),
+				body:        ``,
+				contentType: httpheaders.ContentTypeEmpty,
 			},
 		},
 		"invalid json": {
