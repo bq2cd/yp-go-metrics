@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
@@ -26,4 +27,8 @@ func (h *baseHandler) respondError(w http.ResponseWriter, status int, l log.Logg
 
 	ev.Msg(msg)
 	w.WriteHeader(status)
+}
+
+func (h *baseHandler) getClientInfo(r *http.Request) model.ClientInfo {
+	return model.ClientInfo{}
 }

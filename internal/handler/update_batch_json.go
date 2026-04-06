@@ -16,6 +16,7 @@ type updateBatchJSONHandler struct {
 	baseHandler
 	metrics   service.MetricStorer
 	responder metricBatchJSONResponder
+	auditor   service.MetricAuditor
 }
 
 // ServeHTTP implements http.Handler for /update endpoint with JSON requests/responses.
@@ -33,6 +34,8 @@ func (h *updateBatchJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+
+	h.auditor.RecordMetricsUploaded(r.Context(), model.NewMetricSet(metrics...), h.getClientInfo(r))
 
 	metrics, ok = h.retrieveMetrics(w, r.Context(), keys)
 	if !ok {
@@ -66,12 +69,14 @@ func (h *updateBatchJSONHandler) validateMetrics(w http.ResponseWriter, r *http.
 }
 
 func (h *updateBatchJSONHandler) storeMetrics(w http.ResponseWriter, ctx context.Context, metrics []model.Metric) ([]model.MetricKey, bool) {
-	keys := make([]model.MetricKey, 0, len(metrics))
-	for _, m := range metrics {
-		keys = append(keys, m.Key())
+	keys := make([]model.MetricKey, len(metrics))
+	storable := make([]model.Metric, len(metrics))
+	for i, m := range metrics {
+		keys[i] = m.Key()
+		storable[i] = m.Copy()
 	}
 
-	err := h.metrics.StoreBatch(ctx, metrics)
+	err := h.metrics.StoreBatch(ctx, storable)
 	if err == nil {
 		return keys, true
 	}

@@ -14,6 +14,7 @@ import (
 type updateHandler struct {
 	baseHandler
 	metrics service.MetricStorer
+	auditor service.MetricAuditor
 }
 
 // ServeHTTP implements http.Handler for /update/* endpoint with plain-text requests/responses.
@@ -26,6 +27,8 @@ func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !h.storeMetric(w, l, r.Context(), metric) {
 		return
 	}
+
+	h.auditor.RecordMetricsUploaded(r.Context(), model.NewMetricSet(metric), h.getClientInfo(r))
 
 	h.respondOK(w)
 }
@@ -61,7 +64,7 @@ func (h *updateHandler) validateMetricType(w http.ResponseWriter, l log.Logger, 
 }
 
 func (h *updateHandler) storeMetric(w http.ResponseWriter, l log.Logger, ctx context.Context, metric model.Metric) bool {
-	err := h.metrics.StoreSingle(ctx, metric)
+	err := h.metrics.StoreSingle(ctx, metric.Copy())
 	if err == nil {
 		return true
 	}

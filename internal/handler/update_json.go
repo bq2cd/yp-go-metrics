@@ -17,6 +17,7 @@ type updateJSONHandler struct {
 	baseHandler
 	metrics   service.MetricStorer
 	responder metricJSONResponder
+	auditor   service.MetricAuditor
 }
 
 // ServeHTTP implements http.Handler for /update endpoint with JSON requests/responses.
@@ -33,6 +34,8 @@ func (h *updateJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !h.storeMetric(w, r.Context(), metric) {
 		return
 	}
+
+	h.auditor.RecordMetricsUploaded(r.Context(), model.NewMetricSet(metric), h.getClientInfo(r))
 
 	metric, ok = h.retrieveMetric(w, r.Context(), metric.Key())
 	if !ok {
@@ -66,7 +69,7 @@ func (h *updateJSONHandler) validateMetric(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *updateJSONHandler) storeMetric(w http.ResponseWriter, ctx context.Context, metric model.Metric) bool {
-	err := h.metrics.StoreSingle(ctx, metric)
+	err := h.metrics.StoreSingle(ctx, metric.Copy())
 	if err == nil {
 		return true
 	}

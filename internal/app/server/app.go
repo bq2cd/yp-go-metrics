@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
@@ -10,6 +11,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/router"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/auditsink"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
@@ -25,11 +27,16 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot init storage: %w", err)
 	}
 
+	auditor, err := initAuditor(ctx, logger, cfg)
+	if err != nil {
+		return fmt.Errorf("cannot init metric auditor: %w", err)
+	}
+
 	writer := service.NewStorageBatchWriter(storage)
 	storer := service.NewMetricStorer(storage, writer)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
 
-	handlers := handler.NewRegistry(logger, snapshotter, pinger)
+	handlers := handler.NewRegistry(logger, snapshotter, pinger, auditor)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
 	router, err := router.New(logger, handlers, hmacSigner)
 	if err != nil {
@@ -70,4 +77,54 @@ func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (rep
 	}
 
 	return sqlStorage, sqlStorage, nil
+}
+
+func initAuditor(_ context.Context, logger log.Logger, cfg config.Config) (service.MetricAuditor, error) {
+	auditor := service.NewMetricAuditor()
+
+	err := maybeRegisterAuditFileSink(logger, auditor, cfg.AuditFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = maybeRegisterAuditHTTPSink(logger, auditor, cfg.AuditURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return auditor, nil
+}
+
+func maybeRegisterAuditFileSink(logger log.Logger, auditor service.MetricAuditor, path string) error {
+	if path == "" {
+		return nil
+	}
+
+	sink, err := auditsink.NewFileSink(path)
+	if err != nil {
+		return fmt.Errorf("cannot create audit file sink: %w", err)
+	}
+
+	auditor.RegisterSink(sink)
+
+	logger.Info().Str("path", path).Msg("registered audit file sink")
+
+	return nil
+}
+
+func maybeRegisterAuditHTTPSink(logger log.Logger, auditor service.MetricAuditor, remote url.URL) error {
+	if remote.String() == "" {
+		return nil
+	}
+
+	sink, err := auditsink.NewHTTPSink(remote)
+	if err != nil {
+		return fmt.Errorf("cannot create audit http sink: %w", err)
+	}
+
+	auditor.RegisterSink(sink)
+
+	logger.Info().Str("remote", remote.String()).Msg("registered audit http sink")
+
+	return nil
 }

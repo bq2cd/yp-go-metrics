@@ -23,13 +23,13 @@ const (
 	IdentPing            = "ping"
 )
 
-func getHandlers(metrics service.MetricStorer, pinger service.StoragePinger) map[Ident]handlerLogger {
+func getHandlers(metrics service.MetricStorer, pinger service.StoragePinger, auditor service.MetricAuditor) map[Ident]handlerLogger {
 	return map[Ident]handlerLogger{
 		IdentDefault:         &defaultHandler{},
 		IdentRead:            &readHandler{metrics: metrics},
-		IdentUpdate:          &updateHandler{metrics: metrics},
-		IdentUpdateJSON:      &updateJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
-		IdentUpdateBatchJSON: &updateBatchJSONHandler{metrics: metrics, responder: &defaultMetricBatchJSONResponder{}},
+		IdentUpdate:          &updateHandler{metrics: metrics, auditor: auditor},
+		IdentUpdateJSON:      &updateJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}, auditor: auditor},
+		IdentUpdateBatchJSON: &updateBatchJSONHandler{metrics: metrics, responder: &defaultMetricBatchJSONResponder{}, auditor: auditor},
 		IdentValue:           &valueHandler{metrics: metrics},
 		IdentValueJSON:       &valueJSONHandler{metrics: metrics, responder: &defaultMetricJSONResponder{}},
 		IdentPing:            &pingHandler{pinger: pinger, timeout: 500 * time.Millisecond},
@@ -43,11 +43,11 @@ type Ident string
 type Registry map[Ident]Handler
 
 // NewRegistry creates a new [Registry] map.
-func NewRegistry(logger log.Logger, metrics service.MetricStorer, pinger service.StoragePinger) Registry {
+func NewRegistry(logger log.Logger, metrics service.MetricStorer, pinger service.StoragePinger, auditor service.MetricAuditor) Registry {
 	if logger == nil {
 		logger = log.NewNoopLogger()
 	}
-	handlers := getHandlers(metrics, pinger)
+	handlers := getHandlers(metrics, pinger, auditor)
 	reg := make(Registry, len(handlers))
 	for ident, h := range handlers {
 		h.setLogger(logger.With(log.Str("handler", string(ident))))

@@ -430,7 +430,7 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 
 	logger := log.NewTestLogger()
 
-	handlers := handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
+	handlers := handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl))
 	for id := range handlers {
 		m := handlertest.NewMockHandler(ctrl)
 		handlers[id] = m
@@ -608,17 +608,17 @@ func TestNew(t *testing.T) {
 			want: want{wantErr: true},
 		},
 		"proper handlers pass": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 		"nil logger replaced by noop": {
-			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 		"nil signer fails": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl))},
 			want: want{wantErr: true},
 		},
 		"proper signer passes": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 	}
 	for name, tt := range tests {
