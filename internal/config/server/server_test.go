@@ -212,6 +212,7 @@ func TestConfig_Validate(t *testing.T) {
 		MetricStoreLoadOnStartup bool
 		DatabaseURL              url.URL
 		HMACSecretKey            []byte
+		AuditFilePath            string
 	}
 	tests := []struct {
 		name      string
@@ -245,6 +246,16 @@ func TestConfig_Validate(t *testing.T) {
 				ListenAddress:   ":0",
 				ShutdownTimeout: 1 * time.Second,
 				DatabaseURL:     url.URL{Scheme: "mysql", Host: "localhost:5432"},
+			},
+			assertion: assert.Error,
+		},
+		{
+			name: "invalid audit file path",
+			fields: fields{
+				ListenAddress:       ":0",
+				ShutdownTimeout:     1 * time.Second,
+				MetricStoreFilePath: "test.json",
+				AuditFilePath:       "/tmp", // cannot use directory
 			},
 			assertion: assert.Error,
 		},
@@ -287,6 +298,7 @@ func TestConfig_Validate(t *testing.T) {
 				MetricStoreLoadOnStartup: tt.fields.MetricStoreLoadOnStartup,
 				DatabaseURL:              tt.fields.DatabaseURL,
 				HMACSecretKey:            tt.fields.HMACSecretKey,
+				AuditFilePath:            tt.fields.AuditFilePath,
 			}
 			tt.assertion(t, c.Validate())
 		})
@@ -620,3 +632,125 @@ func TestHMACSecretKey(t *testing.T) {
 		})
 	}
 }
+
+func TestAuditFilePath(t *testing.T) {
+	type args struct {
+		path string
+	}
+	type want struct {
+		path string
+	}
+	tests := []struct {
+		name      string
+		args      args
+		want      want
+		config    Config
+		assertion func(*testing.T, *Config, error, want)
+	}{
+		{
+			name:   "empty is allowed",
+			args:   args{},
+			want:   want{},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "dir not allowed",
+			args:   args{path: "."},
+			want:   want{},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				assert.Error(t, err)
+			},
+		},
+		{
+			name: "relative path is allowed",
+			args: args{path: "test.txt"},
+			want: want{path: func() string {
+				p, err := os.Getwd()
+				require.NoError(t, err)
+				return filepath.Join(p, "test.txt")
+			}()},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "absolute path is allowed",
+			args:   args{path: "/test/me/here/please.txt"},
+			want:   want{path: "/test/me/here/please.txt"},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name:   "overrides previous value",
+			args:   args{path: "/test/me/here/please.txt"},
+			want:   want{path: "/test/me/here/please.txt"},
+			config: Config{MetricStoreFilePath: "/a/default/path"},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				assert.NoError(t, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := AuditFilePath(tt.args.path)(&tt.config)
+			tt.assertion(t, &tt.config, err, tt.want)
+		})
+	}
+}
+
+func TestAuditURL(t *testing.T) {
+	type args struct {
+		input string
+	}
+	type want struct {
+		url url.URL
+	}
+	type testcase struct {
+		args      args
+		want      want
+		config    Config
+		assertion func(*testing.T, *Config, error, want)
+	}
+	tests := map[string]testcase{
+		"empty url is allowed": {
+			args:   args{input: ""},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+		"invalid url is not allowed": {
+			args:   args{input: "::localhost:99"},
+			want:   want{url: url.URL{}},
+			config: Config{},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.Error(t, err)
+			},
+		},
+		"overrides previous url": {
+			args:   args{input: "http://localhost:1234/audit"},
+			want:   want{url: url.URL{Scheme: "http", Host: "localhost:1234", Path: "/audit"}},
+			config: Config{AuditURL: url.URL{Scheme: "", Host: "localhost:5432", Path: "/audit-old"}},
+			assertion: func(t *testing.T, c *Config, err error, want want) {
+				require.NoError(t, err)
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := AuditURL(tt.args.input)(c)
+			tt.assertion(t, &tt.config, err, tt.want)
+			assert.Equal(t, tt.want.url, c.AuditURL)
+		})
+	}
+}
+

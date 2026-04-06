@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -25,6 +23,8 @@ type Config struct {
 	MetricStoreLoadOnStartup bool
 	DatabaseURL              url.URL
 	HMACSecretKey            []byte
+	AuditFilePath            string
+	AuditURL                 url.URL
 }
 
 // Option is function that take pointer to config as an argument,
@@ -43,6 +43,7 @@ func New(opts ...Option) (*Config, error) {
 			return nil, err
 		}
 	}
+
 	return c, nil
 }
 
@@ -84,17 +85,17 @@ func MetricStoreFilePath(path string) Option {
 	return func(c *Config) error {
 		if path == "" {
 			c.MetricStoreFilePath = path
+
 			return nil
 		}
-		stat, err := os.Stat(path)
-		if err == nil && stat.IsDir() {
-			return fmt.Errorf("dir is not allowed")
-		}
-		abspath, err := filepath.Abs(path)
+
+		abspath, err := getAbsoluteFilePath(path)
 		if err != nil {
-			return fmt.Errorf("cannot determine absolute path: %w", err)
+			return err
 		}
+
 		c.MetricStoreFilePath = abspath
+
 		return nil
 	}
 }
@@ -139,10 +140,47 @@ func HMACSecretKey(key string) Option {
 	}
 }
 
+// AuditFilePath sets a path to a file on disk for writing audit events.
+func AuditFilePath(path string) Option {
+	return func(c *Config) error {
+		if path == "" {
+			return nil
+		}
+
+		abspath, err := getAbsoluteFilePath(path)
+		if err != nil {
+			return err
+		}
+
+		c.AuditFilePath = abspath
+
+		return nil
+	}
+}
+
+// AuditURL sets a URL for an audit event receiver.
+func AuditURL(urlText string) Option {
+	return func(c *Config) error {
+		if urlText == "" {
+			return nil
+		}
+
+		uri, err := url.Parse(urlText)
+		if err != nil {
+			return fmt.Errorf("cannot parse url: %w", err)
+		}
+
+		c.AuditURL = *uri
+
+		return nil
+	}
+}
+
 // Validate performs logical validation of the config and returns
 // an error if some values do not make sense (logically).
 func (c *Config) Validate() error {
 	tmp := &Config{}
+
 	if err := ListenAddress(c.ListenAddress)(tmp); err != nil {
 		return fmt.Errorf("%w: %w", err, ErrInvalidConfig)
 	}
@@ -164,5 +202,9 @@ func (c *Config) Validate() error {
 	if err := DatabaseURL(c.DatabaseURL.String())(tmp); err != nil {
 		return fmt.Errorf("%w: %w", err, ErrInvalidConfig)
 	}
+	if err := AuditFilePath(c.AuditFilePath)(tmp); err != nil {
+		return fmt.Errorf("%w: %w", err, ErrInvalidConfig)
+	}
+
 	return nil
 }
