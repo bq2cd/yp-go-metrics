@@ -290,6 +290,30 @@ func Test_parseArgs(t *testing.T) {
 			},
 			assertion: assert.NoError,
 		},
+		{
+			name: "good args, audit file path",
+			args: args{args: []string{"--audit-file=audit.txt"}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				AuditFilePath:       filepath.Join(servertest.GetCwd(t), "audit.txt"),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "good args, audit url",
+			args: args{args: []string{"--audit-url=http://localhost:8888/audit"}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				AuditURL:            url.URL{Scheme: "http", Host: "localhost:8888", Path: "/audit"},
+			},
+			assertion: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -482,6 +506,36 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				HMACSecretKey:       []byte(`123`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides audit file path",
+			args: args{
+				args: []string{"-a=localhost:9090", "--audit-file=/a/path/to/some/file.json"},
+				env:  map[string]string{"AUDIT_FILE": "/an/override/to/a/different/file.json"},
+			},
+			want: config.Config{
+				ListenAddress:       "localhost:9090",
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				AuditFilePath:       "/an/override/to/a/different/file.json",
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides audit url",
+			args: args{
+				args: []string{"-a=localhost:9090", "--audit-url=http://localhost:8888/audit-1"},
+				env:  map[string]string{"AUDIT_URL": "http://localhost:9999/audit-2"},
+			},
+			want: config.Config{
+				ListenAddress:       "localhost:9090",
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				AuditURL:            url.URL{Scheme: "http", Host: "localhost:9999", Path: "/audit-2"},
 			},
 			assertion: assert.NoError,
 		},
