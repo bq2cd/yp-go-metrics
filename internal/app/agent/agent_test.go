@@ -29,44 +29,6 @@ func (m *mockPeriodicTask) doWork(ctx context.Context) error {
 	return nil
 }
 
-func TestNew(t *testing.T) {
-	type args struct {
-		cfg       config.Config
-		collector Collector
-		reporter  Reporter
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "default initialisation",
-			args: args{
-				cfg:       config.Config{},
-				collector: &collector{},
-				reporter:  &reporter{},
-			},
-		},
-		{
-			name: "mock initialisation",
-			args: args{
-				cfg:       config.Config{},
-				collector: &mockCollector{},
-				reporter:  &mockReporter{},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := New(nil, tt.args.cfg, tt.args.collector, tt.args.reporter)
-			assert.NotNil(t, got.logger)
-			assert.Equal(t, tt.args.cfg, got.config)
-			assert.Equal(t, tt.args.collector, got.collector)
-			assert.Equal(t, tt.args.reporter, got.reporter)
-		})
-	}
-}
-
 func Test_agent_Run(t *testing.T) {
 	type fields struct {
 		config    config.Config
@@ -186,11 +148,7 @@ func Test_agent_Run(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
 			defer cancel()
 
-			a := &agent{
-				config:    tt.fields.config,
-				collector: tt.fields.collector,
-				reporter:  tt.fields.reporter,
-			}
+			a := New(nil, tt.fields.config, tt.fields.collector, tt.fields.reporter)
 
 			mCollector := tt.fields.collector.
 				On("Collect", mock.Anything).Return(nil).
@@ -284,7 +242,6 @@ func Test_runPeriodicTask(t *testing.T) {
 		args      args
 		assertion func(*testing.T, *mockPeriodicTask, error)
 	}{
-		// TODO: Add test cases.
 		{
 			name:    "fast task without initial delay",
 			timeout: 100 * time.Millisecond,

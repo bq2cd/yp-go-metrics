@@ -20,6 +20,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var (
+	errTestFinished = errors.New("test finished")
+)
+
 type mockHandler struct {
 	mock.Mock
 	numCalls   int
@@ -36,7 +40,6 @@ func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestRun(t *testing.T) {
-	errTestFinished := errors.New("test finished")
 	type args struct {
 		timeout          time.Duration
 		cfg              config.Config
@@ -121,19 +124,10 @@ func TestRun(t *testing.T) {
 			logger := log.NewTestLogger()
 
 			// Act
-			err := Run(ctx, logger, tt.args.cfg)
+			errRun := Run(ctx, logger, tt.args.cfg)
 
 			// Assert
-			var errFinal error
-			for _, e := range errhelper.UnwrapJoined(err) {
-				if errors.Is(e, errTestFinished) {
-					continue
-				}
-				if e == ErrSenderRequestFailed {
-					continue
-				}
-				errFinal = errors.Join(errFinal, e)
-			}
+			errFinal := extractFinalError(errRun)
 			if tt.want.wantErr {
 				require.Error(t, errFinal)
 			} else {
@@ -146,4 +140,35 @@ func TestRun(t *testing.T) {
 			assert.NotEmpty(t, logger.RecordedEvents())
 		})
 	}
+}
+
+func extractFinalError(errRun error) error {
+	var errFinal error
+
+	flattenedErrors := errhelper.UnwrapJoined(errRun)
+
+	for i := 0; i < len(flattenedErrors); i++ {
+		var curr, next error
+
+		curr = flattenedErrors[i]
+		if i < len(flattenedErrors)-1 {
+			next = flattenedErrors[i+1]
+		}
+
+		if curr == ErrMetricCollectionFailed && errors.Is(next, context.DeadlineExceeded) {
+			i++
+
+			continue
+		}
+
+		if curr == ErrSenderRequestFailed && errors.Is(next, errTestFinished) {
+			i++
+
+			continue
+		}
+
+		errFinal = errors.Join(errFinal, curr)
+	}
+
+	return errFinal
 }
