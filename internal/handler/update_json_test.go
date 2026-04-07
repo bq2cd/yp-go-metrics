@@ -36,11 +36,11 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		invalidJSON bool
 	}
 	tests := []struct {
-		name            string
-		fields          fields
-		args            args
-		want            want
-		assertLogEvents func(*testing.T, log.TestLogEventSet)
+		name             string
+		fields           fields
+		args             args
+		want             want
+		assertLogEvents  func(*testing.T, log.TestLogEventSet)
 		setupAuditorMock func(*servicetest.MockMetricAuditor)
 	}{
 		{

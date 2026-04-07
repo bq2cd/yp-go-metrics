@@ -14,7 +14,6 @@ import (
 	reflect "reflect"
 
 	model "github.com/bq2cd/yp-go-metrics/internal/model"
-	repository "github.com/bq2cd/yp-go-metrics/internal/repository"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -52,16 +51,4 @@ func (m *MockMetricAuditor) RecordMetricsUploaded(ctx context.Context, metrics m
 func (mr *MockMetricAuditorMockRecorder) RecordMetricsUploaded(ctx, metrics, clientInfo any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordMetricsUploaded", reflect.TypeOf((*MockMetricAuditor)(nil).RecordMetricsUploaded), ctx, metrics, clientInfo)
-}
-
-// RegisterSink mocks base method.
-func (m *MockMetricAuditor) RegisterSink(sink repository.AuditSink) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RegisterSink", sink)
-}
-
-// RegisterSink indicates an expected call of RegisterSink.
-func (mr *MockMetricAuditorMockRecorder) RegisterSink(sink any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterSink", reflect.TypeOf((*MockMetricAuditor)(nil).RegisterSink), sink)
 }

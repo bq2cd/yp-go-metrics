@@ -27,7 +27,7 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot init storage: %w", err)
 	}
 
-	auditor, err := initAuditor(ctx, logger, cfg)
+	auditProcessor, err := initAuditProcessor(ctx, logger, cfg)
 	if err != nil {
 		return fmt.Errorf("cannot init metric auditor: %w", err)
 	}
@@ -35,6 +35,7 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	writer := service.NewStorageBatchWriter(storage)
 	storer := service.NewMetricStorer(storage, writer)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
+	auditor := service.NewMetricAuditor(logger, auditProcessor)
 
 	handlers := handler.NewRegistry(logger, snapshotter, pinger, auditor)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
@@ -43,7 +44,7 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot create router: %w", err)
 	}
 
-	srv := New(logger, cfg, router, snapshotter, writer)
+	srv := New(logger, cfg, router, snapshotter, writer, auditProcessor)
 
 	return srv.Run(ctx)
 }
@@ -79,23 +80,23 @@ func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (rep
 	return sqlStorage, sqlStorage, nil
 }
 
-func initAuditor(_ context.Context, logger log.Logger, cfg config.Config) (service.MetricAuditor, error) {
-	auditor := service.NewMetricAuditor()
+func initAuditProcessor(_ context.Context, logger log.Logger, cfg config.Config) (service.AuditEventProcessor, error) {
+	processor := service.NewAuditEventProcessor(logger)
 
-	err := maybeRegisterAuditFileSink(logger, auditor, cfg.AuditFilePath)
+	err := maybeRegisterAuditFileSink(logger, processor, cfg.AuditFilePath)
 	if err != nil {
 		return nil, err
 	}
 
-	err = maybeRegisterAuditHTTPSink(logger, auditor, cfg.AuditURL)
+	err = maybeRegisterAuditHTTPSink(logger, processor, cfg.AuditURL)
 	if err != nil {
 		return nil, err
 	}
 
-	return auditor, nil
+	return processor, nil
 }
 
-func maybeRegisterAuditFileSink(logger log.Logger, auditor service.MetricAuditor, path string) error {
+func maybeRegisterAuditFileSink(logger log.Logger, processor service.AuditEventProcessor, path string) error {
 	if path == "" {
 		return nil
 	}
@@ -105,14 +106,14 @@ func maybeRegisterAuditFileSink(logger log.Logger, auditor service.MetricAuditor
 		return fmt.Errorf("cannot create audit file sink: %w", err)
 	}
 
-	auditor.RegisterSink(sink)
+	processor.RegisterSink("file:"+path, sink)
 
 	logger.Info().Str("path", path).Msg("registered audit file sink")
 
 	return nil
 }
 
-func maybeRegisterAuditHTTPSink(logger log.Logger, auditor service.MetricAuditor, remote url.URL) error {
+func maybeRegisterAuditHTTPSink(logger log.Logger, processor service.AuditEventProcessor, remote url.URL) error {
 	if remote.String() == "" {
 		return nil
 	}
@@ -122,7 +123,7 @@ func maybeRegisterAuditHTTPSink(logger log.Logger, auditor service.MetricAuditor
 		return fmt.Errorf("cannot create audit http sink: %w", err)
 	}
 
-	auditor.RegisterSink(sink)
+	processor.RegisterSink("http:"+remote.String(), sink)
 
 	logger.Info().Str("remote", remote.String()).Msg("registered audit http sink")
 

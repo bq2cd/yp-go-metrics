@@ -107,7 +107,7 @@ func TestRun(t *testing.T) {
 			ts := httptest.NewServer(h)
 			defer ts.Close()
 
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
 			if tt.args.overrideURL {
 				upstreamURL, err := url.Parse(ts.URL)
