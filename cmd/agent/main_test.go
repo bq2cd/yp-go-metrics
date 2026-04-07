@@ -533,12 +533,3 @@ func Test_run(t *testing.T) {
 		})
 	}
 }
-
-func Test_main(t *testing.T) {
-	// `main` only calls `run` under the hood,
-	// so there's not much to test here
-	// unless we could mock `run` function;
-	// and the only way to mock it would be
-	// to assign it to a global variable.
-	t.SkipNow()
-}

@@ -46,7 +46,7 @@ func NewListenAddress(t *testing.T, addr string) ListenAddress {
 	return ListenAddress{Host: parts[0], Port: uint32(port)}
 }
 
-// MakeSimpleRequest sends prepared request using provided HTTP client
+// MakeRequestDiscardResponse sends prepared request using provided HTTP client
 // and ignores response completely, so it only returns if any network error
 // was encountered in the process.
 func MakeRequestDiscardResponse(c *http.Client, r *http.Request) error {
@@ -66,19 +66,20 @@ func MakeRequestDiscardResponse(c *http.Client, r *http.Request) error {
 
 // NewTempFileFactory tracks created temporary files to facilitate their easy removal with a single call to [RemoveAll],
 // typically using `defer` statement.
-func NewTempFileFactory(t *testing.T) *tempFileFactory {
-	return &tempFileFactory{
+func NewTempFileFactory(t *testing.T) *TempFileFactory {
+	return &TempFileFactory{
 		t:       t,
 		created: make([]string, 0),
 	}
 }
 
-type tempFileFactory struct {
+// TempFileFactory is tracks created temporary files.
+type TempFileFactory struct {
 	t       *testing.T
 	created []string
 }
 
-func (ff *tempFileFactory) create(dir string, pattern string) string {
+func (ff *TempFileFactory) create(dir string, pattern string) string {
 	f, err := os.CreateTemp(dir, pattern)
 	require.NoError(ff.t, err)
 	require.NoError(ff.t, f.Close())
@@ -88,7 +89,7 @@ func (ff *tempFileFactory) create(dir string, pattern string) string {
 // Create creates a temporary file in default directory for temporary files,
 // closes the file, records its location internally and
 // returns path to the file.
-func (ff *tempFileFactory) Create(pattern string) string {
+func (ff *TempFileFactory) Create(pattern string) string {
 	path := ff.create(os.TempDir(), pattern)
 	ff.created = append(ff.created, path)
 	return path
@@ -96,28 +97,29 @@ func (ff *tempFileFactory) Create(pattern string) string {
 
 // RemoveAll attempts to remove all temporary files that were created
 // with [Create] method.
-func (ff *tempFileFactory) RemoveAll() {
+func (ff *TempFileFactory) RemoveAll() {
 	for _, path := range ff.created {
 		_ = os.Remove(path)
 	}
 }
 
-// NewListenAddressFactory tracks generated random addresses suitable for listening on (e.g. by a HTTP server).
+// NewListenAddressFactory tracks generated random addresses suitable for listening on (e.g. by an HTTP server).
 // It uses [GetRandomListenAddress] function for generation.
-func NewListenAddressFactory(t *testing.T) *listenAddressFactory {
-	return &listenAddressFactory{
+func NewListenAddressFactory(t *testing.T) *ListenAddressFactory {
+	return &ListenAddressFactory{
 		t:         t,
 		allocated: make([]string, 0),
 	}
 }
 
-type listenAddressFactory struct {
+// ListenAddressFactory tracks allocated ports for listening.
+type ListenAddressFactory struct {
 	t         *testing.T
 	allocated []string
 }
 
 // New will generate a new random address with [GetRandomListenAddress] function and store it for future references.
-func (f *listenAddressFactory) New() string {
+func (f *ListenAddressFactory) New() string {
 	addr := GetRandomListenAddress(f.t)
 	f.allocated = append(f.allocated, addr)
 	return addr
@@ -127,7 +129,7 @@ func (f *listenAddressFactory) New() string {
 // but will resort to generating a new one if such address does not yet exist.
 // Under the hood, it will grow a slice with stored addresses to accommodate requested indexes, producing a "sparse" slice if
 // indexes are not requested in proper order.
-func (f *listenAddressFactory) Get(idx int) string {
+func (f *ListenAddressFactory) Get(idx int) string {
 	n := idx + 1
 	if cap(f.allocated) < n {
 		f.allocated = slices.Grow(f.allocated, n-cap(f.allocated))
