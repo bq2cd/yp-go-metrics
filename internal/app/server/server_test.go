@@ -142,6 +142,11 @@ func (m *mockAuditEventProcessor) WriteEvent(ctx context.Context, event model.Au
 	return nil
 }
 
+func (m *mockAuditEventProcessor) Close() error {
+	m.Called()
+	return nil
+}
+
 func createTempFile(t *testing.T, pattern string) string {
 	f, err := os.CreateTemp("", pattern)
 	require.NoError(t, err)

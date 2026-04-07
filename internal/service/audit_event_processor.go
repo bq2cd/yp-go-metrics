@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"maps"
 	"slices"
 	"sync"
@@ -15,6 +16,10 @@ import (
 const (
 	auditEventProcessorBufferSize  = 256
 	auditEventProcessorConcurrency = 2
+)
+
+var (
+	ErrAuditEventProcessorClosed = errors.New("audit processor is closed")
 )
 
 // AuditEventProcessor defines a sink that is designed to run in background, processing incoming audit events
@@ -39,6 +44,31 @@ type auditEventProcessor struct {
 	logger   log.Logger
 	sinks    map[string]repository.AuditSink
 	incoming chan model.AuditEvent
+	closed   bool
+}
+
+func (ap *auditEventProcessor) WriteEvent(ctx context.Context, event model.AuditEvent) error {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	if ap.closed {
+		return ErrAuditEventProcessorClosed
+	}
+
+	ap.incoming <- event
+
+	return nil
+}
+
+func (ap *auditEventProcessor) Close() error {
+	// handled by [StartProcessing] when context is canceled.
+	return nil
 }
 
 func (ap *auditEventProcessor) RegisterSink(sinkID string, sink repository.AuditSink) {
@@ -48,17 +78,9 @@ func (ap *auditEventProcessor) RegisterSink(sinkID string, sink repository.Audit
 	ap.sinks[sinkID] = sink
 }
 
-func (ap *auditEventProcessor) WriteEvent(ctx context.Context, event model.AuditEvent) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case ap.incoming <- event:
-		return nil
-	}
-}
-
 func (ap *auditEventProcessor) StartProcessing(ctx context.Context) {
 	ap.mainLoop(ctx)
+	ap.closeSinks()
 }
 
 func (ap *auditEventProcessor) mainLoop(ctx context.Context) {
@@ -73,6 +95,20 @@ func (ap *auditEventProcessor) mainLoop(ctx context.Context) {
 
 			ap.processEvent(ctx, event)
 		}
+	}
+}
+
+func (ap *auditEventProcessor) closeSinks() {
+	ap.mu.Lock()
+	defer ap.mu.Unlock()
+
+	ap.closed = true
+
+	close(ap.incoming)
+
+	for sinkID, sink := range ap.sinks {
+		err := sink.Close()
+		ap.logger.Info().WithErr(err).Str("sink", sinkID).Msg("closed audit sink")
 	}
 }
 

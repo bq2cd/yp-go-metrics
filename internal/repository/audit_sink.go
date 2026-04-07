@@ -9,4 +9,5 @@ import (
 // AuditSink represents a destination for audit events.
 type AuditSink interface {
 	WriteEvent(ctx context.Context, event model.AuditEvent) error
+	Close() error
 }

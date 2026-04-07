@@ -26,3 +26,7 @@ type httpSink struct {
 func (s *httpSink) WriteEvent(ctx context.Context, event model.AuditEvent) error {
 	return nil
 }
+
+func (s *httpSink) Close() error {
+	return nil
+}
