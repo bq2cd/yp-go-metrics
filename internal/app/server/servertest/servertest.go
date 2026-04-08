@@ -135,9 +135,29 @@ func (f *ListenAddressFactory) Get(idx int) string {
 		f.allocated = slices.Grow(f.allocated, n-cap(f.allocated))
 	}
 	f.allocated = f.allocated[:max(len(f.allocated), n)]
+
+	return f.ensureAllocatedAt(idx)
+}
+
+// Last returns the last allocated address.
+func (f *ListenAddressFactory) Last() string {
+	if len(f.allocated) == 0 {
+		return f.New()
+	}
+
+	return f.ensureAllocatedAt(len(f.allocated) - 1)
+}
+
+// Clear forgets all previously allocated addresses.
+func (f *ListenAddressFactory) Clear() {
+	f.allocated = f.allocated[:0]
+}
+
+func (f *ListenAddressFactory) ensureAllocatedAt(idx int) string {
 	if f.allocated[idx] == "" {
 		f.allocated[idx] = GetRandomListenAddress(f.t)
 	}
+
 	return f.allocated[idx]
 }
 

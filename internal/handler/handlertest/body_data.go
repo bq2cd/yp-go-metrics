@@ -3,6 +3,7 @@ package handlertest
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
-	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -171,4 +171,12 @@ func (b *BodyData) AssertEqual(other BodyData) {
 	b.T.Helper()
 	b.AssertType(other.contentType)
 	b.AssertData(other.data)
+}
+
+func DecodeBodyDataAsJSON[T any](body *BodyData) (T, error) {
+	var target T
+
+	err := json.Unmarshal(body.data, &target)
+
+	return target, err
 }
