@@ -6,19 +6,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source"
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/sourcetest"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
+	"github.com/bq2cd/yp-go-metrics/internal/testutil"
 )
 
 type mockCollector struct {
-	mock.Mock
+	testutil.Mock
+
 	metrics []model.Metric
 	wantErr bool
 }

@@ -548,7 +548,10 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 			defer httpmock.Reset()
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
-			defer close(rbodyCh)
+			t.Cleanup(func() {
+				close(rbodyCh)
+			})
+
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
@@ -947,7 +950,10 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			defer httpmock.Reset()
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
-			defer close(rbodyCh)
+			t.Cleanup(func() {
+				close(rbodyCh)
+			})
+
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))

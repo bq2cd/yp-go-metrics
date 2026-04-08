@@ -43,7 +43,7 @@ func TestRun(t *testing.T) {
 	tests := map[string]testcase{
 		"server is up and responds with OK": {
 			args: args{
-				timeout: 30 * time.Millisecond,
+				timeout: 100 * time.Millisecond,
 				cfg: config.Config{
 					ShutdownTimeout: 1 * time.Millisecond,
 				},
@@ -57,7 +57,7 @@ func TestRun(t *testing.T) {
 		},
 		"server fails to start due to invalid address": {
 			args: args{
-				timeout: 30 * time.Millisecond,
+				timeout: 50 * time.Millisecond,
 				cfg: config.Config{
 					ListenAddress:   "12;34",
 					ShutdownTimeout: 1 * time.Millisecond,

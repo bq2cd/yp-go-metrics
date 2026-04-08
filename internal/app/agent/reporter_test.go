@@ -7,15 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
+	"github.com/bq2cd/yp-go-metrics/internal/testutil"
 )
 
 type mockReporter struct {
-	mock.Mock
+	testutil.Mock
+
 	metrics []model.Metric
 	timeout time.Duration
 	wantErr bool

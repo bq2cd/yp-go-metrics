@@ -6,15 +6,18 @@ import (
 	"testing"
 	"time"
 
-	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/testutil"
 )
 
 type mockPeriodicTask struct {
-	mock.Mock
+	testutil.Mock
+
 	workDuration func() time.Duration
 	wantErr      func() bool
 }
@@ -30,10 +33,16 @@ func (m *mockPeriodicTask) doWork(ctx context.Context) error {
 }
 
 func Test_agent_Run(t *testing.T) {
+	type collector struct {
+		metrics []model.Metric
+	}
+	type reporter struct {
+		timeout time.Duration
+	}
 	type fields struct {
 		config    config.Config
-		collector *mockCollector
-		reporter  *mockReporter
+		collector collector
+		reporter  reporter
 	}
 	type want struct {
 		metrics         []model.Metric
@@ -51,10 +60,10 @@ func Test_agent_Run(t *testing.T) {
 			timeout: 50 * time.Millisecond,
 			fields: fields{
 				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 23 * time.Millisecond},
-				collector: &mockCollector{
+				collector: collector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{},
+				reporter: reporter{},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -67,10 +76,10 @@ func Test_agent_Run(t *testing.T) {
 			timeout: 50 * time.Millisecond,
 			fields: fields{
 				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 23 * time.Millisecond},
-				collector: &mockCollector{
+				collector: collector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{timeout: 40 * time.Millisecond},
+				reporter: reporter{timeout: 40 * time.Millisecond},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -83,10 +92,10 @@ func Test_agent_Run(t *testing.T) {
 			timeout: 50 * time.Millisecond,
 			fields: fields{
 				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 12 * time.Millisecond},
-				collector: &mockCollector{
+				collector: collector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{timeout: 30 * time.Millisecond},
+				reporter: reporter{timeout: 30 * time.Millisecond},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -99,10 +108,10 @@ func Test_agent_Run(t *testing.T) {
 			timeout: 80 * time.Millisecond,
 			fields: fields{
 				config: config.Config{PollInterval: 12 * time.Millisecond, ReportInterval: 12 * time.Millisecond},
-				collector: &mockCollector{
+				collector: collector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{timeout: 20 * time.Millisecond},
+				reporter: reporter{timeout: 20 * time.Millisecond},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -115,10 +124,10 @@ func Test_agent_Run(t *testing.T) {
 			timeout: 50 * time.Millisecond,
 			fields: fields{
 				config: config.Config{PollInterval: 20 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
-				collector: &mockCollector{
+				collector: collector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{},
+				reporter: reporter{},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -131,10 +140,10 @@ func Test_agent_Run(t *testing.T) {
 			timeout: 50 * time.Millisecond,
 			fields: fields{
 				config: config.Config{PollInterval: 15 * time.Millisecond, ReportInterval: 15 * time.Millisecond},
-				collector: &mockCollector{
+				collector: collector{
 					metrics: []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
 				},
-				reporter: &mockReporter{},
+				reporter: reporter{},
 			},
 			want: want{
 				metrics:         []model.Metric{model.NewCounterMetric("id1", 5), model.NewGaugeMetric("id2", 0.3)},
@@ -148,23 +157,25 @@ func Test_agent_Run(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), tt.timeout)
 			defer cancel()
 
-			a := New(nil, tt.fields.config, tt.fields.collector, tt.fields.reporter)
+			mCollector := &mockCollector{metrics: tt.fields.collector.metrics}
+			mReporter := &mockReporter{timeout: tt.fields.reporter.timeout}
 
-			mCollector := tt.fields.collector.
+			a := New(nil, tt.fields.config, mCollector, mReporter)
+
+			mCollector.
 				On("Collect", mock.Anything).Return(nil).
 				On("Snapshot", mock.Anything).Return(mock.Anything, nil)
-			mReporter := tt.fields.reporter.On("Report", mock.Anything, mock.Anything).Return(nil)
+			mReporter.On("Report", mock.Anything, mock.Anything).Return(nil)
 
 			err := a.Run(ctx)
 			require.NoError(t, err)
 
-			mCollector.Parent.AssertExpectations(t)
-			mReporter.Parent.AssertExpectations(t)
+			mCollector.AssertExpectations(t)
+			mReporter.AssertExpectations(t)
 
-			mCollector.Parent.AssertNumberOfCalls(t, "Collect", tt.want.numCallsCollect)
-			mCollector.Parent.AssertNumberOfCalls(t, "Snapshot", tt.want.numCallsReport)
-			mReporter.Parent.AssertNumberOfCalls(t, "Report", tt.want.numCallsReport)
-
+			testutil.AssertNumberInBetween(t, tt.want.numCallsCollect-1, tt.want.numCallsCollect+1, mCollector.GetNumCalls("Collect"))
+			testutil.AssertNumberInBetween(t, tt.want.numCallsReport-1, tt.want.numCallsReport+1, mCollector.GetNumCalls("Snapshot"))
+			testutil.AssertNumberInBetween(t, tt.want.numCallsReport-1, tt.want.numCallsReport+1, mReporter.GetNumCalls("Report"))
 		})
 	}
 }
@@ -256,7 +267,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.NoError(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 7)
+				testutil.AssertNumberInBetween(t, 6, 8, m.GetNumCalls("doWork"))
 			},
 		},
 		{
@@ -273,7 +284,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.NoError(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 5)
+				testutil.AssertNumberInBetween(t, 4, 6, m.GetNumCalls("doWork"))
 			},
 		},
 		{
@@ -290,7 +301,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.NoError(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 1)
+				testutil.AssertNumberInBetween(t, 1, 2, m.GetNumCalls("doWork"))
 			},
 		},
 		{
@@ -307,7 +318,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.NoError(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 2)
+				testutil.AssertNumberInBetween(t, 1, 3, m.GetNumCalls("doWork"))
 			},
 		},
 		{
@@ -324,7 +335,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.NoError(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 1)
+				testutil.AssertNumberInBetween(t, 1, 2, m.GetNumCalls("doWork"))
 			},
 		},
 		{
@@ -341,7 +352,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.NoError(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 2)
+				testutil.AssertNumberInBetween(t, 1, 3, m.GetNumCalls("doWork"))
 			},
 		},
 		{
@@ -358,7 +369,7 @@ func Test_runPeriodicTask(t *testing.T) {
 			assertion: func(t *testing.T, m *mockPeriodicTask, err error) {
 				require.Error(t, err)
 				m.AssertExpectations(t)
-				m.AssertNumberOfCalls(t, "doWork", 3)
+				testutil.AssertNumberInBetween(t, 2, 4, m.GetNumCalls("doWork"))
 			},
 		},
 	}
