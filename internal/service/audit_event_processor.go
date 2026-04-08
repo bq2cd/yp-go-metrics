@@ -66,8 +66,10 @@ func (ap *auditEventProcessor) WriteEvent(ctx context.Context, event model.Audit
 	return nil
 }
 
+// Close is effectively a no-op: registered sinks are closed
+// during graceful shutdown in [auditEventProcessor.StartProcessing] when context is canceled.
+// This method is here to satisfy [repository.AuditSink] interface.
 func (ap *auditEventProcessor) Close() error {
-	// handled by [StartProcessing] when context is canceled.
 	return nil
 }
 

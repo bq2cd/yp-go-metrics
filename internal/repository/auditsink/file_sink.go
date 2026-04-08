@@ -19,17 +19,21 @@ func NewFileSink(path string) (*fileSink, error) {
 
 	sink := &fileSink{
 		fp: fp,
+		jsonMarshaller: func(ctx context.Context, event model.AuditEvent) ([]byte, error) {
+			return json.MarshalContext(ctx, event)
+		},
 	}
 
 	return sink, nil
 }
 
 type fileSink struct {
-	fp *os.File
+	fp             *os.File
+	jsonMarshaller func(context.Context, model.AuditEvent) ([]byte, error)
 }
 
 func (s *fileSink) WriteEvent(ctx context.Context, event model.AuditEvent) error {
-	data, err := json.MarshalContext(ctx, event)
+	data, err := s.jsonMarshaller(ctx, event)
 	if err != nil {
 		return fmt.Errorf("cannot encode audit event to JSON: %w", err)
 	}
