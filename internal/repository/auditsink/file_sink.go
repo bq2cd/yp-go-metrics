@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/goccy/go-json"
+
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
@@ -27,6 +29,16 @@ type fileSink struct {
 }
 
 func (s *fileSink) WriteEvent(ctx context.Context, event model.AuditEvent) error {
+	data, err := json.MarshalContext(ctx, event)
+	if err != nil {
+		return fmt.Errorf("cannot encode audit event to JSON: %w", err)
+	}
+
+	_, err = s.fp.Write(append(data, '\n'))
+	if err != nil {
+		return fmt.Errorf("cannot write encoded audit event to file: %w", err)
+	}
+
 	return nil
 }
 

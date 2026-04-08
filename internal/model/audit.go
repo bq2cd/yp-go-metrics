@@ -20,9 +20,14 @@ func NewAuditEvent(metrics MetricSet, ipAddress string) AuditEvent {
 		IPAddress:   ipAddress,
 	}
 
-	for mkey := range metrics.Keys() {
-		event.MetricNames = append(event.MetricNames, fmt.Sprintf("%s:%s", mkey.Type, mkey.ID))
+	for key := range metrics {
+		event.MetricNames = append(event.MetricNames, NewAuditMetricName(key))
 	}
 
 	return event
+}
+
+// NewAuditMetricName converts given [MetricKey] to a string for audit purposes.
+func NewAuditMetricName(key MetricKey) string {
+	return fmt.Sprintf("%s:%s", key.Type, key.ID)
 }

@@ -108,7 +108,11 @@ func (ap *auditEventProcessor) closeSinks() {
 
 	for sinkID, sink := range ap.sinks {
 		err := sink.Close()
-		ap.logger.Info().WithErr(err).Str("sink", sinkID).Msg("closed audit sink")
+		if err != nil {
+			ap.logger.Error().WithErr(err).Str("sink", sinkID).Msg("failed to close audit sink")
+		} else {
+			ap.logger.Info().Str("sink", sinkID).Msg("closed audit sink")
+		}
 	}
 }
 

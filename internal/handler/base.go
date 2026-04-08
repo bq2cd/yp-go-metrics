@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"net"
 	"net/http"
 
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -30,5 +31,14 @@ func (h *baseHandler) respondError(w http.ResponseWriter, status int, l log.Logg
 }
 
 func (h *baseHandler) getClientInfo(r *http.Request) model.ClientInfo {
-	return model.ClientInfo{}
+	var info model.ClientInfo
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return info
+	}
+
+	info.IPAddress = host
+
+	return info
 }

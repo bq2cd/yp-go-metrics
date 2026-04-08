@@ -1,13 +1,16 @@
 package server_test
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
+	"net/http/httptest"
 	neturl "net/url"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -198,6 +201,193 @@ func (ts *IntegrationTestSuite) TestServerRetriesPostgresQueriesOnConnectionErro
 	ts.runIntegrationCase(ic)
 }
 
+func (ts *IntegrationTestSuite) TestAuditFileSink() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			AuditFilePath: ts.tempFactory.Create("test-metrics-audit-*"),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+		},
+		assertStopped: func(cfg config.Config) {
+			wantMetrics := []model.Metric{
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+			}
+
+			ts.validateAuditFileSink(cfg.AuditFilePath, wantMetrics)
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestAuditHTTPSink() {
+	auditHandler := new(mockAuditReceiver)
+	auditSrv := httptest.NewServer(auditHandler)
+	auditURL, err := neturl.Parse(auditSrv.URL)
+
+	ts.Require().NoError(err)
+
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			AuditURL: *auditURL,
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+		},
+		assertStopped: func(cfg config.Config) {
+			wantMetrics := []model.Metric{
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+			}
+
+			ts.validateAuditHTTPSink(auditHandler, wantMetrics)
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestAuditHTTPSinkNotAcceptingEvents() {
+	auditHandler := new(mockAuditReceiver)
+	auditHandler.SetFaulty()
+
+	auditSrv := httptest.NewServer(auditHandler)
+	auditURL, err := neturl.Parse(auditSrv.URL)
+
+	ts.Require().NoError(err)
+
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			AuditURL: *auditURL,
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+		},
+		assertStopped: func(cfg config.Config) {
+			ts.validateAuditHTTPSink(auditHandler, nil)
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestAuditFileAndHTTPSinks() {
+	auditHandler := new(mockAuditReceiver)
+	auditSrv := httptest.NewServer(auditHandler)
+	auditURL, err := neturl.Parse(auditSrv.URL)
+
+	ts.Require().NoError(err)
+
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			AuditURL:      *auditURL,
+			AuditFilePath: ts.tempFactory.Create("test-metrics-audit-*"),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+		},
+		assertStopped: func(cfg config.Config) {
+			wantMetrics := []model.Metric{
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+			}
+
+			ts.validateAuditFileSink(cfg.AuditFilePath, wantMetrics)
+
+			ts.validateAuditHTTPSink(auditHandler, wantMetrics)
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestAuditFileAndHTTPSinksWithHTTPSinkFaulty() {
+	auditHandler := new(mockAuditReceiver)
+	auditHandler.SetFaulty()
+
+	auditSrv := httptest.NewServer(auditHandler)
+	auditURL, err := neturl.Parse(auditSrv.URL)
+
+	ts.Require().NoError(err)
+
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			AuditURL:      *auditURL,
+			AuditFilePath: ts.tempFactory.Create("test-metrics-audit-*"),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+		},
+		assertStopped: func(cfg config.Config) {
+			wantMetrics := []model.Metric{
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+			}
+
+			ts.validateAuditFileSink(cfg.AuditFilePath, wantMetrics)
+
+			ts.validateAuditHTTPSink(auditHandler, nil)
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
 func (ts *IntegrationTestSuite) runIntegrationCase(ic IntegrationCase) {
 	addr := ts.addrFactory.New()
 
@@ -316,4 +506,99 @@ func (ts *IntegrationTestSuite) validateMetricsInSnapshot(snapshotPath string, w
 	ts.Require().NoError(err)
 
 	ts.ElementsMatch(wantMetrics, metrics)
+}
+
+func (ts *IntegrationTestSuite) validateAuditFileSink(sinkPath string, wantMetrics []model.Metric) {
+	ts.T().Helper()
+
+	wantEvent := model.NewAuditEvent(model.NewMetricSet(wantMetrics...), "127.0.0.1")
+
+	f, err := os.Open(sinkPath)
+	ts.Require().NoError(err)
+
+	defer func() { _ = f.Close() }()
+
+	lines := []string{}
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	ts.Require().NoError(scanner.Err())
+	ts.Require().Len(lines, 1)
+
+	var event model.AuditEvent
+
+	err = json.Unmarshal([]byte(lines[0]), &event)
+
+	ts.Require().NoError(err)
+
+	ts.validateAuditEvent(wantEvent, event)
+}
+
+func (ts *IntegrationTestSuite) validateAuditHTTPSink(receiver *mockAuditReceiver, wantMetrics []model.Metric) {
+	ts.T().Helper()
+
+	gotEvents := receiver.GetEvents()
+
+	if len(wantMetrics) == 0 {
+		ts.Require().Empty(gotEvents)
+
+		return
+	}
+
+	wantEvent := model.NewAuditEvent(model.NewMetricSet(wantMetrics...), "127.0.0.1")
+
+	ts.Require().Len(gotEvents, 1)
+
+	ts.validateAuditEvent(wantEvent, gotEvents[0])
+}
+
+func (ts *IntegrationTestSuite) validateAuditEvent(wantEvent, gotEvent model.AuditEvent) {
+	ts.T().Helper()
+
+	ts.Greater(gotEvent.Timestamp, wantEvent.Timestamp-5) // 5 seconds difference should be enough
+	ts.Equal(wantEvent.IPAddress, gotEvent.IPAddress)
+	ts.ElementsMatch(wantEvent.MetricNames, gotEvent.MetricNames)
+}
+
+type mockAuditReceiver struct {
+	mu     sync.RWMutex
+	events []model.AuditEvent
+	faulty bool
+}
+
+func (m *mockAuditReceiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if m.faulty {
+		w.WriteHeader(http.StatusBadGateway)
+
+		return
+	}
+
+	var event model.AuditEvent
+
+	err := json.NewDecoder(r.Body).Decode(&event)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+
+	m.mu.Lock()
+	m.events = append(m.events, event)
+	m.mu.Unlock()
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (m *mockAuditReceiver) GetEvents() []model.AuditEvent {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	return m.events
+}
+
+func (m *mockAuditReceiver) SetFaulty() {
+	m.faulty = true
 }
