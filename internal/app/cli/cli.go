@@ -19,7 +19,9 @@ type App[C any] struct {
 }
 
 func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string, stderr io.Writer) error {
-	cfg, profiler, err := a.parseArgs(args, stderr)
+	profiler := newProfiler(logger)
+
+	cfg, err := a.populateConfig(profiler, args, stderr)
 	if err != nil {
 		return err
 	}
@@ -36,19 +38,18 @@ func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string, s
 	return a.run(ctx, logger, cfg)
 }
 
-func (a App[C]) parseArgs(args []string, stderr io.Writer) (C, *profiler, error) {
+func (a App[C]) populateConfig(profiler *profiler, args []string, stderr io.Writer) (C, error) {
 	fs := flag.NewFlagSet(a.Name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
-	profiler := newProfiler()
 	profiler.AddProfilingArgs(fs)
 
 	cfg, err := a.ParseArgs(fs, args, envparser.NewParser())
 	if err != nil {
-		return cfg, profiler, fmt.Errorf("unable to parse args: %w", err)
+		return cfg, fmt.Errorf("unable to parse args: %w", err)
 	}
 
-	return cfg, profiler, err
+	return cfg, err
 }
 
 func (a App[C]) run(ctx context.Context, logger log.Logger, cfg C) error {
