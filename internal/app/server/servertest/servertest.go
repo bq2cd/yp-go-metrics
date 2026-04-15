@@ -9,14 +9,21 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
+type TestingT interface {
+	require.TestingT
+
+	Helper()
+	Cleanup(fn func())
+	Logf(format string, args ...any)
+}
+
 // GetRandomListenAddress returns the first free listen address
 // bound to 'localhost' and using TCP protocol.
-func GetRandomListenAddress(t *testing.T) string {
+func GetRandomListenAddress(t TestingT) string {
 	l, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 
@@ -39,7 +46,7 @@ func (la ListenAddress) String() string {
 
 // NewListenAddress parses a listen address in the form of "host:port"
 // and returns a [ListenAddress] struct.
-func NewListenAddress(t *testing.T, addr string) ListenAddress {
+func NewListenAddress(t TestingT, addr string) ListenAddress {
 	parts := strings.SplitN(addr, ":", 2)
 	port, err := strconv.ParseUint(parts[1], 10, 32)
 	require.NoError(t, err)
@@ -66,7 +73,7 @@ func MakeRequestDiscardResponse(c *http.Client, r *http.Request) error {
 
 // NewTempFileFactory tracks created temporary files to facilitate their easy removal with a single call to [RemoveAll],
 // typically using `defer` statement.
-func NewTempFileFactory(t *testing.T) *TempFileFactory {
+func NewTempFileFactory(t TestingT) *TempFileFactory {
 	return &TempFileFactory{
 		t:       t,
 		created: make([]string, 0),
@@ -75,7 +82,7 @@ func NewTempFileFactory(t *testing.T) *TempFileFactory {
 
 // TempFileFactory is tracks created temporary files.
 type TempFileFactory struct {
-	t       *testing.T
+	t       TestingT
 	created []string
 }
 
@@ -105,7 +112,7 @@ func (ff *TempFileFactory) RemoveAll() {
 
 // NewListenAddressFactory tracks generated random addresses suitable for listening on (e.g. by an HTTP server).
 // It uses [GetRandomListenAddress] function for generation.
-func NewListenAddressFactory(t *testing.T) *ListenAddressFactory {
+func NewListenAddressFactory(t TestingT) *ListenAddressFactory {
 	return &ListenAddressFactory{
 		t:         t,
 		allocated: make([]string, 0),
@@ -114,7 +121,7 @@ func NewListenAddressFactory(t *testing.T) *ListenAddressFactory {
 
 // ListenAddressFactory tracks allocated ports for listening.
 type ListenAddressFactory struct {
-	t         *testing.T
+	t         TestingT
 	allocated []string
 }
 
@@ -163,7 +170,7 @@ func (f *ListenAddressFactory) ensureAllocatedAt(idx int) string {
 
 // GetCwd returns current working directory for the process.
 // It uses [os.Getwd] under the hood, but will fail on an error.
-func GetCwd(t *testing.T) string {
+func GetCwd(t TestingT) string {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 	return cwd
