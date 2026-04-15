@@ -89,11 +89,7 @@ func (s *server) Run(ctx context.Context) error {
 		errFinal = errors.Join(errFinal, err)
 	}
 
-	// if metrics were not being dumped on every write,
-	// perform final dump (aka "flush") before shutdown.
-	if s.config.MetricStoreInterval > 0 {
-		errFinal = errors.Join(errFinal, s.dumpMetrics(ctx))
-	}
+	errFinal = errors.Join(errFinal, s.performFinalDump())
 
 	return errFinal
 }
@@ -238,4 +234,17 @@ func (s *server) launchMetricDumper(ctx context.Context, wg *sync.WaitGroup, err
 		defer wg.Done()
 		errCh <- s.createPeriodicTask(s.dumpMetrics).Run(ctx)
 	}()
+}
+
+func (s *server) performFinalDump() error {
+	if s.config.MetricStoreInterval == 0 {
+		// metrics were being dumped on every write,
+		// so nothing to dump here.
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
+	defer cancel()
+
+	return s.dumpMetrics(ctx)
 }
