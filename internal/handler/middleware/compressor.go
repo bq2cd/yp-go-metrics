@@ -2,10 +2,13 @@ package middleware
 
 import (
 	"compress/gzip"
+	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/pkg/gzippool"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
@@ -61,15 +64,24 @@ type compressorFactory interface {
 }
 
 type compressorGzipFactory struct {
-	level int
+	level    int
+	pool     *gzippool.WriterPool
+	poolOnce sync.Once
 }
 
 func (f *compressorGzipFactory) Create(w io.Writer) (io.WriteCloser, error) {
-	wgz, err := gzip.NewWriterLevel(w, f.level)
-	if err != nil {
-		return nil, err
+	var err error
+
+	if f.pool == nil {
+		f.poolOnce.Do(func() {
+			f.pool, err = gzippool.NewWriterPool(f.level)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("cannot initialize gzip writer pool: %w", err)
+		}
 	}
-	return wgz, nil
+
+	return f.pool.Get(w), nil
 }
 
 func (f *compressorGzipFactory) ContentEncoding() httpheaders.ContentEncoding {
@@ -87,18 +99,34 @@ func Compressor(l log.Logger) Middleware {
 type compressorMiddleware struct {
 	logger            log.Logger
 	compressorFactory compressorFactory
+	decompressorPool  *gzippool.ReaderPool
+	poolOnce          sync.Once
 }
 
 func (m *compressorMiddleware) decompressRequest(r *http.Request) error {
 	if !httpheaders.ContentEncodingGzip.Matches(r.Header) {
 		return nil
 	}
+
+	var err error
+
+	if m.decompressorPool == nil {
+		m.poolOnce.Do(func() {
+			m.decompressorPool, err = gzippool.NewReaderPool()
+		})
+		if err != nil {
+			return fmt.Errorf("cannot initialize gzip reader pool: %w", err)
+		}
+	}
+
 	rbody := r.Body
-	rgz, err := gzip.NewReader(rbody)
+	rgz, err := m.decompressorPool.Get(rbody)
 	if err != nil {
 		return err
 	}
+
 	r.Body = rgz
+
 	return nil
 }
 
