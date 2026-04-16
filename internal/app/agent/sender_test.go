@@ -533,7 +533,7 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 
 			var hmacSigner *hmacsignertest.MockHMACSigner
 			if tt.want.httpCall != "" {
-				hmacSigner = setupSigner(ctrl, tt.want.numRetries+1)
+				hmacSigner = setupSigner(ctrl, 1)
 			} else {
 				hmacSigner = setupSigner(ctrl, 0)
 			}
@@ -934,7 +934,7 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 
 		var hmacSigner *hmacsignertest.MockHMACSigner
 		if tt.want.httpCall != "" {
-			hmacSigner = setupSigner(ctrl, tt.want.numRetries+1)
+			hmacSigner = setupSigner(ctrl, 1)
 		} else {
 			hmacSigner = setupSigner(ctrl, 0)
 		}
