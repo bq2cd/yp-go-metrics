@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
-	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
+
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 )
 
 func ensureNotEmpty(v string) string {

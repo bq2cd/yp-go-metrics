@@ -3,8 +3,9 @@ package service
 import (
 	"io"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/goccy/go-json"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
 // MetricDecoder reads from the provided reader and attempts to decode a slice of metrics from it.

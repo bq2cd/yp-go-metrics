@@ -3,8 +3,9 @@ package service
 import (
 	"io"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/goccy/go-json"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
 // MetricEncoder encodes a slice of metrics and writes the result into the provided writer.

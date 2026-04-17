@@ -8,6 +8,9 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/go-resty/resty/v2"
+	"github.com/goccy/go-json"
+
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -15,8 +18,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/pkg/gzippool"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
-	"github.com/go-resty/resty/v2"
-	"github.com/goccy/go-json"
 )
 
 var (

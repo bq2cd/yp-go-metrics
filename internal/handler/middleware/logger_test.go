@@ -6,10 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type mockResponseWriter struct {

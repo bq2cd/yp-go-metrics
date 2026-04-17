@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )
 
 func Test_metricBatchTx_Result(t *testing.T) {

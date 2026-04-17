@@ -10,6 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-resty/resty/v2"
+	"github.com/goccy/go-json"
+	"github.com/jarcoal/httpmock"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
@@ -18,13 +26,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
-	"github.com/go-resty/resty/v2"
-	"github.com/goccy/go-json"
-	"github.com/jarcoal/httpmock"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 type mockSender struct {

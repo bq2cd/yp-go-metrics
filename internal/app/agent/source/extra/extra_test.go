@@ -3,9 +3,10 @@ package extra
 import (
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
 func TestGetSupportedMetrics(t *testing.T) {

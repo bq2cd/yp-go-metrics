@@ -4,10 +4,11 @@ import (
 	"context"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/periodictask"
-	"golang.org/x/sync/errgroup"
 )
 
 type agent struct {

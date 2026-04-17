@@ -5,12 +5,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
-	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 const (

@@ -8,8 +8,9 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/huandu/go-sqlbuilder"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
 var (

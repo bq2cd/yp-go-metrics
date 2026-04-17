@@ -12,12 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
-	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
-	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
+	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 )
 
 func Test_parseArgs(t *testing.T) {

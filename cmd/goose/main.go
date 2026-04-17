@@ -9,12 +9,13 @@ import (
 	stdlog "log"
 	"os"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+
 	"github.com/bq2cd/yp-go-metrics/internal/app/cli"
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	"github.com/bq2cd/yp-go-metrics/internal/app/logger"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
 const (

@@ -1,10 +1,11 @@
 package mockretrierfactory
 
 import (
+	"go.uber.org/mock/gomock"
+
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
-	"go.uber.org/mock/gomock"
 )
 
 type MockRetrierFactory struct {

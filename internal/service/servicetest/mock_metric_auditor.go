@@ -13,8 +13,9 @@ import (
 	context "context"
 	reflect "reflect"
 
-	model "github.com/bq2cd/yp-go-metrics/internal/model"
 	gomock "go.uber.org/mock/gomock"
+
+	model "github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
 // MockMetricAuditor is a mock of MetricAuditor interface.

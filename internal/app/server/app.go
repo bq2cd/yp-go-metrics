@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
@@ -17,7 +19,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // Run is an app entry point to launch a server process.
