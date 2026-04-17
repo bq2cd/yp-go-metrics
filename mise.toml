@@ -1,2 +1,49 @@
 [tools]
 go = "1.24"
+"go:golang.org/x/tools/cmd/goimports" = "v0.42.0"
+"go:github.com/Antonboom/testifylint" = "v1.6.4"
+
+[vars]
+go_package = "github.com/bq2cd/yp-go-metrics"
+
+[tasks.fmt]
+description = "Format Go code"
+run = ["goimports -local '{{ vars.go_package }}' -w ."]
+
+[tasks.generate]
+description = "Generate Go code"
+run = ["go generate ./..."]
+
+[tasks.lint]
+description = "Lint Go code"
+run = ["testifylint -enable-all ./..."]
+
+[tasks.test-dir]
+hide = true
+usage = '''
+arg "<target_dir>" help="Run tests only for this directory"
+arg "[go_test_args]" var=#true
+'''
+env = { "INTEGRATION" = "1" }
+run = "go test -failfast -race {{ usage.target_dir }} {{ usage.go_test_args | default(value=[]) | join(sep=' ') }}"
+
+[tasks.test]
+description = "Test Go code"
+run = [{ task = "test-dir ./..." }]
+
+[tasks.coverage]
+description = "Generate coverage for Go tests"
+env = { "INTEGRATION" = "1" }
+run = [
+  "go test -failfast -cover -coverpkg=./... -coverprofile=coverage.out ./...",
+  "go tool cover -html=coverage.out",
+]
+
+[tasks.pre-push]
+description = "Validate Go code before pushing/creating PR"
+run = [
+  { task = "generate" },
+  { task = "fmt" },
+  { task = "lint" },
+  { task = "test" },
+]
