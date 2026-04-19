@@ -12,9 +12,8 @@ package sourcetest
 import (
 	reflect "reflect"
 
-	gomock "go.uber.org/mock/gomock"
-
 	model "github.com/bq2cd/yp-go-metrics/internal/model"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockSource is a mock of Source interface.

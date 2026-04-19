@@ -10,17 +10,26 @@ import (
 
 //go:generate go tool mockgen -destination=handlertest/mock_handler.go -package=handlertest github.com/bq2cd/yp-go-metrics/internal/handler Handler
 
+// Handler is an alias for [http.Handler], needed for generating mocks.
 type Handler = http.Handler
 
 const (
-	IdentDefault         = "default"
-	IdentRead            = "read"
-	IdentUpdate          = "update"
-	IdentUpdateJSON      = "update_json"
+	// IdentDefault represents [defaultHandler].
+	IdentDefault = "default"
+	// IdentRead represents [readHandler].
+	IdentRead = "read"
+	// IdentUpdate represents [updateHandler].
+	IdentUpdate = "update"
+	// IdentUpdateJSON represents [updateJSONHandler].
+	IdentUpdateJSON = "update_json"
+	// IdentUpdateBatchJSON represents [updateBatchJSONHandler].
 	IdentUpdateBatchJSON = "update_batch_json"
-	IdentValue           = "value"
-	IdentValueJSON       = "value_json"
-	IdentPing            = "ping"
+	// IdentValue represents [valueHandler].
+	IdentValue = "value"
+	// IdentValueJSON represents [valueJSONHandler].
+	IdentValueJSON = "value_json"
+	// IdentPing represents [pingHandler].
+	IdentPing = "ping"
 )
 
 func getHandlers(metrics service.MetricStorer, pinger service.StoragePinger, auditor service.MetricAuditor) map[Ident]handlerLogger {
@@ -39,7 +48,7 @@ func getHandlers(metrics service.MetricStorer, pinger service.StoragePinger, aud
 // Ident represents a handler ID.
 type Ident string
 
-// Registry maps a handler ID ([Ident]) to a [http.Handler] implementation.
+// Registry maps a handler ID ([Ident]) to a [Handler] implementation.
 type Registry map[Ident]Handler
 
 // NewRegistry creates a new [Registry] map.

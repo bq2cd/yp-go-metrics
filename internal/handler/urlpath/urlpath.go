@@ -11,19 +11,27 @@ import (
 )
 
 var (
-	// errors
-	ErrInvalidURLPath     = errors.New("invalid url path")
-	ErrMissingOperation   = errors.New("missing operation")
-	ErrMissingMetricType  = errors.New("missing metric type")
-	ErrMissingMetricID    = errors.New("missing metric id")
+	// ErrInvalidURLPath is returned when HTTP URL does not match certain pattern.
+	ErrInvalidURLPath = errors.New("invalid url path")
+	// ErrMissingOperation is returned when operation on metric is missing from the URL.
+	ErrMissingOperation = errors.New("missing operation")
+	// ErrMissingMetricType is returned when metric type is missing from the URL.
+	ErrMissingMetricType = errors.New("missing metric type")
+	// ErrMissingMetricID is returned when metric ID is missing from the URL.
+	ErrMissingMetricID = errors.New("missing metric id")
+	// ErrMissingMetricValue is returned when metric value is missing from the URL.
 	ErrMissingMetricValue = errors.New("missing metric value")
-	ErrInvalidOperation   = errors.New("invalid operation")
-	ErrInvalidMetricType  = errors.New("invalid metric type")
+	// ErrInvalidOperation is returned when operation on metric is not supported.
+	ErrInvalidOperation = errors.New("invalid operation")
+	// ErrInvalidMetricType is returned when metric type is not supported.
+	ErrInvalidMetricType = errors.New("invalid metric type")
+	// ErrInvalidMetricValue is returned when metric value is not a valid number.
 	ErrInvalidMetricValue = errors.New("invalid metric value")
 
-	// supported operation types
+	// OperationTypeUpdate represents metric update operation.
 	OperationTypeUpdate = OperationType("update")
-	OperationTypeValue  = OperationType("value")
+	// OperationTypeValue represents metric value read operation.
+	OperationTypeValue = OperationType("value")
 
 	reMultipleSlashes = regexp.MustCompile("/+")
 )

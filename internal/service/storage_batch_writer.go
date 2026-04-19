@@ -17,9 +17,9 @@ type MetricBatchTx interface {
 	Result() <-chan error
 }
 
-// StorageBatchWriter provides a way to send batch updates to the storage (requires [repository.StorageMulti] capabilities).
-// It is intended to run as a goroutine and process incoming
-// batches via channel.
+// StorageBatchWriter provides a way to send batch updates to the storage
+// (requires [repository.StorageMulti] capabilities).
+// It is intended to run as a goroutine, processing incoming batches via channel.
 type StorageBatchWriter interface {
 	WriteBatch(ctx context.Context, batch MetricBatch) MetricBatchTx
 	StartProcessing(ctx context.Context)

@@ -20,6 +20,7 @@ const (
 )
 
 var (
+	// ErrAuditEventProcessorClosed is returned by [WriteEvent] when audit processor is shutting down.
 	ErrAuditEventProcessorClosed = errors.New("audit processor is closed")
 )
 
@@ -32,6 +33,7 @@ type AuditEventProcessor interface {
 	StartProcessing(ctx context.Context)
 }
 
+// NewAuditEventProcessor creates an instance of [AuditEventProcessor].
 func NewAuditEventProcessor(logger log.Logger) *auditEventProcessor {
 	return &auditEventProcessor{
 		logger:   logger,
@@ -48,6 +50,9 @@ type auditEventProcessor struct {
 	closed   bool
 }
 
+// WriteEvent accepts incoming audit event and puts into internal buffered channel.
+// It will block if channel is full (e.g. not being processed fast enough).
+// Provided context is used as a means for cancellation.
 func (ap *auditEventProcessor) WriteEvent(ctx context.Context, event model.AuditEvent) error {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
@@ -74,6 +79,8 @@ func (ap *auditEventProcessor) Close() error {
 	return nil
 }
 
+// RegisterSink add provided [repository.AuditSink] into internal map under provided ID.
+// It is a responsibility of the caller to ensure that ID is unique.
 func (ap *auditEventProcessor) RegisterSink(sinkID string, sink repository.AuditSink) {
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
@@ -81,6 +88,12 @@ func (ap *auditEventProcessor) RegisterSink(sinkID string, sink repository.Audit
 	ap.sinks[sinkID] = sink
 }
 
+// StartProcessing launches main loop that processes audit events from internal buffered channel.
+// For each event, all registered sinks are invoked in parallel (with up to [auditEventProcessorConcurrency]),
+// and errors are logged.
+// If no sinks could accept the event, the event is skipped (that is, no retries, best-effort delivery).
+// When provided context is canceled, the loop stops and all registered sinks are closed
+// (which gives them a chance to flush their in-memory data, if any).
 func (ap *auditEventProcessor) StartProcessing(ctx context.Context) {
 	ap.mainLoop(ctx)
 	ap.closeSinks()

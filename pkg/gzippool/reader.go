@@ -10,21 +10,30 @@ import (
 )
 
 var (
+	// ErrGzipReaderUnavailable is returned by [ReaderPool.Get] if it cannot obtain
+	// a gzip reader object from the underlying [sync.Pool].
 	ErrGzipReaderUnavailable = errors.New("cannot get gzip reader from pool")
 )
 
 var _ io.ReadCloser = &Reader{}
 
+// Reader is a thin wrapper on top of [gzip.Reader] to enable its release to a [sync.Pool]
+// when [Reader.Close] method is called.
 type Reader struct {
 	rgz       *gzip.Reader
 	releaseFn func()
 	once      sync.Once
 }
 
+// Read calls the underlying [gzip.Reader.Read] method.
 func (r *Reader) Read(p []byte) (int, error) {
 	return r.rgz.Read(p)
 }
 
+// Close calls the underlying [gzip.Reader.Close] method and returns
+// the underlying reader to a [sync.Pool].
+// The release function is ensured to be called only once by using
+// [sync.Once] primitive.
 func (r *Reader) Close() error {
 	var err error
 
@@ -37,10 +46,16 @@ func (r *Reader) Close() error {
 	return err
 }
 
+// ReaderPool is a thing wrapper on top of [sync.Pool] to create reusable [gzip.Reader] objects
+// that support release to the underlying pool.
 type ReaderPool struct {
 	pool *sync.Pool
 }
 
+// NewReaderPool creates an instance of [ReaderPool].
+// It will return an (unlikely) error, if the initial seed reader
+// (containing only gzip header and footer) cannot be created
+// for some reason.
 func NewReaderPool() (*ReaderPool, error) {
 	noop, err := newNoopReader()
 	if err != nil {
@@ -62,6 +77,9 @@ func NewReaderPool() (*ReaderPool, error) {
 	return pool, nil
 }
 
+// Get returns a new instance of [Reader] backed by a (possibly) reused [gzip.Reader] from
+// the underlying [sync.Pool].
+// The returned [gzip.Reader] is configured with the provided [io.Reader] via [gzip.Reader.Reset] method.
 func (rp *ReaderPool) Get(r io.Reader) (*Reader, error) {
 	rgz := rp.pool.Get().(*gzip.Reader)
 	if rgz == nil {
@@ -108,6 +126,7 @@ func newNoopReader() (*noopReader, error) {
 	return r, nil
 }
 
+// Read returns the contents of gzip header by using [bytes.NewReader].
 func (r *noopReader) Read(p []byte) (int, error) {
 	return bytes.NewReader(r.gzipHeader).Read(p)
 }

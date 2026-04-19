@@ -32,6 +32,8 @@ type fileSink struct {
 	jsonMarshaller func(context.Context, model.AuditEvent) ([]byte, error)
 }
 
+// WriteEvent writes given audit event to a file in JSONL format.
+// Each audit event is JSON-encoded and written on a separate line.
 func (s *fileSink) WriteEvent(ctx context.Context, event model.AuditEvent) error {
 	data, err := s.jsonMarshaller(ctx, event)
 	if err != nil {
@@ -46,6 +48,7 @@ func (s *fileSink) WriteEvent(ctx context.Context, event model.AuditEvent) error
 	return nil
 }
 
+// Close closes underlying file, flushing all in-memory data to disk.
 func (s *fileSink) Close() error {
 	return s.fp.Close()
 }

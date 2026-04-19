@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	// ErrMetricCollectionFailed is a sentinel error returned when [Collector.Collect] fails.
 	ErrMetricCollectionFailed = errors.New("metric collection failed")
 )
 

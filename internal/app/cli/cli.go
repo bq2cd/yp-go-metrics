@@ -12,12 +12,20 @@ import (
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
+// App represents an application entry point with given name and hook functions
+// to parse CLI flags and launch app's main process.
 type App[C any] struct {
 	Name          string
 	ParseArgs     func(*flag.FlagSet, []string, envparser.Parser) (C, error)
 	LaunchProcess func(context.Context, log.Logger, C) error
 }
 
+// Run parses CLI flags and environment variables, populates app's config, conditionally enables
+// profiling, and start app's main process.
+// It is also configures OS signal handling (SIGINT, SIGTERM) via [context.Context] - the app is
+// expected to handle context cancellation and finish its execution gracefully.
+// Currently, there is no enforcement for apps that might ignore context cancellation or
+// not handle it properly.
 func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string, stderr io.Writer) error {
 	profiler := newProfiler(logger)
 

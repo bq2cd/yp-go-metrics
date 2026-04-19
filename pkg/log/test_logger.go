@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+// TestLogEventSet defines a slice of test log events.
 type TestLogEventSet []TestLogEvent
 
 // TestLogger extends regular Logger interface with extra method:

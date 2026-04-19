@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	// ErrHTTPSinkResponseError is returned by [WriteEvent] if remote HTTP server responds with non-2xx status code.
 	ErrHTTPSinkResponseError = errors.New("HTTP sink responded with error")
 )
 
@@ -30,6 +31,7 @@ type httpSink struct {
 	client *resty.Client
 }
 
+// WriteEvent sends JSON-encoded audit event to a remote HTTP server.
 func (s *httpSink) WriteEvent(ctx context.Context, event model.AuditEvent) error {
 	resp, err := s.client.R().SetContext(ctx).SetBody(event).Send()
 	if err != nil {
@@ -43,6 +45,7 @@ func (s *httpSink) WriteEvent(ctx context.Context, event model.AuditEvent) error
 	return nil
 }
 
+// Close does nothing and always returns `nil`.
 func (s *httpSink) Close() error {
 	return nil
 }

@@ -21,9 +21,15 @@ import (
 )
 
 var (
+	// ErrSenderRequestFailed is returned by [Sender.Send] or [SenderBatch.SendBatch] when
+	// HTTP request to an upstream server fails due to network errors.
 	ErrSenderRequestFailed = errors.New("http request error")
+	// ErrSenderResponseNotOK is returned by [Sender.Send] or [SenderBatch.SendBatch] when
+	// HTTP response from an upstream server has non-200 status.
 	ErrSenderResponseNotOK = errors.New("http response not OK")
-	ErrSenderEmptyMetric   = errors.New("empty metric")
+	// ErrSenderEmptyMetric is returned by [Sender.Send] when attempting to send a single metric
+	// without value (such metric would not be accepted by the server).
+	ErrSenderEmptyMetric = errors.New("empty metric")
 )
 
 // Sender abstracts a protocol to encode and send a single metric.
@@ -31,7 +37,7 @@ type Sender interface {
 	Send(ctx context.Context, metric model.Metric) error
 }
 
-// SendBatch allows to send metrics in batches.
+// SenderBatch allows to send metrics in batches.
 type SenderBatch interface {
 	Sender
 	SendBatch(ctx context.Context, metrics model.MetricSet) (model.MetricSet, error)

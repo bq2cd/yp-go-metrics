@@ -35,7 +35,8 @@ func (s *strategy1s3s5s) Name() string {
 	return "1s3s5s"
 }
 
-// NextDelay returns current delay and `true` if the strategy is active, and `0` and `false` if the strategy has finished.
+// NextDelay returns current delay and `true` if the strategy is active, and `0` and `false` if
+// the strategy has finished.
 func (s *strategy1s3s5s) NextDelay() (time.Duration, bool) {
 	if s.current >= len(s.steps) {
 		return 0, false

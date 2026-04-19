@@ -17,6 +17,7 @@ const (
 )
 
 var (
+	// ErrProfilerMemRateNotPositive is returned when provided memory rate is zero (which disables profiling).
 	ErrProfilerMemRateNotPositive = errors.New("memory rate must be positive and greater than zero")
 )
 
@@ -42,12 +43,17 @@ func newProfiler(logger log.Logger) *profiler {
 	}
 }
 
+// AddProfilingArgs adds CLI flags for profiling configuration to the provided flag set.
 func (p *profiler) AddProfilingArgs(fs *flag.FlagSet) {
 	fs.StringVar(&p.opts.OutPathCPU, "pprof-cpu-out", "", "path to cpu profile output")
 	fs.StringVar(&p.opts.OutPathMem, "pprof-mem-out", "", "path to memory (heap) profile output")
 	fs.UintVar(&p.opts.MemRate, "pprof-mem-rate", profilerDefaultMemRate, "profile memory allocation every N bytes (must be > 0)")
 }
 
+// MaybeStartProfiling parses environment variables and conditionally enables CPU and/or memory profiling.
+// It returns a `stop` function that must be called before process termination in order for the profiling data
+// to be collected properly.
+// Typically, `stop` function is called at the end of `main` function.
 func (p *profiler) MaybeStartProfiling() (profilerStopFunc, error) {
 	stopFn := p.stopProfiling
 

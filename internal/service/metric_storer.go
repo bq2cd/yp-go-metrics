@@ -11,8 +11,10 @@ import (
 var (
 	// ErrMetricNotFound wraps [repository.ErrMetricNotFound] to avoid exposure of [repository]
 	// to a caller.
-	ErrMetricNotFound   = errors.New("metric not found")
-	ErrMetricIsEmpty    = errors.New("metric is empty")
+	ErrMetricNotFound = errors.New("metric not found")
+	// ErrMetricIsEmpty is returned with provided metric contains no value.
+	ErrMetricIsEmpty = errors.New("metric is empty")
+	// ErrMetricKeyIsEmpty is returned when metric lack either type or ID or both.
 	ErrMetricKeyIsEmpty = errors.New("metric key is empty")
 )
 

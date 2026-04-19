@@ -14,8 +14,11 @@ import (
 )
 
 var (
-	ErrRouteEmptyPatterns     = errors.New("empty patterns")
-	ErrRouteEmptyHandler      = errors.New("empty handler")
+	// ErrRouteEmptyPatterns is returned when [RouteDefinition] contains no patterns.
+	ErrRouteEmptyPatterns = errors.New("empty patterns")
+	// ErrRouteEmptyHandler is returned when [RouteDefinition] has a `nil` handler.
+	ErrRouteEmptyHandler = errors.New("empty handler")
+	// ErrRouteDuplicatePatterns is returned when [RouteDefinitions] has duplicate patterns.
 	ErrRouteDuplicatePatterns = errors.New("duplicate patterns")
 )
 
@@ -77,7 +80,8 @@ type Route struct {
 	handler  http.Handler
 }
 
-// Validate ensures that route has at least one pattern and a non-nil http handler. Duplicate patterns are considered an error.
+// Validate ensures that route has at least one pattern and a non-nil http handler.
+// Duplicate patterns are considered an error.
 func (r *Route) Validate() error {
 	if r.handler == nil {
 		return ErrRouteEmptyHandler

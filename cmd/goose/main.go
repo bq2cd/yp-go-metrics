@@ -1,4 +1,6 @@
-// Custom goose binary as per https://github.com/pressly/goose/blob/main/examples/go-migrations/main.go
+// Binary goose provides a thin CLI wrapper on top of `github.com/pressly/goose` library
+// to perform SQL migrations management. This approach is documented in the official documentation
+// [here](https://github.com/pressly/goose/blob/main/examples/go-migrations/main.go).
 package main
 
 import (

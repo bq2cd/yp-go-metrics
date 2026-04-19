@@ -12,6 +12,8 @@ var (
 	supportedMetrics map[string]model.MetricType
 )
 
+// GetSupportedMetrics returns a map of metric ID to metric type,
+// that can be produced by this source.
 func GetSupportedMetrics() map[string]model.MetricType {
 	once.Do(func() {
 		supportedMetrics = map[string]model.MetricType{
@@ -31,7 +33,7 @@ func New() *source {
 	return &source{}
 }
 
-// ReadMetrics reads metrics from runtime.MemStats and converts them
+// ReadMetrics reads custom metrics and converts them
 // into internal representation.
 func (s *source) ReadMetrics() ([]model.Metric, error) {
 	s.pollCounter++

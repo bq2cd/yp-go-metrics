@@ -1,3 +1,5 @@
+// Binary server launches an HTTP server that accepts incoming metrics and stores them in configured database.
+// The server also provides endpoints to access stored metrics.
 package main
 
 import (

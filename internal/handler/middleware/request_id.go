@@ -15,7 +15,7 @@ const (
 
 type requestIDKey string
 
-// RequestIDGenerator is a middleware that generates a random request ID and passes it to the next HTTP handler via request context.
+// RequestID is middleware that generates a random request ID and passes it to the next HTTP handler via request context.
 func RequestID() Middleware {
 	m := &requestIDMiddleware{}
 	return createMiddleware(m)
@@ -46,6 +46,8 @@ func getOrGenerateRequestID(ctx context.Context) string {
 
 type requestIDMiddleware struct{}
 
+// Intercept defines actual middleware implementation.
+// It will call next HTTP handler after processing.
 func (m *requestIDMiddleware) Intercept(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	ctx := r.Context()
 	rID := getOrGenerateRequestID(ctx)

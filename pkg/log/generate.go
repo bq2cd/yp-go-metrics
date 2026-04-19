@@ -39,23 +39,28 @@ import (
 
 
 // Field type constants
+
 const (
 	_ FieldType = iota
 	{{- range .Types }}
+	// FieldType{{.Ident}} represents field type for {{.Ident}}.
 	FieldType{{.Ident}}
 	{{- end }}
 )
 
 
 // Field constructors
+
 {{- range .Types }}
+
+// {{.Ident}} creates new field of type [FieldType{{.Ident}}].
 func {{.Ident}}(key string, value {{.Type}}) Field {
 	return Field{Key: key, Type: FieldType{{.Ident}}, Value: value}
 }
 {{- end }}
 
 
-// EventFieldAdder interface for adding fields to EventBuilder
+// EventFieldAdder is an interface for adding fields to [EventBuilder].
 type EventFieldAdder interface {
 	{{- range .Types }}
 	{{.Ident}}(key string, value {{.Type}}) EventBuilder
@@ -64,8 +69,11 @@ type EventFieldAdder interface {
 
 
 // eventBuilder methods to implement EventFieldAdder
+
 {{- range .Types }}
 
+// {{.Ident}} adds field of type [FieldType{{.Ident}}] to the current event builder
+// and returns it back. 
 func (e *eventBuilder) {{.Ident}}(key string, value {{.Type}}) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldType{{.Ident}}, Value: value})
 	return e
@@ -114,6 +122,8 @@ func (g *generator) populateImports() {
 	}
 }
 
+// Run invokes code generator for common primitive types to produce
+// concrete implementations for methods of `EventFieldAdder` interface.
 func (g *generator) Run() []byte {
 	g.populateImports()
 

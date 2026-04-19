@@ -19,7 +19,7 @@ type updateBatchJSONHandler struct {
 	auditor   service.MetricAuditor
 }
 
-// ServeHTTP implements http.Handler for /update endpoint with JSON requests/responses.
+// ServeHTTP implements [Handler] for /update endpoint with JSON requests/responses.
 func (h *updateBatchJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !h.validateContentType(w, r) {
 		return

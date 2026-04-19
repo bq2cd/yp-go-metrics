@@ -22,12 +22,16 @@ import (
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 )
 
+// LauncherOpts defines [Launcher] options, settable from CLI flags.
 type LauncherOpts struct {
 	MemProfileRate uint
 	Timeout        uint
 	OutputDir      string
 }
 
+// Launcher performs orchestration of agent and server processes.
+// It is responsible for enabling CPU and memory profiling and
+// graceful shutdown of the launched processes.
 type Launcher struct {
 	T             *TestingT
 	opts          LauncherOpts
@@ -38,6 +42,7 @@ type Launcher struct {
 	binPathServer string
 }
 
+// NewLauncher creates an instance of [Launcher].
 func NewLauncher(t *TestingT) *Launcher {
 	l := &Launcher{
 		T:           t,
@@ -51,6 +56,8 @@ func NewLauncher(t *TestingT) *Launcher {
 	return l
 }
 
+// Run is the main entry point, that performs all the logic of compiling, launching
+// and terminating of the server and agent processes.
 func (l *Launcher) Run() error {
 	err := l.parseArgs()
 	if err != nil {
@@ -73,6 +80,7 @@ func (l *Launcher) Run() error {
 	return l.orchestrate(ctx)
 }
 
+// Cleanup is responsible for removing all temporary files created during [Launcher.Run] execution.
 func (l *Launcher) Cleanup() {
 	l.tempFactory.RemoveAll()
 	l.addrFactory.Clear()

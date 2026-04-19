@@ -24,8 +24,11 @@ const (
 )
 
 var (
+	// ErrUnsupportedMetricType is returned when given metric type cannot be read or updated
+	// due to lack of support in database schema.
 	ErrUnsupportedMetricType = errors.New("unsupported metric type")
-	ErrMetricNotFound        = repository.ErrMetricNotFound
+	// ErrMetricNotFound is returned when given metric (type + ID) cannot be found in database.
+	ErrMetricNotFound = repository.ErrMetricNotFound
 )
 
 type sqlSelector interface {

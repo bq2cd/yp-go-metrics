@@ -13,6 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestingT defines minimal interface to handle errors and cleanup scenarios.
+// In tests, we use [testing.T] as the implementation, but there could be cases
+// where we might want to use it outside of tests, with a custom implementation.
 type TestingT interface {
 	require.TestingT
 
@@ -35,11 +38,13 @@ func GetRandomListenAddress(t TestingT) string {
 	return addr
 }
 
+// ListenAddress defines a pair of host and port.
 type ListenAddress struct {
 	Host string
 	Port uint32
 }
 
+// String converts [ListenAddress] to "host:port" string.
 func (la ListenAddress) String() string {
 	return fmt.Sprintf("%s:%d", la.Host, la.Port)
 }
@@ -80,7 +85,7 @@ func NewTempFileFactory(t TestingT) *TempFileFactory {
 	}
 }
 
-// TempFileFactory is tracks created temporary files.
+// TempFileFactory tracks created temporary files.
 type TempFileFactory struct {
 	t       TestingT
 	created []string
@@ -119,7 +124,7 @@ func NewListenAddressFactory(t TestingT) *ListenAddressFactory {
 	}
 }
 
-// ListenAddressFactory tracks allocated ports for listening.
+// ListenAddressFactory tracks allocated addresses for listening.
 type ListenAddressFactory struct {
 	t         TestingT
 	allocated []string
@@ -134,8 +139,8 @@ func (f *ListenAddressFactory) New() string {
 
 // Get will attempt to return already generated address by its index,
 // but will resort to generating a new one if such address does not yet exist.
-// Under the hood, it will grow a slice with stored addresses to accommodate requested indexes, producing a "sparse" slice if
-// indexes are not requested in proper order.
+// Under the hood, it will grow a slice with stored addresses to accommodate requested indexes,
+// producing a "sparse" slice if indexes are not requested in proper order.
 func (f *ListenAddressFactory) Get(idx int) string {
 	n := idx + 1
 	if cap(f.allocated) < n {
@@ -146,10 +151,10 @@ func (f *ListenAddressFactory) Get(idx int) string {
 	return f.ensureAllocatedAt(idx)
 }
 
-// Last returns the last allocated address.
+// Last returns the last allocated address or creates a new one if no addresses were previously allocated.
 func (f *ListenAddressFactory) Last() string {
 	if len(f.allocated) == 0 {
-		return f.New()
+		return f.Get(0)
 	}
 
 	return f.ensureAllocatedAt(len(f.allocated) - 1)
@@ -169,7 +174,7 @@ func (f *ListenAddressFactory) ensureAllocatedAt(idx int) string {
 }
 
 // GetCwd returns current working directory for the process.
-// It uses [os.Getwd] under the hood, but will fail on an error.
+// It uses [os.Getwd] under the hood, but will fail (panic) on an error.
 func GetCwd(t TestingT) string {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)

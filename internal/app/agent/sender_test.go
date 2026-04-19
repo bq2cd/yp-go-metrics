@@ -545,11 +545,12 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
 			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner)
 			s.shouldCompress = shouldCompress
-			httpmock.ActivateNonDefault(s.client.GetClient())
-			defer httpmock.Reset()
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
+
+			httpmock.ActivateNonDefault(s.client.GetClient())
 			t.Cleanup(func() {
+				httpmock.DeactivateAndReset()
 				close(rbodyCh)
 			})
 
@@ -947,11 +948,12 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
 			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner)
 			s.shouldCompress = shouldCompress
-			httpmock.ActivateNonDefault(s.client.GetClient())
-			defer httpmock.Reset()
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
+
+			httpmock.ActivateNonDefault(s.client.GetClient())
 			t.Cleanup(func() {
+				httpmock.DeactivateAndReset()
 				close(rbodyCh)
 			})
 

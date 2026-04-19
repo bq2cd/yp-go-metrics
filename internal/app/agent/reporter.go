@@ -14,10 +14,6 @@ const (
 	defaultSenderBatchSize = 10
 )
 
-var (
-	ErrReporterEmptyMetric = errors.New("empty metric")
-)
-
 // Reporter abstracts a process of sending metrics to a central storage.
 type Reporter interface {
 	Report(ctx context.Context, inCh <-chan model.Metric) error
@@ -86,13 +82,6 @@ func (r *reporter) storeReported(ctx context.Context, orig, sent model.MetricSet
 		}
 	}
 	return r.reported.SetMulti(ctx, reported)
-}
-
-func (r *reporter) reportSingle(ctx context.Context, metric model.Metric) error {
-	if metric.Empty() {
-		return ErrReporterEmptyMetric
-	}
-	return r.reportBatch(ctx, model.NewMetricSet(metric))
 }
 
 func (r *reporter) reportBatch(ctx context.Context, orig model.MetricSet) error {

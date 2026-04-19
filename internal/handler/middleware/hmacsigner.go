@@ -18,15 +18,20 @@ type hmacSignerResponseWriter struct {
 	statusCode int
 }
 
+// Write copies incoming data into internal buffer for further signing.
 func (hw *hmacSignerResponseWriter) Write(data []byte) (int, error) {
 	n, err := io.Copy(hw.data, bytes.NewReader(data))
 	return int(n), err
 }
 
+// WriteHeader saves HTTP response status internally to make a decision
+// whether to sign the response data later on.
 func (hw *hmacSignerResponseWriter) WriteHeader(statusCode int) {
 	hw.statusCode = statusCode
 }
 
+// HMACSigner defines middleware that validates incoming requests' HMAC signature and
+// signs 2xx responses.
 func HMACSigner(l log.Logger, signer hmacsigner.HMACSigner) Middleware {
 	m := &hmacSignerMiddleware{
 		logger: l.With(log.Str("middleware", "hmac_signer")),
@@ -122,6 +127,8 @@ func (m *hmacSignerMiddleware) signResponse(hw *hmacSignerResponseWriter) error 
 	return nil
 }
 
+// Intercept defines actual middleware implementation.
+// It will call next HTTP handler after processing.
 func (m *hmacSignerMiddleware) Intercept(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	if !m.signer.HasKey() {
 		next.ServeHTTP(w, r)

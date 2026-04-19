@@ -17,7 +17,7 @@ type updateHandler struct {
 	auditor service.MetricAuditor
 }
 
-// ServeHTTP implements http.Handler for /update/* endpoint with plain-text requests/responses.
+// ServeHTTP implements [Handler] for /update/* endpoint with plain-text requests/responses.
 func (h *updateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metric, ok, l := h.validateMetric(w, r)
 	if !ok {

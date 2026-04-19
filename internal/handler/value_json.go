@@ -17,7 +17,7 @@ type valueJSONHandler struct {
 	responder metricJSONResponder
 }
 
-// ServeHTTP implements http.Handler for /value endpoint with JSON requests/responses.
+// ServeHTTP implements [Handler] for /value endpoint with JSON requests/responses.
 func (h *valueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !httpheaders.ContentTypeApplicationJSON.Matches(r.Header) {
 		w.WriteHeader(http.StatusBadRequest)

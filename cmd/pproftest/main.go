@@ -1,3 +1,7 @@
+// Binary pproftest launches agent and server processes with CPU and memory profiling activated,
+// waits for a given time, then performs graceful shutdown of the launched processes.
+// Agent process(es) are configured to upload their collected metrics to the server process.
+// Profiling results are stored under the path provided as an argument.
 package main
 
 import (
@@ -32,7 +36,7 @@ func teardown(t *TestingT) {
 		exitCode = 2
 	}
 
-	err = t.runCleanups(true)
+	err = t.RunCleanups()
 	if err != nil {
 		log.Printf("CLEANUP PANIC: %v", err)
 

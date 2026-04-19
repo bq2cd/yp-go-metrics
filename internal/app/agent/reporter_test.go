@@ -41,219 +41,6 @@ func (m *mockReporter) Report(ctx context.Context, inCh <-chan model.Metric) err
 	return nil
 }
 
-func Test_reporter_reportSingle(t *testing.T) {
-	type fields struct {
-		sender   *mockSender
-		reported *storagetest.MockStorage
-	}
-	type args struct {
-		metric model.Metric
-	}
-	type want struct {
-		metricSent   model.Metric
-		metricStored model.Metric
-		checkErr     func(*testing.T, error)
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   want
-	}{
-		{
-			name: "send counter without value, newly reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
-			},
-			args: args{
-				metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
-			},
-			want: want{
-				metricSent:   model.Metric{},
-				metricStored: model.Metric{},
-				checkErr: func(t *testing.T, err error) {
-					assert.ErrorIs(t, err, ErrReporterEmptyMetric)
-				},
-			},
-		},
-		{
-			name: "send counter without value, previously reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
-			},
-			args: args{
-				metric: model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
-			},
-			want: want{
-				metricSent:   model.Metric{Type: model.MetricTypeCounter, ID: "id1"},
-				metricStored: model.NewCounterMetric("id1", -5),
-				checkErr: func(t *testing.T, err error) {
-					assert.ErrorIs(t, err, ErrReporterEmptyMetric)
-				},
-			},
-		},
-		{
-			name: "send gauge without value, newly reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
-			},
-			args: args{
-				metric: model.Metric{Type: model.MetricTypeGauge, ID: "id1"},
-			},
-			want: want{
-				metricSent:   model.Metric{},
-				metricStored: model.Metric{},
-				checkErr: func(t *testing.T, err error) {
-					assert.ErrorIs(t, err, ErrReporterEmptyMetric)
-				},
-			},
-		},
-		{
-			name: "send counter, newly reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
-			},
-			args: args{
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			want: want{
-				metricSent:   model.NewCounterMetric("id1", 5),
-				metricStored: model.NewCounterMetric("id1", 5),
-				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
-			},
-		},
-		{
-			name: "send counter, previously reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
-			},
-			args: args{
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			want: want{
-				metricSent:   model.NewCounterMetric("id1", 10),
-				metricStored: model.NewCounterMetric("id1", 5),
-				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
-			},
-		},
-		{
-			name: "send counter, previously reported with the same value",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 5)),
-			},
-			args: args{
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			want: want{
-				metricSent:   model.NewCounterMetric("id1", 0),
-				metricStored: model.NewCounterMetric("id1", 5),
-				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
-			},
-		},
-		{
-			name: "send gauge, newly reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(),
-			},
-			args: args{
-				metric: model.NewGaugeMetric("id1", -5.5),
-			},
-			want: want{
-				metricSent:   model.NewGaugeMetric("id1", -5.5),
-				metricStored: model.NewGaugeMetric("id1", -5.5),
-				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
-			},
-		},
-		{
-			name: "send gauge, previously reported",
-			fields: fields{
-				sender:   &mockSender{},
-				reported: storagetest.NewMockStorage(model.NewGaugeMetric("id1", 3.8)),
-			},
-			args: args{
-				metric: model.NewGaugeMetric("id1", -5.5),
-			},
-			want: want{
-				metricSent:   model.NewGaugeMetric("id1", -5.5),
-				metricStored: model.NewGaugeMetric("id1", -5.5),
-				checkErr:     func(t *testing.T, err error) { assert.NoError(t, err) },
-			},
-		},
-		{
-			name: "sender error, newly reported",
-			fields: fields{
-				sender: &mockSender{
-					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
-						return nil, errors.New("something went wrong")
-					},
-				},
-				reported: storagetest.NewMockStorage(),
-			},
-			args: args{
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			want: want{
-				metricSent:   model.NewCounterMetric("id1", 5),
-				metricStored: model.Metric{},
-				checkErr:     func(t *testing.T, err error) { assert.Errorf(t, err, "something went wrong") },
-			},
-		},
-		{
-			name: "sender error, previously reported",
-			fields: fields{
-				sender: &mockSender{
-					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
-						return nil, errors.New("something went wrong")
-					},
-				},
-				reported: storagetest.NewMockStorage(model.NewCounterMetric("id1", 10)),
-			},
-			args: args{
-				metric: model.NewCounterMetric("id1", 5),
-			},
-			want: want{
-				metricSent:   model.NewCounterMetric("id1", -5),
-				metricStored: model.NewCounterMetric("id1", 10),
-				checkErr:     func(t *testing.T, err error) { assert.Errorf(t, err, "something went wrong") },
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &reporter{
-				sender:   tt.fields.sender,
-				reported: tt.fields.reported,
-			}
-			tt.fields.sender.On("SendBatch", t.Context(), model.NewMetricSet(tt.want.metricSent)).Return(mock.AnythingOfType("error"))
-			metric := tt.args.metric.Copy()
-
-			err := r.reportSingle(t.Context(), metric)
-
-			defer func() {
-				assert.Equal(t, tt.args.metric, metric)
-			}()
-			if tt.want.metricSent.Empty() {
-				tt.fields.sender.AssertNotCalled(t, "Send")
-			} else {
-				tt.fields.sender.AssertExpectations(t)
-			}
-			tt.want.checkErr(t, err)
-			if !tt.want.metricStored.Empty() {
-				got, err := tt.fields.reported.Get(t.Context(), tt.want.metricStored.Key())
-				require.NoError(t, err)
-				assert.Equal(t, tt.want.metricStored, got)
-			}
-		})
-	}
-}
-
 func TestNewReporter(t *testing.T) {
 	type args struct {
 		sender  *mockSender
@@ -414,7 +201,7 @@ func Test_reporter_Report(t *testing.T) {
 			},
 		},
 		{
-			name: "send single counter",
+			name: "send single counter, newly reported",
 			fields: fields{
 				sender:    &mockSender{},
 				reported:  storagetest.NewMockStorage(),
@@ -430,6 +217,128 @@ func Test_reporter_Report(t *testing.T) {
 			},
 			assertion: func(t *testing.T, err error) {
 				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send single counter, previously reported",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(model.NewCounterMetric("id1", -5)),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 10)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send single counter, previously reported with the same value",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(model.NewCounterMetric("id1", 5)),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 0)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send single gauge, newly reported",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewGaugeMetric("id1", -5.5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewGaugeMetric("id1", -5.5)},
+				storedMetrics: []model.Metric{model.NewGaugeMetric("id1", -5.5)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "send single gauge, previously reported",
+			fields: fields{
+				sender:    &mockSender{},
+				reported:  storagetest.NewMockStorage(model.NewGaugeMetric("id1", 3.8)),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewGaugeMetric("id1", -5.5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewGaugeMetric("id1", -5.5)},
+				storedMetrics: []model.Metric{model.NewGaugeMetric("id1", -5.5)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.NoError(t, err)
+			},
+		},
+		{
+			name: "sender error, single counter, newly reported",
+			fields: fields{
+				sender: &mockSender{
+					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
+						return nil, errors.New("something went wrong")
+					},
+				},
+				reported:  storagetest.NewMockStorage(),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", 5)},
+				storedMetrics: []model.Metric{},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.Errorf(t, err, "something went wrong")
+			},
+		},
+		{
+			name: "sender error, single counter, previously reported",
+			fields: fields{
+				sender: &mockSender{
+					wantBatchErr: func(metrics model.MetricSet) (model.MetricSet, error) {
+						return nil, errors.New("something went wrong")
+					},
+				},
+				reported:  storagetest.NewMockStorage(model.NewCounterMetric("id1", 10)),
+				batchSize: defaultSenderBatchSize,
+			},
+			args: args{
+				timeout: 100 * time.Millisecond,
+				metrics: []model.Metric{model.NewCounterMetric("id1", 5)},
+			},
+			want: want{
+				sentMetrics:   []model.Metric{model.NewCounterMetric("id1", -5)},
+				storedMetrics: []model.Metric{model.NewCounterMetric("id1", 10)},
+			},
+			assertion: func(t *testing.T, err error) {
+				assert.Errorf(t, err, "something went wrong")
 			},
 		},
 		{

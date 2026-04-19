@@ -28,6 +28,8 @@ linters:
       - linters:
           - staticcheck
         text: "QF1008:"
+    paths:
+      - cmd/test/
 
 formatters:
   enable:

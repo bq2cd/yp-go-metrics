@@ -15,7 +15,7 @@ type pingHandler struct {
 	timeout time.Duration
 }
 
-// ServeHTTP implements [http.Handler] for /ping endpoint.
+// ServeHTTP implements [Handler] for /ping endpoint.
 func (h *pingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), h.timeout)
 	defer cancel()
