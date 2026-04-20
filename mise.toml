@@ -13,7 +13,10 @@ run = ["go generate ./..."]
 
 [tasks.lint]
 description = "Lint Go code"
-run = ["golangci-lint run"]
+run = [
+  "golangci-lint run",
+  "go run ./cmd/staticlint ./...",
+]
 
 [tasks.test-dir]
 hide = true
