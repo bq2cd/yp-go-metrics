@@ -5,43 +5,61 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"log"
-	"os"
 	"runtime/debug"
 )
 
-var exitCode int
-
 func main() {
+	var err error
+
 	t := NewTestingT()
-	defer teardown(t)
 
-	l := NewLauncher(t)
-	defer l.Cleanup()
+	defer func() {
+		teardown(t, err) // panics are handled here
+	}()
 
-	err := l.Run()
-	if err != nil {
-		log.Printf("RUN ERROR: %v", err)
-
-		exitCode = 1
-	}
+	err = run(t)
 }
 
-func teardown(t *TestingT) {
-	err := recover()
+func run(t *TestingT) error {
+	l, err := NewLauncher(t)
 	if err != nil {
-		log.Printf("PANIC: %v", err)
+		return fmt.Errorf("launcher error: %w", err)
+	}
+
+	defer l.Cleanup()
+
+	err = l.Run()
+	if err != nil {
+		return fmt.Errorf("run error: %w", err)
+	}
+
+	return nil
+}
+
+func teardown(t *TestingT, errRun error) {
+	errFinal := errRun
+
+	result := recover()
+	if result != nil {
+		errFinal = errors.Join(errFinal, fmt.Errorf("run panic: %v", result))
+
+		log.Printf("RUN PANIC: %v", result)
 		log.Println(string(debug.Stack()))
 
-		exitCode = 2
 	}
 
-	err = t.RunCleanups()
-	if err != nil {
-		log.Printf("CLEANUP PANIC: %v", err)
+	result = t.RunCleanups()
+	if result != nil {
+		errFinal = errors.Join(errFinal, fmt.Errorf("cleanup panic: %v", result))
 
-		exitCode = 3
+		log.Printf("CLEANUP PANIC: %v", result)
+		log.Println(string(debug.Stack()))
 	}
 
-	os.Exit(exitCode)
+	if errFinal != nil {
+		log.Fatalf("FINAL ERROR: %v", errFinal)
+	}
 }

@@ -6,8 +6,8 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-// This example demonstrates sample usage of `POST /updates/` HTTP endpoint.
-func Example_uploadMetrics() {
+// This example demonstrates sample usage of `GET /` HTTP endpoint.
+func Example_listMetrics() {
 	addr := getRandomLocalhostAddress() // returns "localhost:PORT" or panics
 
 	stop := startDemoServer(addr) // or use `go run ./cmd/server -a ADDR` to launch real server.
@@ -39,11 +39,8 @@ func Example_uploadMetrics() {
 	}
 
 	// Upload generated metrics.
-	var result []Metric
-
 	resp, err := client.R().
 		SetBody(generated).
-		SetResult(&result).
 		Post("/updates/")
 	if err != nil {
 		panic(err)
@@ -52,22 +49,22 @@ func Example_uploadMetrics() {
 		panic(resp.Status())
 	}
 
-	// Print uploaded metrics.
-	for _, metric := range result {
-		switch metric.Type {
-		case "counter":
-			fmt.Printf("counter::%s::%d\n", metric.ID, *metric.Delta)
-		case "gauge":
-			fmt.Printf("gauge::%s::%.6f\n", metric.ID, *metric.Value)
-		default:
-			panic("unsupported type")
-		}
+	// List uploaded metrics
+	resp, err = client.R().Get("/")
+	if err != nil {
+		panic(err)
+	}
+	if !resp.IsSuccess() {
+		panic(resp.Status())
 	}
 
+	// Print metrics
+	fmt.Println(resp.String())
+
 	// Unordered output:
-	// counter::metric-0::0
-	// gauge::metric-1::0.010000
-	// counter::metric-2::200
-	// gauge::metric-3::0.030000
-	// counter::metric-4::400
+	// metric-0 0
+	// metric-1 0.01
+	// metric-2 200
+	// metric-3 0.03
+	// metric-4 400
 }

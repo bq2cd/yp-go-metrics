@@ -2,6 +2,7 @@ package examples_test
 
 import (
 	"context"
+	"net"
 	"os"
 	"time"
 
@@ -25,6 +26,22 @@ func initLogger() log.Logger {
 
 	return logger
 
+}
+
+func getRandomLocalhostAddress() string {
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(err)
+	}
+
+	addr := l.Addr().String()
+
+	err = l.Close()
+	if err != nil {
+		panic(err)
+	}
+
+	return addr
 }
 
 func startDemoServer(addr string) func() error {

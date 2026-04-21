@@ -43,7 +43,7 @@ type Launcher struct {
 }
 
 // NewLauncher creates an instance of [Launcher].
-func NewLauncher(t *TestingT) *Launcher {
+func NewLauncher(t *TestingT) (*Launcher, error) {
 	l := &Launcher{
 		T:           t,
 		opts:        LauncherOpts{},
@@ -51,9 +51,9 @@ func NewLauncher(t *TestingT) *Launcher {
 		addrFactory: servertest.NewListenAddressFactory(t),
 	}
 
-	l.generateHMACKey()
+	err := l.generateHMACKey()
 
-	return l
+	return l, err
 }
 
 // Run is the main entry point, that performs all the logic of compiling, launching
@@ -86,11 +86,19 @@ func (l *Launcher) Cleanup() {
 	l.addrFactory.Clear()
 }
 
-func (l *Launcher) generateHMACKey() {
+func (l *Launcher) generateHMACKey() error {
 	buf := [32]byte{}
-	rand.Read(buf[:])
+
+	// As per documentation to [rand.Read], it never returns an error but rather crashes the program irrecoverably.
+	// However, it is better to err on the safe side here :).
+	_, err := rand.Read(buf[:])
+	if err != nil {
+		return fmt.Errorf("crypto/rand failed: %v", err)
+	}
 
 	l.hmacKeyBase64 = base64.StdEncoding.EncodeToString(buf[:])
+
+	return nil
 }
 
 func (l *Launcher) parseArgs() error {

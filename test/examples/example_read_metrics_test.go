@@ -8,10 +8,9 @@ import (
 
 // This example demonstrates sample usage of `POST /value/` HTTP endpoint.
 func Example_readMetrics() {
-	addr := "localhost:12346"
+	addr := getRandomLocalhostAddress() // returns "localhost:PORT" or panics
 
-	// use `go run ./cmd/server` for external testing.
-	stop := startDemoServer(addr)
+	stop := startDemoServer(addr) // or use `go run ./cmd/server -a ADDR` to launch real server.
 	defer stop()
 
 	client := resty.New().SetBaseURL("http://" + addr)
