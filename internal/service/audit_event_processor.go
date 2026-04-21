@@ -12,6 +12,8 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/option"
+	"github.com/bq2cd/yp-go-metrics/pkg/sharedchan"
 )
 
 const (
@@ -33,20 +35,62 @@ type AuditEventProcessor interface {
 	StartProcessing(ctx context.Context)
 }
 
+// AuditEventProcessorConfig provides configuration knobs for [AuditEventProcessor].
+// These knobs are settable via option functions (see `WithAuditEventProcessorXXX` functions).
+type AuditEventProcessorConfig struct {
+	bufferSize  uint
+	concurrency int
+}
+
 // NewAuditEventProcessor creates an instance of [AuditEventProcessor].
-func NewAuditEventProcessor(logger log.Logger) *auditEventProcessor {
+func NewAuditEventProcessor(logger log.Logger, opts ...option.Option[AuditEventProcessorConfig]) *auditEventProcessor {
+	cfg := AuditEventProcessorConfig{
+		bufferSize:  auditEventProcessorBufferSize,
+		concurrency: auditEventProcessorConcurrency,
+	}
+
+	option.Apply(&cfg, opts...)
+
 	return &auditEventProcessor{
 		logger:   logger,
+		config:   cfg,
 		sinks:    make(map[string]repository.AuditSink),
-		incoming: make(chan model.AuditEvent, auditEventProcessorBufferSize),
+		incoming: sharedchan.NewChannel[model.AuditEvent](cfg.bufferSize),
+	}
+}
+
+// WithAuditEventProcessorBufferSize sets desired size for buffered incoming channel where
+// audit events are enqueued before processing.
+// NB. Specifying size equal to zero will turn incoming channel into unbuffered one and
+// [AuditEventProcessor.WriteEvent] will block on new event until this event is fully
+// processed.
+func WithAuditEventProcessorBufferSize(size uint) option.Option[AuditEventProcessorConfig] {
+	return func(c *AuditEventProcessorConfig) {
+		c.bufferSize = size
+	}
+}
+
+// WithAuditEventProcessorConcurrency sets desired number of concurrently active sinks while
+// processing an audit event. E.g. for `n = 2` and `5` sinks, each event will be sent
+// simultaneously to `2` sinks, with other sinks being activated as soon as processing
+// of any sink finishes.
+// NB. Setting number to zero will lead to concurrent processing of all registered sinks for each event.
+func WithAuditEventProcessorConcurrency(n uint) option.Option[AuditEventProcessorConfig] {
+	return func(c *AuditEventProcessorConfig) {
+		if n == 0 {
+			c.concurrency = -1 // no limit on concurrent workers
+		} else {
+			c.concurrency = int(n)
+		}
 	}
 }
 
 type auditEventProcessor struct {
 	mu       sync.RWMutex
 	logger   log.Logger
+	config   AuditEventProcessorConfig
 	sinks    map[string]repository.AuditSink
-	incoming chan model.AuditEvent
+	incoming *sharedchan.Channel[model.AuditEvent]
 	closed   bool
 }
 
@@ -54,20 +98,15 @@ type auditEventProcessor struct {
 // It will block if channel is full (e.g. not being processed fast enough).
 // Provided context is used as a means for cancellation.
 func (ap *auditEventProcessor) WriteEvent(ctx context.Context, event model.AuditEvent) error {
-	ap.mu.Lock()
-	defer ap.mu.Unlock()
-
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
 
-	if ap.closed {
+	if !ap.incoming.Send(event) {
 		return ErrAuditEventProcessorClosed
 	}
-
-	ap.incoming <- event
 
 	return nil
 }
@@ -104,7 +143,7 @@ func (ap *auditEventProcessor) mainLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case event, ok := <-ap.incoming:
+		case event, ok := <-ap.incoming.Receive():
 			if !ok {
 				return
 			}
@@ -115,12 +154,10 @@ func (ap *auditEventProcessor) mainLoop(ctx context.Context) {
 }
 
 func (ap *auditEventProcessor) closeSinks() {
+	ap.incoming.Close()
+
 	ap.mu.Lock()
 	defer ap.mu.Unlock()
-
-	ap.closed = true
-
-	close(ap.incoming)
 
 	for sinkID, sink := range ap.sinks {
 		err := sink.Close()
@@ -140,7 +177,7 @@ func (ap *auditEventProcessor) processEvent(ctx context.Context, event model.Aud
 	}
 
 	grp := new(errgroup.Group)
-	grp.SetLimit(auditEventProcessorConcurrency)
+	grp.SetLimit(ap.config.concurrency)
 
 	for _, sink := range ap.getCurrentSinks() {
 		grp.Go(func() error {
