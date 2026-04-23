@@ -13,8 +13,14 @@ const (
 )
 
 const (
+	// MetricAggregateStrategyLastValueWins defines aggregation strategy when last seen metric value for the same
+	// [MetricKey] is taken as the final value for that key.
 	MetricAggregateStrategyLastValueWins MetricAggregateStrategy = iota
+	// MetricAggregateStrategyFirstValueWins defines aggregation strategy when first seen metric value for the same
+	// [MetricKey] is taken as the final value for that key.
 	MetricAggregateStrategyFirstValueWins
+	// MetricAggregateStrategyCounterValueAccumulates defines aggregation strategy for counters when their values are
+	// summed up (accumulated) for the same [MetricKey], and for other metric types, the last seen value is taken.
 	MetricAggregateStrategyCounterValueAccumulates
 )
 
@@ -161,7 +167,8 @@ func (m *Metric) Copy() Metric {
 	return metric
 }
 
-// AddDelta adds provided value to the metric [Delta] field but only if metric type is [MetricTypeCounter] and new value is not nil.
+// AddDelta adds provided value to the metric [Delta] field but only if metric type is [MetricTypeCounter] and
+// new value is not nil.
 func (m *Metric) AddDelta(other *int64) {
 	if m.Type != MetricTypeCounter {
 		return
@@ -179,12 +186,14 @@ func (m *Metric) AddDelta(other *int64) {
 // MetricSet represents a set of unique metrics keyed by their [MetricKey].
 type MetricSet map[MetricKey]Metric
 
-// NewMetricSet converts a list of metrics into unique set of metrics, keyed by [MetricKey] using [MetricAggregateStrategyLastValueWins].
+// NewMetricSet converts a list of metrics into unique set of metrics, keyed by [MetricKey] using
+// [MetricAggregateStrategyLastValueWins].
 func NewMetricSet(metrics ...Metric) MetricSet {
 	return NewMetricSetWithStrategy(MetricAggregateStrategyLastValueWins, metrics...)
 }
 
-// NewMetricSetWithStrategy converts a list of metrics into unique set of metrics, keyed by [MetricKey] using provided [MetricAggregateStrategy].
+// NewMetricSetWithStrategy converts a list of metrics into unique set of metrics, keyed by [MetricKey] using
+// provided [MetricAggregateStrategy].
 func NewMetricSetWithStrategy(strategy MetricAggregateStrategy, metrics ...Metric) MetricSet {
 	unique := make(MetricSet, len(metrics))
 	for _, m := range metrics {

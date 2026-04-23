@@ -3,19 +3,22 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
+
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/router"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/auditsink"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
-	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // Run is an app entry point to launch a server process.
@@ -25,18 +28,24 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot init storage: %w", err)
 	}
 
+	auditProcessor, err := initAuditProcessor(ctx, logger, cfg)
+	if err != nil {
+		return fmt.Errorf("cannot init metric auditor: %w", err)
+	}
+
 	writer := service.NewStorageBatchWriter(storage)
 	storer := service.NewMetricStorer(storage, writer)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
+	auditor := service.NewMetricAuditor(logger, auditProcessor)
 
-	handlers := handler.NewRegistry(logger, snapshotter, pinger)
+	handlers := handler.NewRegistry(logger, snapshotter, pinger, auditor)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
 	router, err := router.New(logger, handlers, hmacSigner)
 	if err != nil {
 		return fmt.Errorf("cannot create router: %w", err)
 	}
 
-	srv := New(logger, cfg, router, snapshotter, writer)
+	srv := New(logger, cfg, router, snapshotter, writer, auditProcessor)
 
 	return srv.Run(ctx)
 }
@@ -70,4 +79,54 @@ func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (rep
 	}
 
 	return sqlStorage, sqlStorage, nil
+}
+
+func initAuditProcessor(_ context.Context, logger log.Logger, cfg config.Config) (service.AuditEventProcessor, error) {
+	processor := service.NewAuditEventProcessor(logger)
+
+	err := maybeRegisterAuditFileSink(logger, processor, cfg.AuditFilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = maybeRegisterAuditHTTPSink(logger, processor, cfg.AuditURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return processor, nil
+}
+
+func maybeRegisterAuditFileSink(logger log.Logger, processor service.AuditEventProcessor, path string) error {
+	if path == "" {
+		return nil
+	}
+
+	sink, err := auditsink.NewFileSink(path)
+	if err != nil {
+		return fmt.Errorf("cannot create audit file sink: %w", err)
+	}
+
+	processor.RegisterSink("file:"+path, sink)
+
+	logger.Info().Str("path", path).Msg("registered audit file sink")
+
+	return nil
+}
+
+func maybeRegisterAuditHTTPSink(logger log.Logger, processor service.AuditEventProcessor, remote url.URL) error {
+	if remote.String() == "" {
+		return nil
+	}
+
+	sink, err := auditsink.NewHTTPSink(remote)
+	if err != nil {
+		return fmt.Errorf("cannot create audit http sink: %w", err)
+	}
+
+	processor.RegisterSink("http:"+remote.String(), sink)
+
+	logger.Info().Str("remote", remote.String()).Msg("registered audit http sink")
+
+	return nil
 }

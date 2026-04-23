@@ -6,6 +6,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/goccy/go-json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
@@ -14,11 +20,6 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	"github.com/go-chi/chi/v5"
-	"github.com/goccy/go-json"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 func TestRouter_ServeHTTP(t *testing.T) {
@@ -430,7 +431,7 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 
 	logger := log.NewTestLogger()
 
-	handlers := handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
+	handlers := handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl))
 	for id := range handlers {
 		m := handlertest.NewMockHandler(ctrl)
 		handlers[id] = m
@@ -608,17 +609,17 @@ func TestNew(t *testing.T) {
 			want: want{wantErr: true},
 		},
 		"proper handlers pass": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 		"nil logger replaced by noop": {
-			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+			args: args{logger: nil, handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 		"nil signer fails": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl))},
 			want: want{wantErr: true},
 		},
 		"proper signer passes": {
-			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
+			args: args{logger: log.NewNoopLogger(), handlers: handler.NewRegistry(log.NewNoopLogger(), servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl)), signer: hmacsigner.NewHMACSigner(nil)},
 		},
 	}
 	for name, tt := range tests {

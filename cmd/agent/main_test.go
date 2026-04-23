@@ -12,12 +12,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
-	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
-	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 )
 
 func Test_parseArgs(t *testing.T) {
@@ -532,13 +533,4 @@ func Test_run(t *testing.T) {
 			tt.assertionErr(t, err)
 		})
 	}
-}
-
-func Test_main(t *testing.T) {
-	// `main` only calls `run` under the hood,
-	// so there's not much to test here
-	// unless we could mock `run` function;
-	// and the only way to mock it would be
-	// to assign it to a global variable.
-	t.SkipNow()
 }

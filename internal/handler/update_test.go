@@ -7,11 +7,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
-	"github.com/bq2cd/yp-go-metrics/internal/service"
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
+	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 func Test_updateHandler_ServeHTTP(t *testing.T) {
@@ -30,10 +34,11 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 		contentType string
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   want
+		name             string
+		fields           fields
+		args             args
+		want             want
+		setupAuditorMock func(*servicetest.MockMetricAuditor)
 	}{
 		// Bad Request
 		{
@@ -122,50 +127,77 @@ func Test_updateHandler_ServeHTTP(t *testing.T) {
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/id1/123", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id1", 123)), gomock.Any())
+			},
 		},
 		{
 			name:   "POST %s OK",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/id1/123/", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id1", 123)), gomock.Any())
+			},
 		},
 		{
 			name:   "POST %s OK",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/counter/id1/-456", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id1", -456)), gomock.Any())
+			},
 		},
 		{
 			name:   "POST %s OK",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/gauge/id2/1.05", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewGaugeMetric("id2", 1.05)), gomock.Any())
+			},
 		},
 		{
 			name:   "POST %s OK",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/gauge/id2/-3.03", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewGaugeMetric("id2", -3.03)), gomock.Any())
+			},
 		},
 		{
 			name:   "POST %s OK",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/gauge/id3/25", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewGaugeMetric("id3", 25)), gomock.Any())
+			},
 		},
 		{
 			name:   "POST %s OK",
 			fields: fields{metrics: newMetricStorer(t, storagetest.NewMockStorage())},
 			args:   args{method: http.MethodPost, url: "/update/gauge/id3/-35", contentType: "text/plain", body: http.NoBody},
 			want:   want{code: http.StatusOK, body: "", contentType: "text/plain; charset=utf-8"},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewGaugeMetric("id3", -35)), gomock.Any())
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf(tt.name, tt.args.url), func(t *testing.T) {
+			ctrl := gomock.NewController(t)
 			logger := log.NewTestLogger()
+			auditorMock := servicetest.NewMockMetricAuditor(ctrl)
+			if tt.setupAuditorMock != nil {
+				tt.setupAuditorMock(auditorMock)
+			}
 			h := &updateHandler{
 				baseHandler: baseHandler{logger: logger},
 				metrics:     tt.fields.metrics,
+				auditor:     auditorMock,
 			}
 			ts := httptest.NewServer(h)
 			defer ts.Close()

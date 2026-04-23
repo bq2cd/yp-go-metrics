@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// TaskTimerFn represents task's actual workload.
 type TaskTimerFn func(context.Context) error
 
 type timerTask struct {
@@ -14,6 +15,8 @@ type timerTask struct {
 	initialDelay time.Duration
 }
 
+// NewTimerTask creates an instance of a task that trigger provided task function
+// every given interval, with possible initial delay before the first execution.
 func NewTimerTask(interval time.Duration, taskFn TaskTimerFn, initialDelay time.Duration) *timerTask {
 	return &timerTask{
 		taskFn:       taskFn,
@@ -22,6 +25,9 @@ func NewTimerTask(interval time.Duration, taskFn TaskTimerFn, initialDelay time.
 	}
 }
 
+// Run starts task execution using provided context as a means for cancellation.
+// The execution is synchronous, so it is the caller's responsibility to use
+// goroutines if asynchronous execution is required.
 func (t *timerTask) Run(ctx context.Context) error {
 	var (
 		errFinal error

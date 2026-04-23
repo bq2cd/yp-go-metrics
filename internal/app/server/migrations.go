@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	"github.com/bq2cd/yp-go-metrics/migrations"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
-	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
 type gooseLogger struct {

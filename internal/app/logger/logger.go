@@ -1,9 +1,10 @@
 package logger
 
 import (
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
+
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 // NewProduction returns pre-configured logger for a production environment.

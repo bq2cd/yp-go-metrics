@@ -7,14 +7,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
 	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/storagetest"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
@@ -33,11 +36,12 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 		invalidJSON bool
 	}
 	tests := []struct {
-		name            string
-		fields          fields
-		args            args
-		want            want
-		assertLogEvents func(*testing.T, log.TestLogEventSet)
+		name             string
+		fields           fields
+		args             args
+		want             want
+		assertLogEvents  func(*testing.T, log.TestLogEventSet)
+		setupAuditorMock func(*servicetest.MockMetricAuditor)
 	}{
 		{
 			name: "empty storage",
@@ -52,6 +56,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				code:        http.StatusOK,
 				body:        `{ "id": "id1", "type": "counter", "delta": 7 }`,
 				contentType: httpheaders.ContentTypeApplicationJSON,
+			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id1", 7)), gomock.Any())
 			},
 		},
 		{
@@ -69,6 +76,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				code:        http.StatusOK,
 				body:        `{ "id": "id1", "type": "counter", "delta": 7 }`,
 				contentType: httpheaders.ContentTypeApplicationJSON,
+			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id1", 7)), gomock.Any())
 			},
 		},
 		{
@@ -88,6 +98,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				body:        `{ "id": "id1", "type": "counter", "delta": 17 }`,
 				contentType: httpheaders.ContentTypeApplicationJSON,
 			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id1", 7)), gomock.Any())
+			},
 		},
 		{
 			name: "add new gauge",
@@ -105,6 +118,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				code:        http.StatusOK,
 				body:        `{ "id": "id1", "type": "gauge", "value": -7.8 }`,
 				contentType: httpheaders.ContentTypeApplicationJSON,
+			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewGaugeMetric("id1", -7.8)), gomock.Any())
 			},
 		},
 		{
@@ -125,6 +141,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				body:        `{ "id": "id1", "type": "gauge", "value": -7.8 }`,
 				contentType: httpheaders.ContentTypeApplicationJSON,
 			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewGaugeMetric("id1", -7.8)), gomock.Any())
+			},
 		},
 		{
 			name: "skip empty metric",
@@ -141,6 +160,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				code:        http.StatusNotFound,
 				body:        ``,
 				contentType: httpheaders.ContentTypeEmpty,
+			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.Metric{ID: "id1", Type: model.MetricTypeCounter}), gomock.Any())
 			},
 		},
 		{
@@ -159,6 +181,9 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				code:        http.StatusOK,
 				body:        `{ "id": "id1", "type": "counter", "delta": -33 }`,
 				contentType: httpheaders.ContentTypeApplicationJSON,
+			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.Metric{ID: "id1", Type: model.MetricTypeCounter}), gomock.Any())
 			},
 		},
 		{
@@ -252,15 +277,24 @@ func Test_updateJSONHandler_ServeHTTP(t *testing.T) {
 				e := events[0]
 				assert.Equal(t, log.LevelError, e.Level())
 			},
+			setupAuditorMock: func(m *servicetest.MockMetricAuditor) {
+				m.EXPECT().RecordMetricsUploaded(gomock.Any(), model.NewMetricSet(model.NewCounterMetric("id3", 7)), gomock.Any())
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
 			logger := log.NewTestLogger()
+			auditorMock := servicetest.NewMockMetricAuditor(ctrl)
+			if tt.setupAuditorMock != nil {
+				tt.setupAuditorMock(auditorMock)
+			}
 			h := &updateJSONHandler{
 				baseHandler: baseHandler{logger: logger},
 				metrics:     tt.fields.metrics,
 				responder:   tt.fields.responder,
+				auditor:     auditorMock,
 			}
 			ts := httptest.NewServer(h)
 			defer ts.Close()

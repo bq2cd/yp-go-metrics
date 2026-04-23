@@ -2,6 +2,8 @@ package log
 
 import "sync"
 
+// EventBuilder provides a way to build log event with multiple fields and a message.
+// It also provides a method to send the resulting event to the wire (i.e. logging subsystem).
 type EventBuilder interface {
 	EventFieldAdder
 

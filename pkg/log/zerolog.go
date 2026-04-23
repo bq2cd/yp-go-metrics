@@ -21,7 +21,7 @@ func init() {
 	}
 }
 
-// NewZeroLogger creates a logger backed by `zerolog.Logger`
+// NewZeroLogger creates a logger backed by [zerolog.Logger].
 func NewZeroLogger(w io.Writer) (Logger, error) {
 	logger := zerolog.New(w)
 	l := &baseLogger{impl: &zeroLogger{

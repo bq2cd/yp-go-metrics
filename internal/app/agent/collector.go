@@ -3,11 +3,18 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
-	"golang.org/x/sync/errgroup"
+)
+
+var (
+	// ErrMetricCollectionFailed is a sentinel error returned when [Collector.Collect] fails.
+	ErrMetricCollectionFailed = errors.New("metric collection failed")
 )
 
 // Collector abstracts a way to collect metrics.
@@ -33,13 +40,13 @@ func (c *collector) collectFromSource(ctx context.Context, src source.Source, ou
 	if err != nil {
 		return err
 	}
-	for _, m := range metrics {
+	for _, metric := range metrics {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case outCh <- m:
-			// business as usual
+		default:
 		}
+		outCh <- metric
 	}
 	return nil
 }
@@ -49,9 +56,9 @@ func (c *collector) fanInMetrics(ctx context.Context, inCh <-chan model.Metric, 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case outCh <- metric:
-			// business as usual
+		default:
 		}
+		outCh <- metric
 	}
 	return nil
 }
@@ -103,7 +110,12 @@ func (c *collector) Collect(ctx context.Context) error {
 		return c.storeMetrics(ctx, outChs)
 	})
 
-	return erg.Wait()
+	err := erg.Wait()
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrMetricCollectionFailed, err)
+	}
+
+	return nil
 }
 
 // Snapshot returns latest values of all metrics from the internal storage.

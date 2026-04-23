@@ -7,13 +7,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"testing"
 	"time"
 
-	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
+
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 )
 
 func ensureNotEmpty(v string) string {
@@ -23,7 +23,7 @@ func ensureNotEmpty(v string) string {
 	return rand.Text()
 }
 
-func createTemporaryDataDir(t *testing.T, dbname string) string {
+func createTemporaryDataDir(t TestingT, dbname string) string {
 	base := filepath.Join(os.TempDir(), "embedded-postgres-go")
 	err := os.MkdirAll(base, 0755)
 	if !os.IsExist(err) {
@@ -44,20 +44,20 @@ func createTemporaryDataDir(t *testing.T, dbname string) string {
 }
 
 // LaunchEmbeddedPostgresWithDelay starts a temporary PostgreSQL instance with empty data directory after specified delay.
-func LaunchEmbeddedPostgresWithDelay(t *testing.T, user, password, dbname string, delay time.Duration) dbconfig.Config {
+func LaunchEmbeddedPostgresWithDelay(t TestingT, user, password, dbname string, delay time.Duration) dbconfig.Config {
 	addr := NewListenAddress(t, GetRandomListenAddress(t))
 	time.AfterFunc(delay, func() { launchEmbeddedPostgres(t, user, password, dbname, addr) })
 	return generateDBConfig(t, user, password, dbname, addr)
 }
 
 // LaunchEmbeddedPostgres starts a temporary PostgreSQL instance with empty data directory.
-func LaunchEmbeddedPostgres(t *testing.T, user, password, dbname string) dbconfig.Config {
+func LaunchEmbeddedPostgres(t TestingT, user, password, dbname string) dbconfig.Config {
 	addr := NewListenAddress(t, GetRandomListenAddress(t))
 	launchEmbeddedPostgres(t, user, password, dbname, addr)
 	return generateDBConfig(t, user, password, dbname, addr)
 }
 
-func generateDBConfig(t *testing.T, user, password, dbname string, addr ListenAddress) dbconfig.Config {
+func generateDBConfig(t TestingT, user, password, dbname string, addr ListenAddress) dbconfig.Config {
 	t.Helper()
 
 	dbCfg, err := dbconfig.New(url.URL{
@@ -71,7 +71,7 @@ func generateDBConfig(t *testing.T, user, password, dbname string, addr ListenAd
 	return dbCfg
 }
 
-func launchEmbeddedPostgres(t *testing.T, user, password, dbname string, addr ListenAddress) {
+func launchEmbeddedPostgres(t TestingT, user, password, dbname string, addr ListenAddress) {
 	t.Helper()
 
 	user = ensureNotEmpty(user)

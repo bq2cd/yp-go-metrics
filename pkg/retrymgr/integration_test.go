@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
-	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
+	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
 )
 
 type testLogger interface {

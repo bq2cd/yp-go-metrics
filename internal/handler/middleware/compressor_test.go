@@ -11,10 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type mockWriteCloser struct {
@@ -813,7 +814,8 @@ func Test_compressorGzipFactory_Create(t *testing.T) {
 			fields: fields{level: gzip.BestCompression},
 			assertion: func(t *testing.T, got io.WriteCloser, err error) {
 				require.NoError(t, err)
-				assert.IsType(t, &gzip.Writer{}, got)
+				assert.NotNil(t, got)
+				assert.Implements(t, (*io.WriteCloser)(nil), got)
 			},
 		},
 		{

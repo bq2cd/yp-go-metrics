@@ -7,14 +7,15 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
-	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
-	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
+	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type faultyMetricJSONResponder struct{}
@@ -116,7 +117,7 @@ func TestNewRegistry(t *testing.T) {
 		}
 		for name, tt := range tests {
 			t.Run(name, func(t *testing.T) {
-				got := NewRegistry(tt.logger, servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
+				got := NewRegistry(tt.logger, servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl))
 				require.NotEmpty(t, got)
 				for _, h := range got {
 					logger := reflect.ValueOf(h).Elem().FieldByName("logger")
@@ -130,7 +131,7 @@ func TestNewRegistry(t *testing.T) {
 	t.Run("logger contains handler name field", func(t *testing.T) {
 		logger := log.NewTestLogger()
 
-		got := NewRegistry(logger, servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl))
+		got := NewRegistry(logger, servicetest.NewMockMetricStorer(ctrl), servicetest.NewMockStoragePinger(ctrl), servicetest.NewMockMetricAuditor(ctrl))
 		require.NotEmpty(t, got)
 		for _, h := range got {
 			hl, ok := h.(handlerLogger)

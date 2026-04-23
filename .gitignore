@@ -27,6 +27,7 @@ vendor/
 # Extra
 *.tmp
 /.act/
+/.scannerwork/
 /toolkit.nu
 /metrics.json
 /cmd/server/metrics.json

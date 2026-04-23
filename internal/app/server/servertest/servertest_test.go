@@ -152,13 +152,6 @@ func TestMakeRequestDiscardResponse(t *testing.T) {
 	}
 }
 
-func TestNewTempFileFactory(t *testing.T) {
-	assert.Equal(t, &tempFileFactory{
-		t:       t,
-		created: make([]string, 0),
-	}, NewTempFileFactory(t))
-}
-
 func Test_tempFileFactory_create(t *testing.T) {
 	type args struct {
 		dir     string
@@ -200,10 +193,7 @@ func Test_tempFileFactory_create(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ff := &tempFileFactory{
-				t:       t,
-				created: make([]string, 0),
-			}
+			ff := NewTempFileFactory(t)
 			got := ff.create(tt.args.dir, tt.args.pattern)
 			tt.assertion(t, got)
 			_ = os.Remove(got)
@@ -250,10 +240,8 @@ func Test_tempFileFactory_Create(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ff := &tempFileFactory{
-				t:       t,
-				created: tt.fields.created,
-			}
+			ff := NewTempFileFactory(t)
+			ff.created = tt.fields.created
 			defer ff.RemoveAll()
 			got := ff.Create(tt.args.pattern)
 			assert.FileExists(t, got)
@@ -296,23 +284,14 @@ func Test_tempFileFactory_RemoveAll(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ff := &tempFileFactory{
-				t:       t,
-				created: tt.fields.created,
-			}
+			ff := NewTempFileFactory(t)
+			ff.created = tt.fields.created
 			ff.RemoveAll()
 			for _, f := range ff.created {
 				assert.NoFileExists(t, f)
 			}
 		})
 	}
-}
-
-func TestNewListenAddressFactory(t *testing.T) {
-	assert.Equal(t, &listenAddressFactory{
-		t:         t,
-		allocated: make([]string, 0),
-	}, NewListenAddressFactory(t))
 }
 
 func Test_listenAddressFactory_New(t *testing.T) {
@@ -375,10 +354,8 @@ func Test_listenAddressFactory_New(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := &listenAddressFactory{
-				t:         t,
-				allocated: tt.fields.allocated,
-			}
+			f := NewListenAddressFactory(t)
+			f.allocated = tt.fields.allocated
 			got := f.New()
 			assert.NotEmpty(t, got)
 			tt.assertion(t, f.allocated)
@@ -471,10 +448,8 @@ func Test_listenAddressFactory_Get(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := &listenAddressFactory{
-				t:         t,
-				allocated: tt.fields.allocated,
-			}
+			f := NewListenAddressFactory(t)
+			f.allocated = tt.fields.allocated
 			got := f.Get(tt.args.idx)
 			assert.NotEmpty(t, got)
 			tt.assertion(t, f.allocated)
@@ -486,54 +461,4 @@ func TestGetCwd(t *testing.T) {
 	cwd, err := os.Getwd()
 	require.NoError(t, err)
 	require.Equal(t, cwd, GetCwd(t))
-}
-
-func TestListenAddress_String(t *testing.T) {
-	type fields struct {
-		Host string
-		Port uint32
-	}
-	type want struct {
-		got string
-	}
-	type testcase struct {
-		fields fields
-		want   want
-	}
-	tests := map[string]testcase{
-		// TODO: Add test cases.
-	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			la := ListenAddress{
-				Host: tt.fields.Host,
-				Port: tt.fields.Port,
-			}
-			got := la.String()
-			assert.Equal(t, tt.want.got, got)
-		})
-	}
-}
-
-func TestNewListenAddress(t *testing.T) {
-	type args struct {
-		t    *testing.T
-		addr string
-	}
-	type want struct {
-		got ListenAddress
-	}
-	type testcase struct {
-		args args
-		want want
-	}
-	tests := map[string]testcase{
-		// TODO: Add test cases.
-	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := NewListenAddress(tt.args.t, tt.args.addr)
-			assert.Equal(t, tt.want.got, got)
-		})
-	}
 }

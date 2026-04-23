@@ -3,13 +3,14 @@ package agent
 import (
 	"context"
 
+	"github.com/go-resty/resty/v2"
+
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
-	"github.com/go-resty/resty/v2"
 )
 
 // Run is an app entry point to launch an agent process.

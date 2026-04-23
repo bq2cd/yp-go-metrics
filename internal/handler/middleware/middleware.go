@@ -4,6 +4,7 @@ import (
 	"net/http"
 )
 
+// Middleware defines a function that wraps provided HTTP handler and returns new HTTP handler.
 type Middleware func(http.Handler) http.Handler
 
 type middleware interface {
@@ -15,7 +16,9 @@ type middlewareHandler struct {
 	next http.Handler
 }
 
-// ServeHTTP implements http.Handler interface
+// ServeHTTP implements [http.Handler] interface.
+// It will call underlying middleware implementation and pass to it the next
+// HTTP handler.
 func (m *middlewareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.impl.Intercept(w, r, m.next)
 }

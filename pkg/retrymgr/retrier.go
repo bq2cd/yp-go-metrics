@@ -26,7 +26,7 @@ type retrier[T any] struct {
 	sleeper  Sleeper
 }
 
-// New creates an instance of [Retrier] with given [Strategy] and [Sleeper].
+// NewRetrier creates an instance of [Retrier] with given [Strategy] and [Sleeper].
 func NewRetrier[T any](factory RetrierFactory) *retrier[T] {
 	strategy := factory.GetStrategy()
 	return &retrier[T]{
@@ -36,7 +36,15 @@ func NewRetrier[T any](factory RetrierFactory) *retrier[T] {
 	}
 }
 
-func (r *retrier[T]) Do(ctx context.Context, taskName string, taskFn RetryableFn[T], shouldRetryFn ShouldRetryFn) (result T, err error) {
+// Do repeatedly executes provided task function until it succeeds or until retry conditions are fulfilled.
+// The maximum number of retries and delays between retry attempts are defined by [Strategy] that is provided
+// when creating retrier object via [NewRetrier].
+func (r *retrier[T]) Do(
+	ctx context.Context,
+	taskName string,
+	taskFn RetryableFn[T],
+	shouldRetryFn ShouldRetryFn,
+) (result T, err error) {
 	logger := r.logger.With(log.Str("task", taskName))
 
 	attempts := 0

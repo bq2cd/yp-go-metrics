@@ -11,13 +11,16 @@ import (
 )
 
 const (
+	// FaultyStorageErrorTrigger is a metric ID that forces [MockStorage] to return an error.
 	FaultyStorageErrorTrigger = "faultyStorageErrorTrigger"
 )
 
 var (
+	// ErrFaultyStorage is returned with [FaultyStorageErrorTrigger] is encountered.
 	ErrFaultyStorage = errors.New("faulty storage")
 )
 
+// MockStorage is a special implementation of in-memory storage that support fault injection.
 type MockStorage struct {
 	mu        sync.RWMutex
 	data      model.MetricSet

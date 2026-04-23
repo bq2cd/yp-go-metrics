@@ -13,6 +13,8 @@ var (
 	supportedMetrics map[string]model.MetricType
 )
 
+// GetSupportedMetrics returns a map of metric ID to metric type for all possible
+// metrics that can be returned by this source.
 func GetSupportedMetrics() map[string]model.MetricType {
 	once.Do(func() {
 		supportedMetrics = map[string]model.MetricType{
@@ -54,7 +56,7 @@ type memStatsReader interface {
 
 type memStats struct{}
 
-// ReadStats invokes runtime.ReadMemStats() and returns reflected value of runtime.MemStats.
+// ReadStats invokes [runtime.ReadMemStats] and returns reflected value of [runtime.MemStats].
 func (m *memStats) ReadStats() reflect.Value {
 	var stats runtime.MemStats
 	runtime.ReadMemStats(&stats)
@@ -66,12 +68,12 @@ type source struct {
 	reader           memStatsReader
 }
 
-// New creates an instance of runtime.MemStats metrics source.
+// New creates an instance of [runtime.MemStats] metrics source.
 func New() *source {
 	return &source{supportedMetrics: GetSupportedMetrics(), reader: &memStats{}}
 }
 
-// ReadMetrics reads metrics from runtime.MemStats and converts them
+// ReadMetrics reads metrics from [runtime.MemStats] and converts them
 // into internal representation.
 func (s *source) ReadMetrics() ([]model.Metric, error) {
 	metrics := make([]model.Metric, 0, len(s.supportedMetrics))

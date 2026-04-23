@@ -1,3 +1,5 @@
+// Binary agent launches a process that collects its runtime metrics
+// (e.g. memory consumption, number of goroutines, etc.) and uploads them to a remote server.
 package main
 
 import (

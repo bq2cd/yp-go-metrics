@@ -1,3 +1,5 @@
+// Binary server launches an HTTP server that accepts incoming metrics and stores them in configured database.
+// The server also provides endpoints to access stored metrics.
 package main
 
 import (
@@ -31,6 +33,8 @@ type cliOptions struct {
 	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
 	DatabaseDSN              string `env:"DATABASE_DSN"`
 	HMACSecretkey            string `env:"KEY"`
+	AuditFilePath            string `env:"AUDIT_FILE"`
+	AuditURL                 string `env:"AUDIT_URL"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -43,6 +47,8 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.BoolVar(&opts.MetricStoreLoadOnStartup, "r", defaultMetricStoreLoadOnStartup, "restore metrics from file on startup")
 	fs.StringVar(&opts.DatabaseDSN, "d", "", "database dsn (only postgres is supported)")
 	fs.StringVar(&opts.HMACSecretkey, "k", "", "secret key for HMAC calculation")
+	fs.StringVar(&opts.AuditFilePath, "audit-file", "", "path to file for writing audit events")
+	fs.StringVar(&opts.AuditURL, "audit-url", "", "remote endpoint URL for sending audit events")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
@@ -60,6 +66,8 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
 		config.DatabaseURL(opts.DatabaseDSN),
 		config.HMACSecretKey(opts.HMACSecretkey),
+		config.AuditFilePath(opts.AuditFilePath),
+		config.AuditURL(opts.AuditURL),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

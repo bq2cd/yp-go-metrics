@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+version: "2"
+
+linters:
+  enable:
+    - godoclint
+    - govet
+    - ineffassign
+    - staticcheck
+    - testifylint
+  disable:
+    - errcheck
+    - unused
+  settings:
+    godoclint:
+      default: all
+      options:
+        max-len:
+          length: 120
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - godoclint
+      - linters:
+          - staticcheck
+        text: "QF1001:"
+      - linters:
+          - staticcheck
+        text: "QF1008:"
+    paths:
+      - cmd/test/
+
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/bq2cd/yp-go-metrics

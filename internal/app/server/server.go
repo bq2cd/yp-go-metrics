@@ -34,29 +34,64 @@ func (f *listenerFactory) Create(ctx context.Context, addr string) (net.Listener
 }
 
 type server struct {
-	logger      log.Logger
-	config      config.Config
-	router      http.Handler
-	snapshotter service.MetricSnapshotter
-	batchWriter service.StorageBatchWriter
-	lnFactory   ListenerFactory
+	logger         log.Logger
+	config         config.Config
+	router         http.Handler
+	snapshotter    service.MetricSnapshotter
+	batchWriter    service.StorageBatchWriter
+	auditProcessor service.AuditEventProcessor
+	lnFactory      ListenerFactory
 }
 
 // New creates an instance of a server process that runs
 // an HTTP server and other background tasks.
-func New(logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter, batchWriter service.StorageBatchWriter) *server {
+func New(logger log.Logger, cfg config.Config, router http.Handler, snapshotter service.MetricSnapshotter, batchWriter service.StorageBatchWriter, auditProcessor service.AuditEventProcessor) *server {
 	l := logger
 	if l == nil {
 		l = log.NewNoopLogger()
 	}
 	return &server{
-		logger:      l.With(log.Str("subsystem", "server")),
-		config:      cfg,
-		router:      router,
-		snapshotter: snapshotter,
-		batchWriter: batchWriter,
-		lnFactory:   &listenerFactory{},
+		logger:         l.With(log.Str("subsystem", "server")),
+		config:         cfg,
+		router:         router,
+		snapshotter:    snapshotter,
+		batchWriter:    batchWriter,
+		auditProcessor: auditProcessor,
+		lnFactory:      &listenerFactory{},
 	}
+}
+
+// Run launches main loop of the server focused on the following things:
+// (1) listening on provided address and serving incoming HTTP requests;
+// (2) processing batch metric writes via [service.StorageBatchWriter];
+// (2) periodically dumping received metrics to disk (if configured);
+func (s *server) Run(ctx context.Context) error {
+	s.logger.Info().Any("config", s.config).Msg("starting with config")
+
+	wg := new(sync.WaitGroup)
+	errCh := make(chan error, 2)
+
+	s.launchBatchWriter(ctx, wg)
+	s.launchAuditProcessor(ctx, wg)
+
+	s.tryLoadMetrics(ctx)
+
+	s.launchHTTPServer(ctx, wg, errCh)
+	s.launchMetricDumper(ctx, wg, errCh)
+
+	go func() {
+		wg.Wait()
+		close(errCh)
+	}()
+
+	var errFinal error
+	for err := range errCh {
+		errFinal = errors.Join(errFinal, err)
+	}
+
+	errFinal = errors.Join(errFinal, s.performFinalDump())
+
+	return errFinal
 }
 
 func (s *server) listenAndServe(ctx context.Context) error {
@@ -183,6 +218,15 @@ func (s *server) launchBatchWriter(ctx context.Context, wg *sync.WaitGroup) {
 	}()
 }
 
+func (s *server) launchAuditProcessor(ctx context.Context, wg *sync.WaitGroup) {
+	s.logger.Info().Msg("launching audit processor")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.auditProcessor.StartProcessing(ctx)
+	}()
+}
+
 func (s *server) launchMetricDumper(ctx context.Context, wg *sync.WaitGroup, errCh chan error) {
 	s.logger.Info().Msg("launching metric dumper")
 	wg.Add(1)
@@ -192,38 +236,15 @@ func (s *server) launchMetricDumper(ctx context.Context, wg *sync.WaitGroup, err
 	}()
 }
 
-// Run launches main loop of the server focused on the following things:
-// (1) listening on provided address and serving incoming HTTP requests;
-// (2) processing batch metric writes via [service.StorageBatchWriter];
-// (2) periodically dumping received metrics to disk (if configured);
-func (s *server) Run(ctx context.Context) error {
-	s.logger.Info().Any("config", s.config).Msg("starting with config")
-
-	wg := new(sync.WaitGroup)
-	errCh := make(chan error, 2)
-
-	s.launchBatchWriter(ctx, wg)
-
-	s.tryLoadMetrics(ctx)
-
-	s.launchHTTPServer(ctx, wg, errCh)
-	s.launchMetricDumper(ctx, wg, errCh)
-
-	go func() {
-		wg.Wait()
-		close(errCh)
-	}()
-
-	var errFinal error
-	for err := range errCh {
-		errFinal = errors.Join(errFinal, err)
+func (s *server) performFinalDump() error {
+	if s.config.MetricStoreInterval == 0 {
+		// metrics were being dumped on every write,
+		// so nothing to dump here.
+		return nil
 	}
 
-	// if metrics were not being dumped on every write,
-	// perform final dump (aka "flush") before shutdown.
-	if s.config.MetricStoreInterval > 0 {
-		errFinal = errors.Join(errFinal, s.dumpMetrics(ctx))
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
+	defer cancel()
 
-	return errFinal
+	return s.dumpMetrics(ctx)
 }

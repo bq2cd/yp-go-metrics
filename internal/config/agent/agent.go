@@ -13,6 +13,7 @@ import (
 var (
 	reURLCheck = regexp.MustCompile("^[^:/]+://.+")
 
+	// ErrInvalidConfig is returned by [Config.Validate] when config is invalid.
 	ErrInvalidConfig = errors.New("invalid config")
 )
 

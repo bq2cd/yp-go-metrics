@@ -8,45 +8,70 @@ import (
 )
 
 // Field type constants
+
 const (
 	_ FieldType = iota
+	// FieldTypeAny represents field type for Any.
 	FieldTypeAny
+	// FieldTypeBool represents field type for Bool.
 	FieldTypeBool
+	// FieldTypeInt represents field type for Int.
 	FieldTypeInt
+	// FieldTypeFloat represents field type for Float.
 	FieldTypeFloat
+	// FieldTypeStr represents field type for Str.
 	FieldTypeStr
+	// FieldTypeErr represents field type for Err.
 	FieldTypeErr
+	// FieldTypeDur represents field type for Dur.
 	FieldTypeDur
+	// FieldTypeTime represents field type for Time.
 	FieldTypeTime
 )
 
 // Field constructors
+
+// Any creates new field of type [FieldTypeAny].
 func Any(key string, value any) Field {
 	return Field{Key: key, Type: FieldTypeAny, Value: value}
 }
+
+// Bool creates new field of type [FieldTypeBool].
 func Bool(key string, value bool) Field {
 	return Field{Key: key, Type: FieldTypeBool, Value: value}
 }
+
+// Int creates new field of type [FieldTypeInt].
 func Int(key string, value int) Field {
 	return Field{Key: key, Type: FieldTypeInt, Value: value}
 }
+
+// Float creates new field of type [FieldTypeFloat].
 func Float(key string, value float64) Field {
 	return Field{Key: key, Type: FieldTypeFloat, Value: value}
 }
+
+// Str creates new field of type [FieldTypeStr].
 func Str(key string, value string) Field {
 	return Field{Key: key, Type: FieldTypeStr, Value: value}
 }
+
+// Err creates new field of type [FieldTypeErr].
 func Err(key string, value error) Field {
 	return Field{Key: key, Type: FieldTypeErr, Value: value}
 }
+
+// Dur creates new field of type [FieldTypeDur].
 func Dur(key string, value time.Duration) Field {
 	return Field{Key: key, Type: FieldTypeDur, Value: value}
 }
+
+// Time creates new field of type [FieldTypeTime].
 func Time(key string, value time.Time) Field {
 	return Field{Key: key, Type: FieldTypeTime, Value: value}
 }
 
-// EventFieldAdder interface for adding fields to EventBuilder
+// EventFieldAdder is an interface for adding fields to [EventBuilder].
 type EventFieldAdder interface {
 	Any(key string, value any) EventBuilder
 	Bool(key string, value bool) EventBuilder
@@ -60,41 +85,57 @@ type EventFieldAdder interface {
 
 // eventBuilder methods to implement EventFieldAdder
 
+// Any adds field of type [FieldTypeAny] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Any(key string, value any) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeAny, Value: value})
 	return e
 }
 
+// Bool adds field of type [FieldTypeBool] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Bool(key string, value bool) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeBool, Value: value})
 	return e
 }
 
+// Int adds field of type [FieldTypeInt] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Int(key string, value int) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeInt, Value: value})
 	return e
 }
 
+// Float adds field of type [FieldTypeFloat] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Float(key string, value float64) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeFloat, Value: value})
 	return e
 }
 
+// Str adds field of type [FieldTypeStr] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Str(key string, value string) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeStr, Value: value})
 	return e
 }
 
+// Err adds field of type [FieldTypeErr] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Err(key string, value error) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeErr, Value: value})
 	return e
 }
 
+// Dur adds field of type [FieldTypeDur] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Dur(key string, value time.Duration) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeDur, Value: value})
 	return e
 }
 
+// Time adds field of type [FieldTypeTime] to the current event builder
+// and returns it back.
 func (e *eventBuilder) Time(key string, value time.Time) EventBuilder {
 	e.addField(Field{Key: key, Type: FieldTypeTime, Value: value})
 	return e

@@ -7,7 +7,9 @@ import (
 )
 
 var (
-	ErrMissingSecretKey  = errors.New("secret key is missing")
+	// ErrMissingSecretKey is returned by [HMACSigner.Sign] if there is not secret key configured.
+	ErrMissingSecretKey = errors.New("secret key is missing")
+	// ErrSignatureMismatch is returned by [HMACSigner.Verify] if presumably signed data does not match expected signature.
 	ErrSignatureMismatch = errors.New("signature mismatch")
 )
 

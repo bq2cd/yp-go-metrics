@@ -20,6 +20,8 @@ var (
 	supportedMetrics map[string]model.MetricType
 )
 
+// GetSupportedMetrics returns a map of metric ID to metric type for all possible
+// metrics that can be returned by this source.
 func GetSupportedMetrics() map[string]model.MetricType {
 	once.Do(func() {
 		supportedMetrics = map[string]model.MetricType{

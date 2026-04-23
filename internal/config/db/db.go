@@ -7,11 +7,14 @@ import (
 )
 
 const (
+	// DriverNone represents empty (missing) database driver.
 	DriverNone = Driver("")
-	DriverPgx  = Driver("pgx")
+	// DriverPgx represents PostgreSQL database driver.
+	DriverPgx = Driver("pgx")
 )
 
 var (
+	// ErrUnsupportedDBType is returned by [New] if provided database type is not supported.
 	ErrUnsupportedDBType = errors.New("unsupported database type")
 
 	supportedDBTypes = map[string]bool{
@@ -20,6 +23,7 @@ var (
 	}
 )
 
+// Driver represents database connection driver.
 type Driver string
 
 // Config represents database connection details.

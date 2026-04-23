@@ -1,0 +1,46 @@
+[tools]
+go = "1.24"
+golangci-lint = "latest"
+"go:golang.org/x/tools/cmd/godoc" = "latest"
+
+[tasks.fmt]
+description = "Format Go code"
+run = ["golangci-lint fmt"]
+
+[tasks.generate]
+description = "Generate Go code"
+run = ["go generate ./..."]
+
+[tasks.lint]
+description = "Lint Go code"
+run = ["golangci-lint run"]
+
+[tasks.test-dir]
+hide = true
+usage = '''
+arg "<target_dir>" help="Run tests only for this directory"
+arg "[go_test_args]" var=#true
+'''
+env = { "INTEGRATION" = "1" }
+run = "go test -failfast -race {{ usage.target_dir }} {{ usage.go_test_args | default(value=[]) | join(sep=' ') }}"
+
+[tasks.test]
+description = "Test Go code"
+run = [{ task = "test-dir ./..." }]
+
+[tasks.coverage]
+description = "Generate coverage for Go tests"
+env = { "INTEGRATION" = "1" }
+run = [
+  "go test -failfast -cover -coverpkg=./... -coverprofile=coverage.out ./...",
+  "go tool cover -html=coverage.out",
+]
+
+[tasks.pre-push]
+description = "Validate Go code before pushing/creating PR"
+run = [
+  { task = "generate" },
+  { task = "fmt" },
+  { task = "lint" },
+  { task = "test" },
+]

@@ -3,10 +3,11 @@ package source
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/extra"
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/memstats"
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source/psutil"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestDefaultSources(t *testing.T) {

@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
-	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/assert"
+
+	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 )
 
 func TestLaunchEmbeddedPostgres(t *testing.T) {

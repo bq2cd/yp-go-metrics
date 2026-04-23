@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// NewZapLogger creates an instance of [log.Logger] based on [zap.Logger] implementation.
 func NewZapLogger(cfg zap.Config) (Logger, error) {
 	l, err := cfg.Build(zap.AddCallerSkip(2)) // 1 for loggerImpl.Log, 1 for EventBuilder.Msg/Send
 	if err != nil {

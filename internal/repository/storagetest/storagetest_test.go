@@ -3,10 +3,11 @@ package storagetest
 import (
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
-	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 )
 
 func TestNewMockStorage(t *testing.T) {

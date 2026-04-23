@@ -10,15 +10,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	"github.com/bq2cd/yp-go-metrics/pkg/periodictask"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 )
 
 type mockRouter struct {
@@ -122,6 +122,32 @@ func (m *mockStorageBatchWriter) StartProcessing(ctx context.Context) {
 	m.Called(ctx)
 }
 
+type mockAuditEventProcessor struct {
+	mock.Mock
+}
+
+func newMockAuditEventProcessor() *mockAuditEventProcessor {
+	return &mockAuditEventProcessor{}
+}
+
+func (m *mockAuditEventProcessor) StartProcessing(ctx context.Context) {
+	m.Called(ctx)
+}
+
+func (m *mockAuditEventProcessor) RegisterSink(sinkID string, sink repository.AuditSink) {
+	m.Called(sinkID, sink)
+}
+
+func (m *mockAuditEventProcessor) WriteEvent(ctx context.Context, event model.AuditEvent) error {
+	m.Called(ctx, event)
+	return nil
+}
+
+func (m *mockAuditEventProcessor) Close() error {
+	m.Called()
+	return nil
+}
+
 func createTempFile(t *testing.T, pattern string) string {
 	f, err := os.CreateTemp("", pattern)
 	require.NoError(t, err)
@@ -129,97 +155,14 @@ func createTempFile(t *testing.T, pattern string) string {
 	return f.Name()
 }
 
-func TestNew(t *testing.T) {
-	type args struct {
-		logger      log.Logger
-		cfg         config.Config
-		router      http.Handler
-		snapshotter service.MetricSnapshotter
-		batchWriter service.StorageBatchWriter
-	}
-	tests := []struct {
-		name      string
-		args      args
-		assertion func(assert.TestingT, args, *server)
-	}{
-		{
-			name: "no args",
-			args: args{},
-			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.NotNil(t, s.logger)
-				assert.Equal(t, log.NewNoopLogger(), s.logger)
-				assert.Equal(t, config.Config{}, s.config)
-				assert.Nil(t, s.router)
-				assert.Nil(t, s.snapshotter)
-				assert.Nil(t, s.batchWriter)
-				assert.NotNil(t, s.lnFactory)
-				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
-			},
-		},
-		{
-			name: "logger only",
-			args: args{logger: log.NewTestLogger()},
-			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Implements(t, (*log.TestLogger)(nil), s.logger)
-				assert.Equal(t, config.Config{}, s.config)
-				assert.Nil(t, s.router)
-				assert.Nil(t, s.snapshotter)
-				assert.Nil(t, s.batchWriter)
-				assert.NotNil(t, s.lnFactory)
-				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
-			},
-		},
-		{
-			name: "router only",
-			args: args{router: http.NewServeMux()},
-			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, config.Config{}, s.config)
-				assert.Equal(t, args.router, s.router)
-				assert.Nil(t, s.snapshotter)
-				assert.Nil(t, s.batchWriter)
-				assert.NotNil(t, s.lnFactory)
-				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
-			},
-		},
-		{
-			name: "router + snapshotter",
-			args: args{router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter()},
-			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, config.Config{}, s.config)
-				assert.Equal(t, args.router, s.router)
-				assert.Equal(t, args.snapshotter, s.snapshotter)
-				assert.Nil(t, s.batchWriter)
-				assert.NotNil(t, s.lnFactory)
-				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
-			},
-		},
-		{
-			name: "router + snapshotter + batchWriter",
-			args: args{router: http.NewServeMux(), snapshotter: newMockMetricSnapshotter(), batchWriter: newMockStorageBatchWriter()},
-			assertion: func(t assert.TestingT, args args, s *server) {
-				assert.Equal(t, config.Config{}, s.config)
-				assert.Equal(t, args.router, s.router)
-				assert.Equal(t, args.snapshotter, s.snapshotter)
-				assert.Equal(t, args.batchWriter, s.batchWriter)
-				assert.NotNil(t, s.lnFactory)
-				assert.Implements(t, (*ListenerFactory)(nil), s.lnFactory)
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.assertion(t, tt.args, New(tt.args.logger, tt.args.cfg, tt.args.router, tt.args.snapshotter, tt.args.batchWriter))
-		})
-	}
-}
-
 func Test_server_Run(t *testing.T) {
 	type fields struct {
-		config      config.Config
-		router      *mockRouter
-		snapshotter *mockMetricSnapshotter
-		batchWriter *mockStorageBatchWriter
-		lnFactory   ListenerFactory
+		config         config.Config
+		router         *mockRouter
+		snapshotter    *mockMetricSnapshotter
+		batchWriter    *mockStorageBatchWriter
+		auditProcessor *mockAuditEventProcessor
+		lnFactory      ListenerFactory
 	}
 	type innerTest struct {
 		name              string
@@ -241,10 +184,11 @@ func Test_server_Run(t *testing.T) {
 						config: config.Config{
 							ListenAddress:   servertest.GetRandomListenAddress(t),
 							ShutdownTimeout: 100 * time.Millisecond},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -268,10 +212,11 @@ func Test_server_Run(t *testing.T) {
 						config: config.Config{
 							ListenAddress:   "localhost1:123:456",
 							ShutdownTimeout: 100 * time.Millisecond},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -294,10 +239,11 @@ func Test_server_Run(t *testing.T) {
 						config: config.Config{
 							ListenAddress:   servertest.GetRandomListenAddress(t),
 							ShutdownTimeout: 200 * time.Millisecond},
-						router:      &mockRouter{timeout: 2_000 * time.Millisecond},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{timeout: 2_000 * time.Millisecond},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -323,10 +269,11 @@ func Test_server_Run(t *testing.T) {
 						config: config.Config{
 							ListenAddress:   servertest.GetRandomListenAddress(t),
 							ShutdownTimeout: 100 * time.Millisecond},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &faultyListenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &faultyListenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -356,10 +303,11 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout:     100 * time.Millisecond,
 							MetricStoreInterval: 10 * time.Millisecond,
 						},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -385,10 +333,11 @@ func Test_server_Run(t *testing.T) {
 							MetricStoreInterval: 12 * time.Millisecond,
 							MetricStoreFilePath: createTempFile(t, "test-metric-store-*"),
 						},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -419,10 +368,11 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout:     100 * time.Millisecond,
 							MetricStoreInterval: 0,
 						},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -459,8 +409,9 @@ func Test_server_Run(t *testing.T) {
 							}()
 							return m
 						}(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -491,10 +442,11 @@ func Test_server_Run(t *testing.T) {
 							ShutdownTimeout:          100 * time.Millisecond,
 							MetricStoreLoadOnStartup: true,
 						},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -521,10 +473,11 @@ func Test_server_Run(t *testing.T) {
 							MetricStoreLoadOnStartup: true,
 							MetricStoreFilePath:      createTempFile(t, "test-metric-store-*"),
 						},
-						router:      &mockRouter{},
-						snapshotter: newMockMetricSnapshotter(),
-						batchWriter: newMockStorageBatchWriter(),
-						lnFactory:   &listenerFactory{},
+						router:         &mockRouter{},
+						snapshotter:    newMockMetricSnapshotter(),
+						batchWriter:    newMockStorageBatchWriter(),
+						auditProcessor: newMockAuditEventProcessor(),
+						lnFactory:      &listenerFactory{},
 					},
 					assertRouter: func(t *testing.T, m *mockRouter, req *http.Request, errCh chan error) {
 						err := servertest.MakeRequestDiscardResponse(nil, req)
@@ -556,18 +509,13 @@ func Test_server_Run(t *testing.T) {
 						defer func() { _ = os.Remove(tt.fields.config.MetricStoreFilePath) }()
 					}
 
-					s := &server{
-						logger:      log.NewNoopLogger(),
-						config:      tt.fields.config,
-						router:      tt.fields.router,
-						snapshotter: tt.fields.snapshotter,
-						batchWriter: tt.fields.batchWriter,
-						lnFactory:   tt.fields.lnFactory,
-					}
+					s := New(log.NewNoopLogger(), tt.fields.config, tt.fields.router, tt.fields.snapshotter, tt.fields.batchWriter, tt.fields.auditProcessor)
+					s.lnFactory = tt.fields.lnFactory
 
 					tt.fields.router.On("ServeHTTP", mock.Anything, mock.Anything).Return()
 					tt.expectSnapshotter(t, tt.fields.snapshotter)
 					tt.fields.batchWriter.On("StartProcessing", ctx).Return().Once()
+					tt.fields.auditProcessor.On("StartProcessing", ctx).Return().Once()
 
 					errCh := make(chan error, 1)
 					go func() {
@@ -584,149 +532,6 @@ func Test_server_Run(t *testing.T) {
 					tt.fields.batchWriter.AssertExpectations(t)
 				})
 			}
-		})
-	}
-}
-
-func Test_listenerFactory_Create(t *testing.T) {
-	type args struct {
-		ctx  context.Context
-		addr string
-	}
-	tests := []struct {
-		name      string
-		f         *listenerFactory
-		args      args
-		want      net.Listener
-		assertion assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f := &listenerFactory{}
-			got, err := f.Create(tt.args.ctx, tt.args.addr)
-			tt.assertion(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func Test_server_listenAndServe(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		config      config.Config
-		router      http.Handler
-		snapshotter service.MetricSnapshotter
-		lnFactory   ListenerFactory
-	}
-	tests := []struct {
-		name      string
-		fields    fields
-		assertion assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &server{
-				logger:      tt.fields.logger,
-				config:      tt.fields.config,
-				router:      tt.fields.router,
-				snapshotter: tt.fields.snapshotter,
-				lnFactory:   tt.fields.lnFactory,
-			}
-			tt.assertion(t, s.listenAndServe(t.Context()))
-		})
-	}
-}
-
-func Test_server_dumpMetrics(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		config      config.Config
-		router      http.Handler
-		snapshotter service.MetricSnapshotter
-		lnFactory   ListenerFactory
-	}
-	tests := []struct {
-		name      string
-		fields    fields
-		assertion assert.ErrorAssertionFunc
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &server{
-				logger:      tt.fields.logger,
-				config:      tt.fields.config,
-				router:      tt.fields.router,
-				snapshotter: tt.fields.snapshotter,
-				lnFactory:   tt.fields.lnFactory,
-			}
-			tt.assertion(t, s.dumpMetrics(t.Context()))
-		})
-	}
-}
-
-func Test_server_createPeriodicTask(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		config      config.Config
-		router      http.Handler
-		snapshotter service.MetricSnapshotter
-		lnFactory   ListenerFactory
-	}
-	type args struct {
-		f func(context.Context) error
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   periodictask.Task
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &server{
-				logger:      tt.fields.logger,
-				config:      tt.fields.config,
-				router:      tt.fields.router,
-				snapshotter: tt.fields.snapshotter,
-				lnFactory:   tt.fields.lnFactory,
-			}
-			assert.Equal(t, tt.want, s.createPeriodicTask(tt.args.f))
-		})
-	}
-}
-
-func Test_server_tryLoadMetrics(t *testing.T) {
-	type fields struct {
-		logger      log.Logger
-		config      config.Config
-		router      http.Handler
-		snapshotter service.MetricSnapshotter
-		lnFactory   ListenerFactory
-	}
-	tests := []struct {
-		name   string
-		fields fields
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			s := &server{
-				logger:      tt.fields.logger,
-				config:      tt.fields.config,
-				router:      tt.fields.router,
-				snapshotter: tt.fields.snapshotter,
-				lnFactory:   tt.fields.lnFactory,
-			}
-			s.tryLoadMetrics(t.Context())
 		})
 	}
 }

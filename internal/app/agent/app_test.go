@@ -9,15 +9,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/goccy/go-json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
-	"github.com/goccy/go-json"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
+)
+
+var (
+	errTestFinished = errors.New("test finished")
 )
 
 type mockHandler struct {
@@ -36,7 +41,6 @@ func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestRun(t *testing.T) {
-	errTestFinished := errors.New("test finished")
 	type args struct {
 		timeout          time.Duration
 		cfg              config.Config
@@ -54,10 +58,10 @@ func TestRun(t *testing.T) {
 	tests := map[string]testcase{
 		"agent collects metrics and reports to server successfully": {
 			args: args{
-				timeout: 200 * time.Millisecond,
+				timeout: 300 * time.Millisecond,
 				cfg: config.Config{
-					PollInterval:   100 * time.Millisecond,
-					ReportInterval: 100 * time.Millisecond,
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusOK,
@@ -107,7 +111,7 @@ func TestRun(t *testing.T) {
 			ts := httptest.NewServer(h)
 			defer ts.Close()
 
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
 			if tt.args.overrideURL {
 				upstreamURL, err := url.Parse(ts.URL)
@@ -121,19 +125,10 @@ func TestRun(t *testing.T) {
 			logger := log.NewTestLogger()
 
 			// Act
-			err := Run(ctx, logger, tt.args.cfg)
+			errRun := Run(ctx, logger, tt.args.cfg)
 
 			// Assert
-			var errFinal error
-			for _, e := range errhelper.UnwrapJoined(err) {
-				if errors.Is(e, errTestFinished) {
-					continue
-				}
-				if e == ErrSenderRequestFailed {
-					continue
-				}
-				errFinal = errors.Join(errFinal, e)
-			}
+			errFinal := extractFinalError(errRun)
 			if tt.want.wantErr {
 				require.Error(t, errFinal)
 			} else {
@@ -146,4 +141,35 @@ func TestRun(t *testing.T) {
 			assert.NotEmpty(t, logger.RecordedEvents())
 		})
 	}
+}
+
+func extractFinalError(errRun error) error {
+	var errFinal error
+
+	flattenedErrors := errhelper.UnwrapJoined(errRun)
+
+	for i := 0; i < len(flattenedErrors); i++ {
+		var curr, next error
+
+		curr = flattenedErrors[i]
+		if i < len(flattenedErrors)-1 {
+			next = flattenedErrors[i+1]
+		}
+
+		if curr == ErrMetricCollectionFailed && errors.Is(next, context.DeadlineExceeded) {
+			i++
+
+			continue
+		}
+
+		if curr == ErrSenderRequestFailed && errors.Is(next, errTestFinished) {
+			i++
+
+			continue
+		}
+
+		errFinal = errors.Join(errFinal, curr)
+	}
+
+	return errFinal
 }

@@ -3,8 +3,9 @@ package sqlstorage
 import (
 	"testing"
 
-	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/bq2cd/yp-go-metrics/internal/model"
 )
 
 func Test_sqlItemCounter_GetID(t *testing.T) {
