@@ -13,6 +13,7 @@ type TestLogEventSet []TestLogEvent
 // Its primary purpose is to be used in tests to record logging events.
 type TestLogger interface {
 	Logger
+
 	RecordedEvents() TestLogEventSet
 }
 
@@ -47,6 +48,7 @@ func NewTestLogger() TestLogger {
 
 type testLogger struct {
 	*baseLogger
+
 	recorder *testLogEventRecorder
 }
 

@@ -369,6 +369,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 
 type mockServer struct {
 	mock.Mock
+
 	mu sync.RWMutex
 }
 

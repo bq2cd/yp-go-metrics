@@ -12,6 +12,7 @@ import (
 
 type mockWriteCloser struct {
 	mock.Mock
+
 	writeErr error
 	closeErr error
 }
@@ -27,6 +28,7 @@ func (m *mockWriteCloser) Close() error {
 
 type mockReadCloser struct {
 	mock.Mock
+
 	readErr  error
 	closeErr error
 }

@@ -14,6 +14,7 @@ import (
 
 type valueHandler struct {
 	baseHandler
+
 	metrics service.MetricStorer
 }
 

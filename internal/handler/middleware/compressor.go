@@ -14,6 +14,7 @@ import (
 
 type compressorResponseWriter struct {
 	http.ResponseWriter
+
 	compressor      io.WriteCloser
 	contentEncoding httpheaders.ContentEncoding
 	_shouldCompress bool

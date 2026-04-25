@@ -27,6 +27,7 @@ var (
 
 type mockHandler struct {
 	mock.Mock
+
 	numCalls   int
 	statusCode int
 }

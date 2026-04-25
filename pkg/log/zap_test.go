@@ -542,6 +542,7 @@ func Test_zapLogger_with(t *testing.T) {
 
 type mockCore struct {
 	mock.Mock
+
 	syncError bool
 }
 

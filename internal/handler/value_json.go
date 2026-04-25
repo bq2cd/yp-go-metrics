@@ -13,6 +13,7 @@ import (
 
 type valueJSONHandler struct {
 	baseHandler
+
 	metrics   service.MetricStorer
 	responder metricJSONResponder
 }
@@ -37,7 +38,8 @@ func (h *valueJSONHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m, err := h.metrics.RetrieveSingle(r.Context(), needle.Key())
 	switch err {
 	case nil:
-		if err := h.responder.WriteResponse(w, m); err != nil {
+		err = h.responder.WriteResponse(w, m)
+		if err != nil {
 			l.Error().WithErr(err).Any("metric", m).Msg("json encoder failed")
 		}
 	case service.ErrMetricKeyIsEmpty:
