@@ -1,0 +1,6 @@
+{{- $ref := renderRefName .RefName .IndirectionLevel -}}
+{{ $ref }} =
+{{- if .IndirectionLevel -}}({{- end -}}
+{{- $ref -}}
+{{- if .IndirectionLevel -}}){{- end -}}
+[:0]

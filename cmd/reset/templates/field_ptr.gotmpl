@@ -1,0 +1,3 @@
+if {{ renderRefName .RefName .IndirectionLevel }} != nil {
+ {{ renderField .RefName .Type.Target (add .IndirectionLevel 1) -}}
+}

@@ -1,0 +1,10 @@
+{{- $ref := renderRefName .RefName (add .IndirectionLevel -1) -}}
+{{- if .IndirectionLevel -}}
+if v, ok := interface{}({{ $ref }}).(interface{ Reset() }); ok { // types.Struct (pointer)
+ v.Reset()
+}
+{{- else -}}
+if v, ok := interface{}(&{{ $ref }}).(interface{ Reset() }); ok { // types.Struct
+ v.Reset()
+}
+{{- end -}}
