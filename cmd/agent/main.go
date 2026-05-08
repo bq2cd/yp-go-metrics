@@ -6,7 +6,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -22,6 +21,12 @@ const (
 	defaultPollIntervalSec   = 2
 	defaultReportIntervalSec = 10
 	defaultSenderPoolSize    = 0 // sender pool is disabled, sending done serially
+)
+
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
 )
 
 type cliOptions struct {
@@ -69,17 +74,27 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	return *cfg, nil
 }
 
-func run(ctx context.Context, args []string, stderr io.Writer) error {
+func run(ctx context.Context, args []string, terminalConfig cli.TerminalConfig) error {
 	app := cli.App[config.Config]{
 		Name:          "agent",
 		ParseArgs:     parseArgs,
 		LaunchProcess: launcher.Run,
+		BuildInfo: cli.BuildInfo{
+			Version: buildVersion,
+			Date:    buildDate,
+			Commit:  buildCommit,
+		},
+		TerminalConfig: terminalConfig,
 	}
-	return app.Run(ctx, logger.NewProduction(), args, stderr)
+
+	return app.Run(ctx, logger.NewProduction(), args)
 }
 
 func main() {
-	err := run(context.Background(), os.Args[1:], os.Stderr)
+	err := run(context.Background(), os.Args[1:], cli.TerminalConfig{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	})
 	if err != nil {
 		log.Fatalf("failed to start agent: %v", err)
 	}

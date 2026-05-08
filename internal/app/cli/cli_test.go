@@ -140,8 +140,12 @@ func TestRun(t *testing.T) {
 
 	for tname, tc := range tests {
 		t.Run(tname, func(t *testing.T) {
+			stdout, stderr := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
+
+			app.TerminalConfig.Stdout = stdout
+			app.TerminalConfig.Stderr = stderr
+
 			logger := log.NewTestLogger()
-			stderr := bytes.NewBuffer(nil)
 
 			if tc.timeout == 0 {
 				tc.timeout = defaultTimeout
@@ -153,10 +157,12 @@ func TestRun(t *testing.T) {
 			defer cancel()
 
 			// Act
-			err := app.Run(ctx, logger, tc.args, stderr)
+			err := app.Run(ctx, logger, tc.args)
 
 			// Assert
 			tc.assertFn(t, err)
+
+			assert.Equal(t, "Build version: N/A\nBuild date: N/A\nBuild commit: N/A\n", stdout.String())
 		})
 	}
 }
