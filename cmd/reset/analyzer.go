@@ -145,7 +145,7 @@ func (pa *packageAnalyzer) analyzeTypeSpec(spec *ast.TypeSpec, declDoc *ast.Comm
 func (pa *packageAnalyzer) populateStructFields(sobj *Struct, astStruct *ast.StructType) {
 	stype, ok := pa.types.TypeOf(astStruct).(*types.Struct)
 	if !ok {
-		slog.Debug("package analyzer: cannot find type for AST struct", slog.Any("struct", astStruct))
+		slog.Warn("package analyzer: cannot find type for AST struct", slog.Any("struct", astStruct))
 
 		return
 	}
@@ -204,6 +204,8 @@ func extractStructReceiver(ident *ast.Ident) string {
 
 	name := []rune(ident.Name)
 	if len(name) == 0 { // unlikely, but better to prevent index error below
+		slog.Warn("package analyzer: AST ident has empty name", slog.Any("ident", ident))
+
 		return ""
 	}
 
