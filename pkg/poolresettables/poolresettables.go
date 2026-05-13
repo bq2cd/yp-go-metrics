@@ -59,18 +59,20 @@ func WithInitialCapacity(capacity uint) option.Option[poolConfig] {
 }
 
 // Put stores provided [Resettable] object into the pool (`nil` objects are ignored).
-// The object's `Reset()` method is guaranteed to be called in a concurrently-safe manner
-// (that is, protected by [Pool]'s mutex) before the object is stored in the pool.
+// The object's `Reset()` method is called before the object is stored in the pool.
 // The caller **must not** use the object directly after it has been [Put] into the pool.
 func (p *Pool[T, R]) Put(obj R) {
 	if obj == nil {
 		return
 	}
 
+	// It is extremely unlikely that the same object can be [Put] into the pool from
+	// multiple goroutines, so it should be safe to call [Reset] without mutex protection.
+	// The object can implement its own concurrency safeguards internally, if that is needed.
+	obj.Reset()
+
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
-	obj.Reset()
 
 	p.objects = append(p.objects, obj)
 }
