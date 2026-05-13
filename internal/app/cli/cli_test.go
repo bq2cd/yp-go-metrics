@@ -41,19 +41,14 @@ func TestRun(t *testing.T) {
 	tempFactory := servertest.NewTempFileFactory(t)
 	t.Cleanup(tempFactory.RemoveAll)
 
-	app := cli.App[FakeConfig]{
-		Name:          "fake-app",
-		ParseArgs:     FakeParseArgsFn,
-		LaunchProcess: FakeLaunchProcessFn,
-	}
-
 	defaultTimeout := 20 * time.Millisecond
 
 	type testcase struct {
-		timeout  time.Duration
-		args     []string
-		env      map[string]string
-		assertFn func(*testing.T, error)
+		timeout   time.Duration
+		args      []string
+		env       map[string]string
+		buildInfo cli.BuildInfo
+		assertFn  func(*testing.T, error)
 	}
 
 	tests := map[string]testcase{
@@ -136,14 +131,33 @@ func TestRun(t *testing.T) {
 				},
 			}
 		}(),
+		"build info overrides": {
+			args: []string{},
+			buildInfo: cli.BuildInfo{
+				Version: "1.2.3",
+				Date:    "now",
+				Commit:  "abcdef0123",
+			},
+			assertFn: func(t *testing.T, err error) {
+				require.ErrorIs(t, err, ErrAppShuttingDown)
+			},
+		},
 	}
 
 	for tname, tc := range tests {
 		t.Run(tname, func(t *testing.T) {
 			stdout, stderr := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 
-			app.TerminalConfig.Stdout = stdout
-			app.TerminalConfig.Stderr = stderr
+			app := cli.App[FakeConfig]{
+				Name:          "fake-app",
+				ParseArgs:     FakeParseArgsFn,
+				LaunchProcess: FakeLaunchProcessFn,
+				TerminalConfig: cli.TerminalConfig{
+					Stdout: stdout,
+					Stderr: stderr,
+				},
+				BuildInfo: tc.buildInfo,
+			}
 
 			logger := log.NewTestLogger()
 
@@ -162,7 +176,7 @@ func TestRun(t *testing.T) {
 			// Assert
 			tc.assertFn(t, err)
 
-			assert.Equal(t, "Build version: N/A\nBuild date: N/A\nBuild commit: N/A\n", stdout.String())
+			assertBuildInfoPrinted(t, tc.buildInfo, stdout.String())
 		})
 	}
 }
@@ -174,6 +188,14 @@ func assertFilesExistAndNotEmpty(t *testing.T, files ...string) {
 			assert.Positive(t, stat.Size())
 		}
 	}
+}
+
+func assertBuildInfoPrinted(t *testing.T, want cli.BuildInfo, stdout string) {
+	buf := bytes.NewBuffer(nil)
+
+	want.PrintTo(buf)
+
+	assert.Equal(t, buf.String(), stdout)
 }
 
 func overrideEnv(t *testing.T, env map[string]string) {
