@@ -18,6 +18,7 @@ import (
 // for notifications on new writes (only the fact of the new writes, not the number of them).
 type MetricSnapshotter interface {
 	MetricStorer
+
 	DumpClose(ctx context.Context, w io.WriteCloser) error
 	LoadClose(ctx context.Context, r io.ReadCloser) error
 	C() <-chan struct{}
@@ -25,6 +26,7 @@ type MetricSnapshotter interface {
 
 type metricSnapshotter struct {
 	MetricStorer
+
 	mu          sync.RWMutex
 	encoder     MetricEncoder
 	decoder     MetricDecoder

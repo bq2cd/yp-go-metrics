@@ -30,6 +30,7 @@ import (
 
 type mockSender struct {
 	mock.Mock
+
 	delay        time.Duration
 	wantErr      func(model.Metric) error
 	wantBatchErr func(model.MetricSet) (model.MetricSet, error)
@@ -962,8 +963,8 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
 				require.Truef(t, wantHashHeader.Matches(r.Header), "hash header mismatch")
 				rbody := bytes.NewBuffer(nil)
-				_, err := io.Copy(rbody, r.Body)
-				require.NoError(t, err)
+				_, err2 := io.Copy(rbody, r.Body)
+				require.NoError(t, err2)
 				select {
 				case <-rbodyCh:
 				default:
@@ -993,10 +994,10 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			rbody := <-rbodyCh
 			var body string
 			if shouldCompress {
-				rgz, err := gzip.NewReader(rbody)
-				require.NoError(t, err)
-				b, err := io.ReadAll(rgz)
-				require.NoError(t, err)
+				rgz, err2 := gzip.NewReader(rbody)
+				require.NoError(t, err2)
+				b, err2 := io.ReadAll(rgz)
+				require.NoError(t, err2)
 				body = string(b)
 			} else {
 				body = rbody.String()

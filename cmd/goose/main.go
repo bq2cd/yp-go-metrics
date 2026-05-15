@@ -7,7 +7,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	stdlog "log"
 	"os"
 
@@ -75,17 +74,22 @@ func launchProcess(ctx context.Context, logger log.Logger, opts cliOptions) (err
 	return
 }
 
-func run(ctx context.Context, args []string, stderr io.Writer) error {
+func run(ctx context.Context, args []string, terminalConfig cli.TerminalConfig) error {
 	app := cli.App[cliOptions]{
-		Name:          "goose",
-		ParseArgs:     parseArgs,
-		LaunchProcess: launchProcess,
+		Name:           "goose",
+		ParseArgs:      parseArgs,
+		LaunchProcess:  launchProcess,
+		TerminalConfig: terminalConfig,
 	}
-	return app.Run(ctx, logger.NewDevelopment(), args, stderr)
+
+	return app.Run(ctx, logger.NewDevelopment(), args)
 }
 
 func main() {
-	err := run(context.Background(), os.Args[1:], os.Stderr)
+	err := run(context.Background(), os.Args[1:], cli.TerminalConfig{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	})
 	if err != nil {
 		stdlog.Fatalln(err)
 	}

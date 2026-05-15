@@ -13,6 +13,7 @@ import (
 
 type mockMetricDecoder struct {
 	mock.Mock
+
 	metrics []model.Metric
 	err     error
 }

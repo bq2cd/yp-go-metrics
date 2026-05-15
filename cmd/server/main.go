@@ -6,7 +6,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"os"
 
@@ -23,6 +22,12 @@ const (
 	defaultMetricStoreIntervalSec   = 300
 	defaultMetricStoreFilePath      = "metrics.json"
 	defaultMetricStoreLoadOnStartup = false
+)
+
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
 )
 
 type cliOptions struct {
@@ -80,17 +85,27 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	return *cfg, nil
 }
 
-func run(ctx context.Context, args []string, stderr io.Writer) error {
+func run(ctx context.Context, args []string, terminalConfig cli.TerminalConfig) error {
 	app := cli.App[config.Config]{
 		Name:          "server",
 		ParseArgs:     parseArgs,
 		LaunchProcess: launcher.Run,
+		BuildInfo: cli.BuildInfo{
+			Version: buildVersion,
+			Date:    buildDate,
+			Commit:  buildCommit,
+		},
+		TerminalConfig: terminalConfig,
 	}
-	return app.Run(ctx, logger.NewProduction(), args, stderr)
+
+	return app.Run(ctx, logger.NewProduction(), args)
 }
 
 func main() {
-	err := run(context.Background(), os.Args[1:], os.Stderr)
+	err := run(context.Background(), os.Args[1:], cli.TerminalConfig{
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	})
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

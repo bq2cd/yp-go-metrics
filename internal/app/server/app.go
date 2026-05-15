@@ -58,7 +58,8 @@ func initStorage(ctx context.Context, logger log.Logger, cfg config.Config) (rep
 
 	retrierFactory := retrymgr.NewRetrierFactory(logger, retrymgr.NewSleeper(), retrymgr.NewStrategy1s3s5s)
 
-	if err := applyMigrationsWithRetries(ctx, logger, dbCfg, retrierFactory); err != nil {
+	err = applyMigrationsWithRetries(ctx, logger, dbCfg, retrierFactory)
+	if err != nil {
 		return nil, nil, fmt.Errorf("cannot apply DB migrations: %w", err)
 	}
 

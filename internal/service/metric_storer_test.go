@@ -18,6 +18,7 @@ import (
 
 type mockMetricStorer struct {
 	mock.Mock
+
 	metrics []model.Metric
 	err     error
 }

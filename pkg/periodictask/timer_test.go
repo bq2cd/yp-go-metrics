@@ -13,6 +13,7 @@ import (
 
 type mockTimerTask struct {
 	mock.Mock
+
 	workDuration func() time.Duration
 	wantErr      func() bool
 }

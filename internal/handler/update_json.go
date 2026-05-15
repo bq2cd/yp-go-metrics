@@ -15,6 +15,7 @@ import (
 
 type updateJSONHandler struct {
 	baseHandler
+
 	metrics   service.MetricStorer
 	responder metricJSONResponder
 	auditor   service.MetricAuditor

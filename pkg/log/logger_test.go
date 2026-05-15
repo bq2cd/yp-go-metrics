@@ -10,6 +10,7 @@ import (
 
 type mockLoggerImpl struct {
 	mock.Mock
+
 	fields FieldSet
 }
 

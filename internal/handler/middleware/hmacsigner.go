@@ -14,6 +14,7 @@ import (
 
 type hmacSignerResponseWriter struct {
 	http.ResponseWriter
+
 	data       *bytes.Buffer
 	statusCode int
 }

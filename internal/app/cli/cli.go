@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -15,9 +16,11 @@ import (
 // App represents an application entry point with given name and hook functions
 // to parse CLI flags and launch app's main process.
 type App[C any] struct {
-	Name          string
-	ParseArgs     func(*flag.FlagSet, []string, envparser.Parser) (C, error)
-	LaunchProcess func(context.Context, log.Logger, C) error
+	Name           string
+	ParseArgs      func(*flag.FlagSet, []string, envparser.Parser) (C, error)
+	LaunchProcess  func(context.Context, log.Logger, C) error
+	BuildInfo      BuildInfo
+	TerminalConfig TerminalConfig
 }
 
 // Run parses CLI flags and environment variables, populates app's config, conditionally enables
@@ -26,10 +29,14 @@ type App[C any] struct {
 // expected to handle context cancellation and finish its execution gracefully.
 // Currently, there is no enforcement for apps that might ignore context cancellation or
 // not handle it properly.
-func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string, stderr io.Writer) error {
+func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string) error {
+	a.ensureStdoutAndStderr()
+
+	a.BuildInfo.PrintTo(a.TerminalConfig.Stdout)
+
 	profiler := newProfiler(logger)
 
-	cfg, err := a.populateConfig(profiler, args, stderr)
+	cfg, err := a.populateConfig(profiler, args, a.TerminalConfig.Stderr)
 	if err != nil {
 		return err
 	}
@@ -44,6 +51,16 @@ func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string, s
 	defer stop()
 
 	return a.run(ctx, logger, cfg)
+}
+
+func (a App[C]) ensureStdoutAndStderr() {
+	if a.TerminalConfig.Stdout == nil {
+		a.TerminalConfig.Stdout = os.Stdout
+	}
+
+	if a.TerminalConfig.Stderr == nil {
+		a.TerminalConfig.Stderr = os.Stderr
+	}
 }
 
 func (a App[C]) populateConfig(profiler *profiler, args []string, stderr io.Writer) (C, error) {

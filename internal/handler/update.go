@@ -13,6 +13,7 @@ import (
 
 type updateHandler struct {
 	baseHandler
+
 	metrics service.MetricStorer
 	auditor service.MetricAuditor
 }

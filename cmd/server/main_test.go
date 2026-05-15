@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bq2cd/yp-go-metrics/internal/app/cli"
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
@@ -626,7 +627,10 @@ func Test_run(t *testing.T) {
 			errCh := make(chan error, 1)
 
 			go func() {
-				errCh <- run(ctx, args, tt.args.stderr)
+				errCh <- run(ctx, args, cli.TerminalConfig{
+					Stdout: io.Discard,
+					Stderr: tt.args.stderr,
+				})
 			}()
 
 			time.Sleep(100 * time.Millisecond)

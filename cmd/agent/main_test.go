@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/bq2cd/yp-go-metrics/internal/app/cli"
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
@@ -369,6 +370,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 
 type mockServer struct {
 	mock.Mock
+
 	mu sync.RWMutex
 }
 
@@ -504,7 +506,10 @@ func Test_run(t *testing.T) {
 			errCh := make(chan error, 1)
 
 			go func() {
-				errCh <- run(ctx, args, tt.args.stderr)
+				errCh <- run(ctx, args, cli.TerminalConfig{
+					Stdout: io.Discard,
+					Stderr: tt.args.stderr,
+				})
 			}()
 
 			ticker := time.NewTicker(100 * time.Millisecond)

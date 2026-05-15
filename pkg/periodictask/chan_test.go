@@ -15,6 +15,7 @@ import (
 
 type mockChanTask[T any] struct {
 	mock.Mock
+
 	mu           sync.Mutex
 	workDuration func() time.Duration
 	wantErr      func() bool

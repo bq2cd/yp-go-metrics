@@ -14,6 +14,7 @@ import (
 
 type updateBatchJSONHandler struct {
 	baseHandler
+
 	metrics   service.MetricStorer
 	responder metricBatchJSONResponder
 	auditor   service.MetricAuditor

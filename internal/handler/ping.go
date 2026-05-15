@@ -11,6 +11,7 @@ import (
 
 type pingHandler struct {
 	baseHandler
+
 	pinger  service.StoragePinger
 	timeout time.Duration
 }

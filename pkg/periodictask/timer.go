@@ -44,8 +44,9 @@ loop:
 			break loop
 		case <-timer.C:
 			errFinal = errors.Join(errFinal, t.taskFn(ctx))
-			next := start.Add(t.interval * ((time.Since(start) / t.interval) + 1))
-			timer.Reset(time.Until(next))
+			elapsedIntervals := int(time.Since(start) / t.interval)
+			nextInvocation := start.Add(t.interval * time.Duration(elapsedIntervals+1))
+			timer.Reset(time.Until(nextInvocation))
 		}
 	}
 

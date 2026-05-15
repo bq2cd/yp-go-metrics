@@ -23,6 +23,7 @@ import (
 
 type mockRouter struct {
 	mock.Mock
+
 	timeout time.Duration
 }
 
@@ -61,6 +62,7 @@ func newMockMetricSnapshotter() *mockMetricSnapshotter {
 
 type mockMetricSnapshotter struct {
 	mock.Mock
+
 	notifyCh chan struct{}
 }
 

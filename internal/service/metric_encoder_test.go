@@ -13,6 +13,7 @@ import (
 
 type mockMetricEncoder struct {
 	mock.Mock
+
 	err error
 }
 

@@ -1,0 +1,4 @@
+{{- $ref := renderRefName .RefName .IndirectionLevel -}}
+if v, ok := interface{}({{ $ref }}).(interface{ Reset() }); ok { // types.Interface{{ if .IndirectionLevel }} (pointer){{ end }}
+ v.Reset()
+}
