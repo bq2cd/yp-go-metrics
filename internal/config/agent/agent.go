@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"regexp"
 	"time"
 
@@ -19,11 +20,12 @@ var (
 
 // Config represents configuration for the agent process.
 type Config struct {
-	UpstreamURL    url.URL
-	PollInterval   time.Duration
-	ReportInterval time.Duration
-	HMACSecretKey  []byte
-	SenderPoolSize uint
+	UpstreamURL     url.URL
+	PollInterval    time.Duration
+	ReportInterval  time.Duration
+	HMACSecretKey   []byte
+	ServerPublicKey []byte
+	SenderPoolSize  uint
 }
 
 // Option is function that take pointer to config as an argument,
@@ -91,6 +93,27 @@ func ReportInterval(intervalSec uint) Option {
 func HMACSecretKey(key string) Option {
 	return func(c *Config) error {
 		c.HMACSecretKey = hmacsigner.LoadSecretKey(key)
+		return nil
+	}
+}
+
+// ServerPublicKey loads file contents from a given path and stores it in [Config.ServerPublicKey].
+// The path can be an empty string, in which case [Config.ServerPublicKey] is set to `nil`.
+func ServerPublicKey(path string) Option {
+	return func(c *Config) error {
+		if path == "" {
+			c.ServerPublicKey = nil
+
+			return nil
+		}
+
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		c.ServerPublicKey = contents
+
 		return nil
 	}
 }

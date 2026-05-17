@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -52,25 +53,41 @@ func (a *agent) doReport(baseCtx context.Context) error {
 	return a.reporter.Report(ctx, outCh)
 }
 
-func (a *agent) launchCollector(ctx context.Context, erg *errgroup.Group) {
-	erg.Go(func() error {
-		return runPeriodicTask(ctx, a.config.PollInterval, a.collector.Collect, 0)
+func (a *agent) launchCollector(ctx context.Context, grp *errgroup.Group, errCh chan<- error) {
+	grp.Go(func() error {
+		err := runPeriodicTask(ctx, a.config.PollInterval, a.collector.Collect, 0)
+		errCh <- err
+
+		return err
 	})
 }
 
-func (a *agent) launchReporter(ctx context.Context, erg *errgroup.Group) {
-	erg.Go(func() error {
-		return runPeriodicTask(ctx, a.config.ReportInterval, a.doReport, a.config.ReportInterval)
+func (a *agent) launchReporter(ctx context.Context, grp *errgroup.Group, errCh chan<- error) {
+	grp.Go(func() error {
+		err := runPeriodicTask(ctx, a.config.ReportInterval, a.doReport, a.config.ReportInterval)
+		errCh <- err
+
+		return err
 	})
 }
 
 // Run launches main loop of the agent worker:
 // collecting metrics and reporting them back to a server.
 func (a *agent) Run(ctx context.Context) error {
-	erg := new(errgroup.Group)
+	grp := new(errgroup.Group)
+	errCh := make(chan error, 2)
 
-	a.launchCollector(ctx, erg)
-	a.launchReporter(ctx, erg)
+	a.launchCollector(ctx, grp, errCh)
+	a.launchReporter(ctx, grp, errCh)
 
-	return erg.Wait()
+	// we need to collect individual errors for tests
+	_ = grp.Wait()
+	close(errCh)
+
+	var errFinal error
+	for err := range errCh {
+		errFinal = errors.Join(errFinal, err)
+	}
+
+	return errFinal
 }

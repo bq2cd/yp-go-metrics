@@ -44,9 +44,9 @@ func (c *collector) collectFromSource(ctx context.Context, src source.Source, ou
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
+		case outCh <- metric:
+			// continue to next metric
 		}
-		outCh <- metric
 	}
 	return nil
 }

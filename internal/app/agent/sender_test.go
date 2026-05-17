@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -21,11 +23,18 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt/asymcrypttest"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner/hmacsignertest"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest"
+)
+
+const (
+	encryptedPrefix = `encrypted:`
+	dummyHashSHA256 = `64756d6d792d686173682d6279746573`
 )
 
 type mockSender struct {
@@ -270,23 +279,46 @@ func Test_senderPlain_Send(t *testing.T) {
 
 func Test_senderJSON_Send(t *testing.T) {
 	t.Run("nothing signed without secret key", func(t *testing.T) {
-		testSenderJSONSendHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
-			m := hmacsignertest.NewMockHMACSigner(ctrl)
-			m.EXPECT().Sign(gomock.Any()).Return(nil, hmacsigner.ErrMissingSecretKey).Times(numCalls)
-			return m
-		}, httpheaders.HashSHA256Empty)
+		testSenderJSONSendHelper(t,
+			setupMockHMACSignerNoKey,
+			setupMockEncryptorNotConfigured,
+			httpheaders.HashSHA256Empty,
+		)
+	})
+
+	t.Run("request body encrypted but not signed", func(t *testing.T) {
+		testSenderJSONSendHelper(t,
+			setupMockHMACSignerNoKey,
+			setupMockEncryptorWithPrefix,
+			httpheaders.HashSHA256Empty,
+		)
 	})
 
 	t.Run("request body signed with secret key", func(t *testing.T) {
-		testSenderJSONSendHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
-			m := hmacsignertest.NewMockHMACSigner(ctrl)
-			m.EXPECT().Sign(gomock.Any()).Return([]byte(`dummy-hash-bytes`), nil).Times(numCalls)
-			return m
-		}, httpheaders.HashSHA256("64756d6d792d686173682d6279746573"))
+		testSenderJSONSendHelper(
+			t,
+			setupMockHMACSignerDummyHash,
+			setupMockEncryptorNotConfigured,
+			httpheaders.HashSHA256(dummyHashSHA256),
+		)
+	})
+
+	t.Run("request body encrypted and signed with secret key", func(t *testing.T) {
+		testSenderJSONSendHelper(
+			t,
+			setupMockHMACSignerDummyHash,
+			setupMockEncryptorWithPrefix,
+			httpheaders.HashSHA256(dummyHashSHA256),
+		)
 	})
 }
 
-func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner, wantHashHeader httpheaders.HashSHA256) {
+func testSenderJSONSendHelper(
+	t *testing.T,
+	setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner,
+	setupEncryptor func(*gomock.Controller, int) asymcrypt.Encryptor,
+	wantHashHeader httpheaders.HashSHA256,
+) {
 	t.Helper()
 
 	type fields struct {
@@ -533,18 +565,23 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 				},
 			)
 
-			var hmacSigner *hmacsignertest.MockHMACSigner
+			var (
+				hmacSigner *hmacsignertest.MockHMACSigner
+				encryptor  asymcrypt.Encryptor
+			)
 			if tt.want.httpCall != "" {
 				hmacSigner = setupSigner(ctrl, 1)
+				encryptor = setupEncryptor(ctrl, 1)
 			} else {
 				hmacSigner = setupSigner(ctrl, 0)
+				encryptor = setupEncryptor(ctrl, 0)
 			}
 
 			ctx, cancel := context.WithTimeout(t.Context(), tt.fields.deadline)
 			defer cancel()
 
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
-			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner)
+			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner, encryptor)
 			s.shouldCompress = shouldCompress
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
@@ -552,7 +589,9 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			t.Cleanup(func() {
 				httpmock.DeactivateAndReset()
-				close(rbodyCh)
+				// Not closing `rbodyCh` here to avoid races when some httpmock goroutines linger after [httpmock.DeactivateAndReset]
+				// is called, while at the same time [testing.Cleanup] handlers are executed.
+				// After all, tests will eventually terminate so dangling channels should not be too much of a problem.
 			})
 
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
@@ -560,8 +599,8 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
 				require.Truef(t, wantHashHeader.Matches(r.Header), "hash header mismatch")
 				rbody := bytes.NewBuffer(nil)
-				_, err := io.Copy(rbody, r.Body)
-				require.NoError(t, err)
+				_, err2 := io.Copy(rbody, r.Body)
+				require.NoError(t, err2)
 				select {
 				case <-rbodyCh:
 				default:
@@ -598,6 +637,10 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 			} else {
 				body = rbody.String()
 			}
+			if encryptor != nil {
+				assert.Truef(t, strings.HasPrefix(body, encryptedPrefix), "body must be encrypted")
+				body = strings.TrimPrefix(body, encryptedPrefix)
+			}
 			assert.JSONEq(t, tt.want.requestBody, body)
 		})
 	}
@@ -605,22 +648,46 @@ func testSenderJSONSendHelper(t *testing.T, setupSigner func(*gomock.Controller,
 
 func Test_senderJSON_SendBatch(t *testing.T) {
 	t.Run("nothing signed without secret key", func(t *testing.T) {
-		testSenderJSONSendBatchHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
-			m := hmacsignertest.NewMockHMACSigner(ctrl)
-			m.EXPECT().Sign(gomock.Any()).Return(nil, hmacsigner.ErrMissingSecretKey).Times(numCalls)
-			return m
-		}, httpheaders.HashSHA256Empty)
+		testSenderJSONSendBatchHelper(
+			t,
+			setupMockHMACSignerNoKey,
+			setupMockEncryptorNotConfigured,
+			httpheaders.HashSHA256Empty,
+		)
 	})
+
+	t.Run("request body encrypted but not signed", func(t *testing.T) {
+		testSenderJSONSendBatchHelper(
+			t,
+			setupMockHMACSignerNoKey,
+			setupMockEncryptorWithPrefix,
+			httpheaders.HashSHA256Empty,
+		)
+	})
+
 	t.Run("request body signed with secret key", func(t *testing.T) {
-		testSenderJSONSendBatchHelper(t, func(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
-			m := hmacsignertest.NewMockHMACSigner(ctrl)
-			m.EXPECT().Sign(gomock.Any()).Return([]byte(`dummy-hash-bytes`), nil).Times(numCalls)
-			return m
-		}, httpheaders.HashSHA256("64756d6d792d686173682d6279746573"))
+		testSenderJSONSendBatchHelper(t,
+			setupMockHMACSignerDummyHash,
+			setupMockEncryptorNotConfigured,
+			httpheaders.HashSHA256(dummyHashSHA256),
+		)
+	})
+
+	t.Run("request body encrypted and signed with secret key", func(t *testing.T) {
+		testSenderJSONSendBatchHelper(t,
+			setupMockHMACSignerDummyHash,
+			setupMockEncryptorWithPrefix,
+			httpheaders.HashSHA256(dummyHashSHA256),
+		)
 	})
 }
 
-func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner, wantHashHeader httpheaders.HashSHA256) {
+func testSenderJSONSendBatchHelper(
+	t *testing.T,
+	setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner,
+	setupEncryptor func(*gomock.Controller, int) asymcrypt.Encryptor,
+	wantHashHeader httpheaders.HashSHA256,
+) {
 	t.Helper()
 
 	type fields struct {
@@ -935,11 +1002,16 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			},
 		)
 
-		var hmacSigner *hmacsignertest.MockHMACSigner
+		var (
+			hmacSigner *hmacsignertest.MockHMACSigner
+			encryptor  asymcrypt.Encryptor
+		)
 		if tt.want.httpCall != "" {
 			hmacSigner = setupSigner(ctrl, 1)
+			encryptor = setupEncryptor(ctrl, 1)
 		} else {
 			hmacSigner = setupSigner(ctrl, 0)
+			encryptor = setupEncryptor(ctrl, 0)
 		}
 
 		t.Run(name, func(t *testing.T) {
@@ -947,7 +1019,7 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			defer cancel()
 
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
-			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner)
+			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner, encryptor)
 			s.shouldCompress = shouldCompress
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
@@ -955,7 +1027,9 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			httpmock.ActivateNonDefault(s.client.GetClient())
 			t.Cleanup(func() {
 				httpmock.DeactivateAndReset()
-				close(rbodyCh)
+				// Not closing `rbodyCh` here to avoid races when some httpmock goroutines linger after [httpmock.DeactivateAndReset]
+				// is called, while at the same time [testing.Cleanup] handlers are executed.
+				// After all, tests will eventually terminate so dangling channels should not be too much of a problem.
 			})
 
 			httpmock.RegisterRegexpResponder(tt.args.method, tt.args.urlRegexp, func(r *http.Request) (*http.Response, error) {
@@ -1002,6 +1076,10 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			} else {
 				body = rbody.String()
 			}
+			if encryptor != nil {
+				assert.Truef(t, strings.HasPrefix(body, encryptedPrefix), "body must be encrypted")
+				body = strings.TrimPrefix(body, encryptedPrefix)
+			}
 			var wantReqMetrics, gotReqMetrics []model.Metric
 			err = json.Unmarshal([]byte(tt.want.requestBody), &wantReqMetrics)
 			require.NoError(t, err)
@@ -1010,4 +1088,31 @@ func testSenderJSONSendBatchHelper(t *testing.T, setupSigner func(*gomock.Contro
 			assert.ElementsMatch(t, wantReqMetrics, gotReqMetrics)
 		})
 	}
+}
+
+func setupMockHMACSignerNoKey(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
+	m := hmacsignertest.NewMockHMACSigner(ctrl)
+	m.EXPECT().Sign(gomock.Any()).Return(nil, hmacsigner.ErrMissingSecretKey).Times(numCalls)
+
+	return m
+}
+
+func setupMockHMACSignerDummyHash(ctrl *gomock.Controller, numCalls int) *hmacsignertest.MockHMACSigner {
+	m := hmacsignertest.NewMockHMACSigner(ctrl)
+	m.EXPECT().Sign(gomock.Any()).Return([]byte(`dummy-hash-bytes`), nil).Times(numCalls)
+
+	return m
+}
+
+func setupMockEncryptorNotConfigured(ctrl *gomock.Controller, numCalls int) asymcrypt.Encryptor {
+	return nil
+}
+
+func setupMockEncryptorWithPrefix(ctrl *gomock.Controller, numCalls int) asymcrypt.Encryptor {
+	m := asymcrypttest.NewMockEncryptor(ctrl)
+	m.EXPECT().Encrypt(gomock.Any()).DoAndReturn(func(src []byte) ([]byte, error) {
+		return slices.Concat([]byte(encryptedPrefix), src), nil
+	}).Times(numCalls)
+
+	return m
 }

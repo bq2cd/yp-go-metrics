@@ -30,11 +30,12 @@ var (
 )
 
 type cliOptions struct {
-	UpstreamURL    string `env:"ADDRESS"`
-	PollInterval   uint   `env:"POLL_INTERVAL"`
-	ReportInterval uint   `env:"REPORT_INTERVAL"`
-	HMACSecretKey  string `env:"KEY"`
-	SenderPoolSize uint   `env:"RATE_LIMIT"`
+	UpstreamURL         string `env:"ADDRESS"`
+	PollInterval        uint   `env:"POLL_INTERVAL"`
+	ReportInterval      uint   `env:"REPORT_INTERVAL"`
+	HMACSecretKey       string `env:"KEY"`
+	SenderPoolSize      uint   `env:"RATE_LIMIT"`
+	ServerPublicKeyFile string `env:"CRYPTO_KEY"`
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -45,6 +46,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.UintVar(&opts.ReportInterval, "r", defaultReportIntervalSec, "report interval in seconds")
 	fs.StringVar(&opts.HMACSecretKey, "k", "", "secret key for HMAC calculation")
 	fs.UintVar(&opts.SenderPoolSize, "l", defaultSenderPoolSize, "sender pool size (aka rate limit)")
+	fs.StringVar(&opts.ServerPublicKeyFile, "crypto-key", "", "path to a file with server's X25519 public key")
 
 	// parse flags
 	if err := fs.Parse(args); err != nil {
@@ -61,6 +63,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.PollInterval(opts.PollInterval),
 		config.ReportInterval(opts.ReportInterval),
 		config.HMACSecretKey(opts.HMACSecretKey),
+		config.ServerPublicKey(opts.ServerPublicKeyFile),
 		config.SenderPoolSize(opts.SenderPoolSize),
 	)
 	if err != nil {
