@@ -61,6 +61,12 @@ func (s *source) readCPUMetrics() ([]model.Metric, error) {
 	return []model.Metric{model.NewGaugeMetric(nameCPUutilisation, data[0])}, nil
 }
 
+// AvailableMetricNames returns a map of unique metric names to their types, that can be collected
+// through this source.
+func (s *source) AvailableMetricNames() map[string]model.MetricType {
+	return GetSupportedMetrics()
+}
+
 // ReadMetrics reads supported metrics from gopsutil and converts them
 // into internal representation.
 func (s *source) ReadMetrics() ([]model.Metric, error) {

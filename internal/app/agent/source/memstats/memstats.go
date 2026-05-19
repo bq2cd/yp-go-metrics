@@ -73,6 +73,12 @@ func New() *source {
 	return &source{supportedMetrics: GetSupportedMetrics(), reader: &memStats{}}
 }
 
+// AvailableMetricNames returns a map of unique metric names to their types, that can be collected
+// through this source.
+func (s *source) AvailableMetricNames() map[string]model.MetricType {
+	return GetSupportedMetrics()
+}
+
 // ReadMetrics reads metrics from [runtime.MemStats] and converts them
 // into internal representation.
 func (s *source) ReadMetrics() ([]model.Metric, error) {

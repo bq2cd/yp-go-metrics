@@ -11,6 +11,7 @@ import (
 
 // Source abstracts a source of metrics and its underlying implementation.
 type Source interface {
+	AvailableMetricNames() map[string]model.MetricType
 	ReadMetrics() ([]model.Metric, error)
 }
 
