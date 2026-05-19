@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +88,7 @@ func NewTempFileFactory(t TestingT) *TempFileFactory {
 
 // TempFileFactory tracks created temporary files.
 type TempFileFactory struct {
+	mu      sync.Mutex
 	t       TestingT
 	created []string
 }
@@ -103,13 +105,17 @@ func (ff *TempFileFactory) create(dir string, pattern string) string {
 // returns path to the file.
 func (ff *TempFileFactory) Create(pattern string) string {
 	path := ff.create(os.TempDir(), pattern)
+	ff.mu.Lock()
 	ff.created = append(ff.created, path)
+	ff.mu.Unlock()
 	return path
 }
 
 // RemoveAll attempts to remove all temporary files that were created
 // with [Create] method.
 func (ff *TempFileFactory) RemoveAll() {
+	ff.mu.Lock()
+	defer ff.mu.Unlock()
 	for _, path := range ff.created {
 		_ = os.Remove(path)
 	}

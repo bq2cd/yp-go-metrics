@@ -13,10 +13,7 @@ run = ["go generate ./..."]
 
 [tasks.lint]
 description = "Lint Go code"
-run = [
-  "golangci-lint run",
-  "go run ./cmd/staticlint ./...",
-]
+run = ["golangci-lint run", "go run ./cmd/staticlint ./..."]
 
 [tasks.test-dir]
 hide = true
@@ -38,6 +35,14 @@ run = [
   "go test -failfast -cover -coverpkg=./... -coverprofile=coverage.out ./...",
   "go tool cover -html=coverage.out",
 ]
+
+[tasks.e2e]
+description = "Run end-to-end tests (test/e2e)"
+usage = '''
+flag "-p --parallel <parallel>" default="2" help="Tests parallelism (default: 2)"
+'''
+env = { "TEST_E2E" = "1" }
+run = "go test -failfast -race -parallel {{ usage.parallel }} -count 1 -v ./test/e2e/..."
 
 [tasks.pre-push]
 description = "Validate Go code before pushing/creating PR"

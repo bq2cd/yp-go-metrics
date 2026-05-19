@@ -1,8 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"os"
@@ -35,14 +33,13 @@ type Launcher struct {
 // NewLauncher creates an instance of [Launcher].
 func NewLauncher(t *TestingT) (*Launcher, error) {
 	l := &Launcher{
-		T:           t,
-		opts:        LauncherOpts{},
-		tempFactory: servertest.NewTempFileFactory(t),
+		T:             t,
+		opts:          LauncherOpts{},
+		tempFactory:   servertest.NewTempFileFactory(t),
+		hmacKeyBase64: servertest.GenerateHMACKeyBase64(),
 	}
 
-	err := l.generateHMACKey()
-
-	return l, err
+	return l, nil
 }
 
 // Run is the main entry point, that performs all the logic of compiling, launching
@@ -90,21 +87,6 @@ func (l *Launcher) Run() error {
 // Cleanup is responsible for removing all temporary files created during [Launcher.Run] execution.
 func (l *Launcher) Cleanup() {
 	l.tempFactory.RemoveAll()
-}
-
-func (l *Launcher) generateHMACKey() error {
-	buf := [32]byte{}
-
-	// As per documentation to [rand.Read], it never returns an error but rather crashes the program irrecoverably.
-	// However, it is better to err on the safe side here :).
-	_, err := rand.Read(buf[:])
-	if err != nil {
-		return fmt.Errorf("crypto/rand failed: %v", err)
-	}
-
-	l.hmacKeyBase64 = base64.StdEncoding.EncodeToString(buf[:])
-
-	return nil
 }
 
 func (l *Launcher) parseArgs() error {
