@@ -1,9 +1,11 @@
 package router
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -18,8 +20,14 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/middleware"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/service/servicetest"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt/asymcrypttest"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
+)
+
+const (
+	encryptedPrefix = `encrypted:`
 )
 
 func TestRouter_ServeHTTP(t *testing.T) {
@@ -36,6 +44,8 @@ type testHandlerArgs struct {
 	shouldSign          bool
 	expectNoHandlerCall bool
 	overrideHash        httpheaders.HashSHA256
+	encryptionEnabled   bool
+	shouldDecrypt       bool
 }
 
 type testHandlerWant struct {
@@ -184,6 +194,19 @@ func testHandlerFuncMirrorMetric(t *testing.T) http.HandlerFunc {
 	t.Helper()
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m model.Metric
+		err := json.NewDecoder(r.Body).Decode(&m)
+		assert.NoError(t, err)
+		httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
+		w.WriteHeader(http.StatusOK)
+		err = json.NewEncoder(w).Encode(m)
+		assert.NoError(t, err)
+	}
+}
+
+func testHandlerFuncMirrorMetrics(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		var m []model.Metric
 		err := json.NewDecoder(r.Body).Decode(&m)
 		assert.NoError(t, err)
 		httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
@@ -404,6 +427,107 @@ func testRouterServeHTTPMiddleware(t *testing.T) {
 				},
 			},
 		},
+		"when encryption enabled, decrypts request for updating single metric": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:            http.MethodPost,
+						url:               "/update",
+						bodyData:          handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)).TransformData(fakeEncryption),
+						shouldCompress:    true,
+						acceptedEncodings: []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						shouldSign:        true,
+						encryptionEnabled: true,
+						shouldDecrypt:     true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusOK,
+						contentType:     httpheaders.ContentTypeApplicationJSON,
+						contentEncoding: httpheaders.ContentEncodingGzip,
+						body:            []byte(`{"id": "id1", "type": "counter", "delta": 123}`),
+						hash:            httpheaders.HashSHA256("6159e85f20e3dc1f908997d0150102acf21c52efe580ff4b3c24c2076801dc4e"), // https://tools.onecompiler.com/hmac-sha256
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when encryption enabled but request is not encrypted, returns 400 Bad Request": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						shouldSign:          true,
+						encryptionEnabled:   true,
+						shouldDecrypt:       true,
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusBadRequest,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when encryption enabled, decrypts request for updating multiple metrics": {
+			ident: handler.IdentUpdateBatchJSON,
+			fn:    testHandlerFuncMirrorMetrics(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method: http.MethodPost,
+						url:    "/updates",
+						bodyData: handlertest.NewBodyDataFromMetrics(t, []model.Metric{
+							model.NewCounterMetric("id1", 123),
+							model.NewGaugeMetric("id2", -1.23)}).TransformData(fakeEncryption),
+						shouldCompress:    true,
+						acceptedEncodings: []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						encryptionEnabled: true,
+						shouldDecrypt:     true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusOK,
+						contentType:     httpheaders.ContentTypeApplicationJSON,
+						contentEncoding: httpheaders.ContentEncodingGzip,
+						body:            []byte(`[{"id": "id1", "type": "counter", "delta": 123}, {"id": "id2", "type": "gauge", "value": -1.23}]`),
+					},
+				},
+			},
+		},
+		"when encryption enabled, skips decryption of requests for non-encrypted endpoints": {
+			ident: handler.IdentValueJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:            http.MethodPost,
+						url:               "/value",
+						bodyData:          handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:    true,
+						acceptedEncodings: []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						encryptionEnabled: true,
+						shouldDecrypt:     false,
+					},
+					want: testHandlerWant{
+						status:          http.StatusOK,
+						contentType:     httpheaders.ContentTypeApplicationJSON,
+						contentEncoding: httpheaders.ContentEncodingGzip,
+						body:            []byte(`{"id": "id1", "type": "counter", "delta": 123}`),
+					},
+				},
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -452,8 +576,17 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 		}
 	}
 
+	var decryptor asymcrypt.Decryptor
+	if args.encryptionEnabled {
+		m := asymcrypttest.NewMockDecryptor(ctrl)
+		if args.shouldDecrypt {
+			m.EXPECT().Decrypt(gomock.Any()).DoAndReturn(fakeDecryption)
+		}
+		decryptor = m
+	}
+
 	signer := hmacsigner.NewHMACSigner(secretKey)
-	rtr, err := New(logger, handlers, signer)
+	rtr, err := New(logger, handlers, signer, decryptor)
 	require.NoError(t, err)
 
 	ts := httptest.NewServer(rtr)
@@ -502,6 +635,18 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 	assert.Equal(t, bodyData.Len(), fsize.Value)
 	assert.NotNil(t, e.Fields().GetFieldByKey("duration"))
 	assert.NotNil(t, e.Fields().GetFieldByKey("request_id"))
+}
+
+func fakeEncryption(cleartext []byte) []byte {
+	return slices.Concat([]byte(encryptedPrefix), cleartext)
+}
+
+func fakeDecryption(ciphertext []byte) ([]byte, error) {
+	if !bytes.HasPrefix(ciphertext, []byte(encryptedPrefix)) {
+		return nil, fmt.Errorf("ciphertext is not encrypted")
+	}
+
+	return bytes.TrimPrefix(ciphertext, []byte(encryptedPrefix)), nil
 }
 
 func TestRoute_Validate(t *testing.T) {
@@ -624,7 +769,7 @@ func TestNew(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := New(tt.args.logger, tt.args.handlers, tt.args.signer)
+			got, err := New(tt.args.logger, tt.args.handlers, tt.args.signer, nil)
 			if tt.want.wantErr {
 				require.Error(t, err)
 				assert.Nil(t, got)
@@ -741,16 +886,6 @@ func Test_configureChiRouter(t *testing.T) {
 	}
 }
 
-func TestMiddlewares(t *testing.T) {
-	// covered by [TestRouter_ServeHTTP]
-	t.SkipNow()
-}
-
-func TestRouteDefinitions(t *testing.T) {
-	// covered by [TestRouter_ServeHTTP]
-	t.SkipNow()
-}
-
 func TestRoutes(t *testing.T) {
 	type args struct {
 		handlers handler.Registry
@@ -796,7 +931,7 @@ func TestRoutes(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := Routes(tt.args.handlers)
+			got, err := Routes(RouteDefinitions(), tt.args.handlers, nil)
 			if tt.want.wantErr {
 				require.Error(t, err)
 				return

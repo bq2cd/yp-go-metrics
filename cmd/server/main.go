@@ -38,6 +38,7 @@ type cliOptions struct {
 	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
 	DatabaseDSN              string `env:"DATABASE_DSN"`
 	HMACSecretkey            string `env:"KEY"`
+	DecryptionPrivateKeyFile string `env:"CRYPTO_KEY"`
 	AuditFilePath            string `env:"AUDIT_FILE"`
 	AuditURL                 string `env:"AUDIT_URL"`
 }
@@ -54,6 +55,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.StringVar(&opts.HMACSecretkey, "k", "", "secret key for HMAC calculation")
 	fs.StringVar(&opts.AuditFilePath, "audit-file", "", "path to file for writing audit events")
 	fs.StringVar(&opts.AuditURL, "audit-url", "", "remote endpoint URL for sending audit events")
+	fs.StringVar(&opts.DecryptionPrivateKeyFile, "crypto-key", "", "path to a file with server's X25519 private key (for decryption)")
 
 	if err := fs.Parse(args); err != nil {
 		return config.Config{}, fmt.Errorf("invalid args: %w", err)
@@ -71,6 +73,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
 		config.DatabaseURL(opts.DatabaseDSN),
 		config.HMACSecretKey(opts.HMACSecretkey),
+		config.DecryptionPrivateKey(opts.DecryptionPrivateKeyFile),
 		config.AuditFilePath(opts.AuditFilePath),
 		config.AuditURL(opts.AuditURL),
 	)

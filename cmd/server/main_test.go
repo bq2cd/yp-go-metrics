@@ -23,15 +23,19 @@ import (
 )
 
 func Test_parseArgs(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
 	type args struct {
 		args []string
 	}
-	tests := []struct {
+	type testcase struct {
 		name      string
 		args      args
 		want      config.Config
 		assertion assert.ErrorAssertionFunc
-	}{
+	}
+	tests := []testcase{
 		{
 			name: "no args",
 			args: args{args: []string{}},
@@ -106,6 +110,18 @@ func Test_parseArgs(t *testing.T) {
 		{
 			name:      "bad args, missing secret key value",
 			args:      args{args: []string{"-k"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, non-existent private key file",
+			args:      args{args: []string{"-crypto-key=/nonexistent/key.pem"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, private key file is a directory",
+			args:      args{args: []string{"-crypto-key=/tmp"}},
 			want:      config.Config{},
 			assertion: assert.Error,
 		},
@@ -280,6 +296,24 @@ func Test_parseArgs(t *testing.T) {
 			},
 			assertion: assert.NoError,
 		},
+		func() testcase {
+			keyFile := tempFactory.Create("crypto-key-*")
+			err := os.WriteFile(keyFile, []byte(`1234`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name: "good args, private key file",
+				args: args{args: []string{"-crypto-key", keyFile}},
+				want: config.Config{
+					ListenAddress:        defaultAddress,
+					ShutdownTimeout:      defaultShutdownTimeoutSec * time.Second,
+					MetricStoreInterval:  defaultMetricStoreIntervalSec * time.Second,
+					MetricStoreFilePath:  filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+					DecryptionPrivateKey: []byte(`1234`),
+				},
+				assertion: assert.NoError,
+			}
+		}(),
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -293,6 +327,9 @@ func Test_parseArgs(t *testing.T) {
 }
 
 func Test_parseArgs_withEnv(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
 	type args struct {
 		args []string
 		env  map[string]string
@@ -502,6 +539,27 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				AuditURL:            url.URL{Scheme: "http", Host: "localhost:9999", Path: "/audit-2"},
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides private key file",
+			args: args{
+				args: []string{"-crypto-key=/nonexistent/key.pem"},
+				env: func() map[string]string {
+					keyFile := tempFactory.Create("crypto-key-*")
+					err := os.WriteFile(keyFile, []byte(`5678`), 0600)
+					require.NoError(t, err)
+
+					return map[string]string{"CRYPTO_KEY": keyFile}
+				}(),
+			},
+			want: config.Config{
+				ListenAddress:        defaultAddress,
+				ShutdownTimeout:      defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval:  defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath:  filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				DecryptionPrivateKey: []byte(`5678`),
 			},
 			assertion: assert.NoError,
 		},

@@ -26,6 +26,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/testutil"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest/mockretrierfactory"
 )
 
@@ -42,6 +43,7 @@ type IntegrationTestSuite struct {
 	addrFactory *servertest.ListenAddressFactory
 	tempFactory *servertest.TempFileFactory
 	requester   *handlertest.Requester
+	keypair     *servertest.X25519KeyPair
 }
 
 type IntegrationCase struct {
@@ -51,6 +53,13 @@ type IntegrationCase struct {
 	assertErr     func(error)
 	assertRunning func(string)
 	assertStopped func(config.Config)
+}
+
+func (ts *IntegrationTestSuite) SetupSuite() {
+	var err error
+
+	ts.keypair, err = servertest.NewX25519KeyPair()
+	ts.Require().NoErrorf(err, "unable to generate X25519 key pair")
 }
 
 func (ts *IntegrationTestSuite) SetupTest() {
@@ -74,7 +83,7 @@ func (ts *IntegrationTestSuite) TestDumpMetricsOnEveryWrite() {
 			MetricStoreFilePath: ts.tempFactory.Create("test-metrics-dump-*"),
 		},
 		assertRunning: func(addr string) {
-			ts.uploadAndValidateMetrics(addr, []model.Metric{model.NewCounterMetric("id1", 78)}, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, []model.Metric{model.NewCounterMetric("id1", 78)}, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			ts.validateMetricsInSnapshot(cfg.MetricStoreFilePath, []model.Metric{model.NewCounterMetric("id1", 78)})
@@ -136,7 +145,7 @@ func (ts *IntegrationTestSuite) TestServerUsesPostgresWhenConfigured() {
 				model.NewGaugeMetric("max_f64", math.MaxFloat64),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			wantMetrics := []model.Metric{
@@ -182,7 +191,7 @@ func (ts *IntegrationTestSuite) TestServerRetriesPostgresQueriesOnConnectionErro
 				model.NewGaugeMetric("id20", -1.23),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			wantMetrics := []model.Metric{
@@ -216,7 +225,7 @@ func (ts *IntegrationTestSuite) TestAuditFileSink() {
 				model.NewGaugeMetric("id20", -1.23),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			wantMetrics := []model.Metric{
@@ -254,7 +263,7 @@ func (ts *IntegrationTestSuite) TestAuditHTTPSink() {
 				model.NewGaugeMetric("id20", -1.23),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			wantMetrics := []model.Metric{
@@ -294,7 +303,7 @@ func (ts *IntegrationTestSuite) TestAuditHTTPSinkNotAcceptingEvents() {
 				model.NewGaugeMetric("id20", -1.23),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			ts.validateAuditHTTPSink(auditHandler, nil)
@@ -326,7 +335,7 @@ func (ts *IntegrationTestSuite) TestAuditFileAndHTTPSinks() {
 				model.NewGaugeMetric("id20", -1.23),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			wantMetrics := []model.Metric{
@@ -369,7 +378,7 @@ func (ts *IntegrationTestSuite) TestAuditFileAndHTTPSinksWithHTTPSinkFaulty() {
 				model.NewGaugeMetric("id20", -1.23),
 			}
 
-			ts.uploadAndValidateMetrics(addr, collectedMetrics, 50*time.Millisecond)
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToBodyData, 50*time.Millisecond)
 		},
 		assertStopped: func(cfg config.Config) {
 			wantMetrics := []model.Metric{
@@ -382,6 +391,59 @@ func (ts *IntegrationTestSuite) TestAuditFileAndHTTPSinksWithHTTPSinkFaulty() {
 			ts.validateAuditFileSink(cfg.AuditFilePath, wantMetrics)
 
 			ts.validateAuditHTTPSink(auditHandler, nil)
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestEncryptedMetricsUpload() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			DecryptionPrivateKey: ts.keypair.Private.Bytes(),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics, ts.metricsToEncryptedBodyData, 50*time.Millisecond)
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestClearTextMetricsUploadFailsWhenEncryptionEnabled() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			DecryptionPrivateKey: ts.keypair.Private.Bytes(),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			resp, err := ts.requester.Do(http.MethodPost, fmt.Sprintf("http://%s/updates/", addr), ts.metricsToBodyData(collectedMetrics), true)
+
+			ts.Require().NoError(err)
+			ts.Equal(http.StatusBadRequest, resp.Status)
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
 		},
 	}
 
@@ -445,10 +507,10 @@ func (ts *IntegrationTestSuite) waitUntilServerIsUp(baseCtx context.Context, add
 	}
 }
 
-func (ts *IntegrationTestSuite) uploadAndValidateMetrics(addr string, metrics []model.Metric, delay time.Duration) {
+func (ts *IntegrationTestSuite) uploadAndValidateMetrics(addr string, metrics []model.Metric, bodyDataEncoder func([]model.Metric) handlertest.BodyData, delay time.Duration) {
 	ts.T().Helper()
 
-	resp, err := ts.requester.Do(http.MethodPost, fmt.Sprintf("http://%s/updates/", addr), handlertest.NewBodyDataFromMetrics(ts.T(), metrics), true)
+	resp, err := ts.requester.Do(http.MethodPost, fmt.Sprintf("http://%s/updates/", addr), bodyDataEncoder(metrics), true)
 
 	ts.Require().NoError(err)
 	ts.Equal(http.StatusOK, resp.Status)
@@ -475,6 +537,25 @@ func (ts *IntegrationTestSuite) uploadAndValidateMetrics(addr string, metrics []
 
 		ts.Equal(uploadedSet[key], metric)
 	}
+}
+
+func (ts *IntegrationTestSuite) metricsToBodyData(metrics []model.Metric) handlertest.BodyData {
+	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics)
+}
+
+func (ts *IntegrationTestSuite) metricsToEncryptedBodyData(metrics []model.Metric) handlertest.BodyData {
+	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics).TransformData(func(data []byte) []byte {
+		pubkey, err := asymcrypt.ParsePublicKey(ts.keypair.Public.Bytes())
+		ts.Require().NoErrorf(err, "unable to parse pre-generated X25519 public key")
+
+		encryptor, err := asymcrypt.NewEncryptor(pubkey)
+		ts.Require().NoErrorf(err, "unable to initialize encryptor")
+
+		ciphertext, err := encryptor.Encrypt(data)
+		ts.Require().NoErrorf(err, "unable to encrypt clear text data")
+
+		return ciphertext
+	})
 }
 
 func (ts *IntegrationTestSuite) validateMetricsInPostgres(dbCfg dbconfig.Config, wantMetrics []model.Metric) {
