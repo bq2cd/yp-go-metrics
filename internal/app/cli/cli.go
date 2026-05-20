@@ -25,7 +25,7 @@ type App[C any] struct {
 
 // Run parses CLI flags and environment variables, populates app's config, conditionally enables
 // profiling, and start app's main process.
-// It is also configures OS signal handling (SIGINT, SIGTERM) via [context.Context] - the app is
+// It is also configures OS signal handling (SIGINT, SIGTERM, SIGQUIT) via [context.Context] - the app is
 // expected to handle context cancellation and finish its execution gracefully.
 // Currently, there is no enforcement for apps that might ignore context cancellation or
 // not handle it properly.
@@ -47,7 +47,7 @@ func (a App[C]) Run(baseCtx context.Context, logger log.Logger, args []string) e
 	}
 	defer stopProfiling()
 
-	ctx, stop := signal.NotifyContext(baseCtx, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(baseCtx, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
 	return a.run(ctx, logger, cfg)
