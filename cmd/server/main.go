@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -32,7 +31,7 @@ var (
 )
 
 type cliOptions struct {
-	ConfigFile               string `env:"CONFIG" json:"-"`
+	ConfigFilePath           string `env:"CONFIG" json:"-"`
 	ListenAddress            string `env:"ADDRESS" json:"address"`
 	ShutdownTimeout          uint   `env:"SHUTDOWN_TIMEOUT" json:"shutdown_timeout"`
 	MetricStoreInterval      uint   `env:"STORE_INTERVAL" json:"store_interval"`
@@ -46,7 +45,7 @@ type cliOptions struct {
 }
 
 func defineArgs(fs *flag.FlagSet, opts *cliOptions) {
-	fs.StringVar(&opts.ConfigFile, "c", "", "path to config file in JSON format (e.g. config.json)")
+	fs.StringVar(&opts.ConfigFilePath, "c", "", "path to config file in JSON format (e.g. config.json)")
 	fs.StringVar(&opts.ListenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
 	fs.UintVar(&opts.ShutdownTimeout, "t", defaultShutdownTimeoutSec, "graceful shutdown timeout in seconds")
 	fs.UintVar(&opts.MetricStoreInterval, "i", defaultMetricStoreIntervalSec, "dump metrics on disk each interval (in seconds)")
@@ -60,70 +59,13 @@ func defineArgs(fs *flag.FlagSet, opts *cliOptions) {
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
-	var (
-		cfg  config.Config
-		opts cliOptions
-		err  error
-	)
-
-	defineArgs(fs, &opts)
-
-	err = populateOptions(fs, args, envParser, &opts)
-	if err != nil {
-		return cfg, err
+	parser := cli.Parser[cliOptions, config.Config]{
+		DefineArgs:        defineArgs,
+		GetConfigFilePath: func(opts *cliOptions) string { return opts.ConfigFilePath },
+		CreateConfig:      createConfig,
 	}
 
-	err = loadConfigFile(&opts)
-	if err != nil {
-		return cfg, err
-	}
-
-	// Override options from config file with options from CLI flags and environment variables.
-	// Precedence order: config file -> CLI flags -> environment variables
-	err = populateOptions(fs, args, envParser, &opts)
-	if err != nil {
-		return cfg, err
-	}
-
-	cfg, err = createConfig(&opts)
-	if err != nil {
-		return cfg, err
-	}
-
-	return cfg, nil
-}
-
-func populateOptions(fs *flag.FlagSet, args []string, envParser envparser.Parser, opts *cliOptions) error {
-	// parse flags
-	if err := fs.Parse(args); err != nil {
-		return fmt.Errorf("invalid args: %w", err)
-	}
-
-	// parse env vars (take precedence over flags)
-	if err := envParser.Parse(opts); err != nil {
-		return fmt.Errorf("invalid env vars: %w", err)
-	}
-
-	return nil
-}
-
-func loadConfigFile(opts *cliOptions) error {
-	if opts.ConfigFile == "" {
-		return nil
-	}
-
-	cfg, err := os.Open(opts.ConfigFile)
-	if err != nil {
-		return fmt.Errorf("cannot open config file at %s: %w", opts.ConfigFile, err)
-	}
-	defer cfg.Close()
-
-	err = json.NewDecoder(cfg).Decode(opts)
-	if err != nil {
-		return fmt.Errorf("cannot JSON-decode config file: %w", err)
-	}
-
-	return nil
+	return parser.Parse(fs, args, envParser)
 }
 
 func createConfig(opts *cliOptions) (config.Config, error) {
