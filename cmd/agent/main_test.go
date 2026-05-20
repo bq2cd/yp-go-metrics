@@ -157,6 +157,30 @@ func Test_parseArgs(t *testing.T) {
 			assertion: assert.Error,
 		},
 		{
+			name:      "bad args, non-existent config file file",
+			args:      args{args: []string{"-c", "/nonexistent/config.json"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, config file is a directory",
+			args:      args{args: []string{"-c=/tmp"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		func() testcase {
+			cfg := tempFactory.Create("config-file-*")
+			err := os.WriteFile(cfg, []byte(`invalid JSON`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name:      "bad args, config file contains invalid JSON",
+				args:      args{args: []string{"-c", cfg}},
+				want:      config.Config{},
+				assertion: assert.Error,
+			}
+		}(),
+		{
 			name: "good args",
 			args: args{args: []string{"-a=localhost:9090"}},
 			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:9090"}, PollInterval: defaultPollIntervalSec * time.Second, ReportInterval: defaultReportIntervalSec * time.Second},
@@ -226,6 +250,23 @@ func Test_parseArgs(t *testing.T) {
 					PollInterval:    defaultPollIntervalSec * time.Second,
 					ReportInterval:  defaultReportIntervalSec * time.Second,
 					ServerPublicKey: []byte(`1234`),
+				},
+				assertion: assert.NoError,
+			}
+		}(),
+		func() testcase {
+			cfg := tempFactory.Create("config-file-*")
+			err := os.WriteFile(cfg, []byte(`{"address": "9.9.9.9:1234", "poll_interval": 123, "report_interval": 123, "rate_limit": 5}`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name: "good args, config file provides default values but CLI flags override",
+				args: args{args: []string{"-c", cfg, "-p", "12"}},
+				want: config.Config{
+					UpstreamURL:    url.URL{Scheme: "http", Host: "9.9.9.9:1234"},
+					PollInterval:   12 * time.Second,
+					ReportInterval: 123 * time.Second,
+					SenderPoolSize: 5,
 				},
 				assertion: assert.NoError,
 			}
@@ -411,6 +452,30 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				PollInterval:    defaultPollIntervalSec * time.Second,
 				ReportInterval:  defaultReportIntervalSec * time.Second,
 				ServerPublicKey: []byte(`5678`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides config file",
+			args: args{
+				args: []string{"-c=/nonexistent/config.json", "-p=25"},
+				env: func() map[string]string {
+					cfg := tempFactory.Create("config-file-*")
+					err := os.WriteFile(cfg, []byte(`{"address": "9.9.9.9:1234", "poll_interval": 123, "report_interval": 123, "rate_limit": 5}`), 0600)
+					require.NoError(t, err)
+
+					return map[string]string{
+						"CONFIG":        cfg,
+						"RATE_LIMIT":    "10",
+						"POLL_INTERVAL": "37",
+					}
+				}(),
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: "9.9.9.9:1234"},
+				PollInterval:   37 * time.Second,
+				ReportInterval: 123 * time.Second,
+				SenderPoolSize: 10,
 			},
 			assertion: assert.NoError,
 		},
