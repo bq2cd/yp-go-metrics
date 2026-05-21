@@ -1,17 +1,20 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
@@ -26,19 +29,32 @@ var (
 )
 
 type mockHandler struct {
-	mock.Mock
-
-	numCalls   int
-	statusCode int
+	mu                 sync.Mutex
+	numCalls           int
+	responseStatusCode int
+	lastRequestBody    *bytes.Buffer
 }
 
 func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.Called(w, r)
+	m.mu.Lock()
 	m.numCalls++
-	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
-	w.WriteHeader(m.statusCode)
-	_ = json.NewEncoder(w).Encode([]model.Metric{})
+	m.mu.Unlock()
 
+	rgz, err := gzip.NewReader(r.Body)
+	if err != nil {
+		panic(err) // cannot use `testify` in HTTP handlers; better panic here instead.
+	}
+
+	defer rgz.Close()
+
+	m.mu.Lock()
+	m.lastRequestBody.Reset()
+	m.lastRequestBody.ReadFrom(rgz)
+	m.mu.Unlock()
+
+	httpheaders.ContentTypeApplicationJSON.Apply(w.Header())
+	w.WriteHeader(m.responseStatusCode)
+	_ = json.NewEncoder(w).Encode([]model.Metric{})
 }
 
 func TestRun(t *testing.T) {
@@ -71,9 +87,28 @@ func TestRun(t *testing.T) {
 				calledServer: true,
 			},
 		},
+		"agent collects metrics and reports encrypted metrics to server successfully": {
+			args: args{
+				timeout: 300 * time.Millisecond,
+				cfg: config.Config{
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
+					ServerPublicKey: []byte(`
+-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VuAyEAkZEdmg2VjtMlDU5mDWH76QagkM22DkDqVxt0W7NjqFM=
+-----END PUBLIC KEY-----
+						`),
+				},
+				overrideURL:      true,
+				serverStatusCode: http.StatusOK,
+			},
+			want: want{
+				calledServer: true,
+			},
+		},
 		"agent collects metrics but server responds with error": {
 			args: args{
-				timeout: 100 * time.Millisecond,
+				timeout: 300 * time.Millisecond,
 				cfg: config.Config{
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 50 * time.Millisecond,
@@ -88,7 +123,7 @@ func TestRun(t *testing.T) {
 		},
 		"agent collects metrics but server unreachable": {
 			args: args{
-				timeout: 100 * time.Millisecond,
+				timeout: 300 * time.Millisecond,
 				cfg: config.Config{
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 50 * time.Millisecond,
@@ -104,15 +139,15 @@ func TestRun(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			// Arrange
-			h := &mockHandler{statusCode: tt.args.serverStatusCode}
-			if tt.want.calledServer {
-				h.On("ServeHTTP", mock.Anything, mock.Anything).Return()
+			handler := &mockHandler{
+				responseStatusCode: tt.args.serverStatusCode,
+				lastRequestBody:    bytes.NewBuffer(nil),
 			}
 
-			ts := httptest.NewServer(h)
+			ts := httptest.NewServer(handler)
 			defer ts.Close()
 
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 
 			if tt.args.overrideURL {
 				upstreamURL, err := url.Parse(ts.URL)
@@ -135,9 +170,19 @@ func TestRun(t *testing.T) {
 			} else {
 				require.NoError(t, errFinal)
 			}
-			h.AssertExpectations(t)
 			if tt.want.calledServer {
-				assert.GreaterOrEqual(t, h.numCalls, 1)
+				assert.GreaterOrEqual(t, handler.numCalls, 1)
+				assert.NotEmpty(t, handler.lastRequestBody.Bytes())
+
+				var lastRequestData any
+				err := json.Unmarshal(handler.lastRequestBody.Bytes(), &lastRequestData)
+				if len(tt.args.cfg.ServerPublicKey) == 0 {
+					require.NoErrorf(t, err, "server should've received cleartext JSON data")
+				} else {
+					require.Errorf(t, err, "server should've received encrypted data (not cleartext JSON)")
+				}
+			} else {
+				assert.Equalf(t, 0, handler.numCalls, "no HTTP requests to server should've happened")
 			}
 			assert.NotEmpty(t, logger.RecordedEvents())
 		})
@@ -167,6 +212,16 @@ func extractFinalError(errRun error) error {
 			i++
 
 			continue
+		}
+
+		// a bit hacky way to ignore canceled [retrymgr.Sleeper].
+		if curr != nil && strings.HasPrefix(curr.Error(), "sleeper error ") {
+			inner := errors.Unwrap(curr)
+			if errors.Is(inner, context.DeadlineExceeded) {
+				i++
+
+				continue
+			}
 		}
 
 		errFinal = errors.Join(errFinal, curr)

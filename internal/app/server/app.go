@@ -16,6 +16,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/repository/auditsink"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/service"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr"
@@ -33,6 +34,11 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot init metric auditor: %w", err)
 	}
 
+	decryptor, err := initDecryptor(cfg)
+	if err != nil {
+		return fmt.Errorf("cannot init decryptor: %w", err)
+	}
+
 	writer := service.NewStorageBatchWriter(storage)
 	storer := service.NewMetricStorer(storage, writer)
 	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
@@ -40,7 +46,8 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 
 	handlers := handler.NewRegistry(logger, snapshotter, pinger, auditor)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
-	router, err := router.New(logger, handlers, hmacSigner)
+
+	router, err := router.New(logger, handlers, hmacSigner, decryptor)
 	if err != nil {
 		return fmt.Errorf("cannot create router: %w", err)
 	}
@@ -96,6 +103,21 @@ func initAuditProcessor(_ context.Context, logger log.Logger, cfg config.Config)
 	}
 
 	return processor, nil
+}
+
+func initDecryptor(cfg config.Config) (asymcrypt.Decryptor, error) {
+	if len(cfg.DecryptionPrivateKey) == 0 {
+		return nil, nil
+	}
+
+	key, err := asymcrypt.ParsePrivateKey(cfg.DecryptionPrivateKey)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse private key: %w", err)
+	}
+
+	decryptor := asymcrypt.NewDecryptor(key)
+
+	return decryptor, nil
 }
 
 func maybeRegisterAuditFileSink(logger log.Logger, processor service.AuditEventProcessor, path string) error {

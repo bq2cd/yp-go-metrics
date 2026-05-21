@@ -66,7 +66,7 @@ func New(logger log.Logger, cfg config.Config, router http.Handler, snapshotter 
 // (2) processing batch metric writes via [service.StorageBatchWriter];
 // (2) periodically dumping received metrics to disk (if configured);
 func (s *server) Run(ctx context.Context) error {
-	s.logger.Info().Any("config", s.config).Msg("starting with config")
+	s.logConfig()
 
 	wg := new(sync.WaitGroup)
 	errCh := make(chan error, 2)
@@ -92,6 +92,15 @@ func (s *server) Run(ctx context.Context) error {
 	errFinal = errors.Join(errFinal, s.performFinalDump())
 
 	return errFinal
+}
+
+func (s *server) logConfig() {
+	sanitizedConfig := s.config
+
+	sanitizedConfig.HMACSecretKey = fmt.Appendf([]byte{}, "<redacted(len=%d)>", len(s.config.HMACSecretKey))
+	sanitizedConfig.DecryptionPrivateKey = fmt.Appendf([]byte{}, "<redacted(len=%d)>", len(s.config.DecryptionPrivateKey))
+
+	s.logger.Info().Any("config", sanitizedConfig).Msg("starting with config")
 }
 
 func (s *server) listenAndServe(ctx context.Context) error {

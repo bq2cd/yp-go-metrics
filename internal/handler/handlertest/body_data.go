@@ -16,7 +16,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 )
 
-// BodyData contains raw bytes and their content type (as defined HTTP specification).
+// BodyData contains raw bytes and their content type (as defined in HTTP specification).
 type BodyData struct {
 	T           testing.TB
 	data        []byte
@@ -118,6 +118,21 @@ func (b BodyData) AsType(contentType httpheaders.ContentType) BodyData {
 		T:           b.T,
 		data:        b.data,
 		contentType: contentType,
+	}
+}
+
+// TransformData creates a new instance of [BodyData] by copying original data and applying transformation function
+// to the copy. Original instance of [BodyData] remains untouched.
+func (b BodyData) TransformData(transformFn func([]byte) []byte) BodyData {
+	transformed := b.data
+	if transformFn != nil {
+		transformed = transformFn(b.data)
+	}
+
+	return BodyData{
+		T:           b.T,
+		data:        transformed,
+		contentType: b.contentType,
 	}
 }
 

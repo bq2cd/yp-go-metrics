@@ -31,20 +31,21 @@ var (
 )
 
 type cliOptions struct {
-	ListenAddress            string `env:"ADDRESS"`
-	ShutdownTimeout          uint   `env:"SHUTDOWN_TIMEOUT"`
-	MetricStoreInterval      uint   `env:"STORE_INTERVAL"`
-	MetricStoreFilePath      string `env:"FILE_STORAGE_PATH"`
-	MetricStoreLoadOnStartup bool   `env:"RESTORE"`
-	DatabaseDSN              string `env:"DATABASE_DSN"`
-	HMACSecretkey            string `env:"KEY"`
-	AuditFilePath            string `env:"AUDIT_FILE"`
-	AuditURL                 string `env:"AUDIT_URL"`
+	ConfigFilePath           string `env:"CONFIG" json:"-"`
+	ListenAddress            string `env:"ADDRESS" json:"address"`
+	ShutdownTimeout          uint   `env:"SHUTDOWN_TIMEOUT" json:"shutdown_timeout"`
+	MetricStoreInterval      uint   `env:"STORE_INTERVAL" json:"store_interval"`
+	MetricStoreFilePath      string `env:"FILE_STORAGE_PATH" json:"file_storage_path"`
+	MetricStoreLoadOnStartup bool   `env:"RESTORE" json:"restore"`
+	DatabaseDSN              string `env:"DATABASE_DSN" json:"database_dsn"`
+	HMACSecretkey            string `env:"KEY" json:"key"`
+	DecryptionPrivateKeyFile string `env:"CRYPTO_KEY" json:"crypto_key"`
+	AuditFilePath            string `env:"AUDIT_FILE" json:"audit_file"`
+	AuditURL                 string `env:"AUDIT_URL" json:"audit_url"`
 }
 
-func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
-	var opts cliOptions
-
+func defineArgs(fs *flag.FlagSet, opts *cliOptions) {
+	fs.StringVar(&opts.ConfigFilePath, "c", "", "path to config file in JSON format (e.g. config.json)")
 	fs.StringVar(&opts.ListenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
 	fs.UintVar(&opts.ShutdownTimeout, "t", defaultShutdownTimeoutSec, "graceful shutdown timeout in seconds")
 	fs.UintVar(&opts.MetricStoreInterval, "i", defaultMetricStoreIntervalSec, "dump metrics on disk each interval (in seconds)")
@@ -54,15 +55,20 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 	fs.StringVar(&opts.HMACSecretkey, "k", "", "secret key for HMAC calculation")
 	fs.StringVar(&opts.AuditFilePath, "audit-file", "", "path to file for writing audit events")
 	fs.StringVar(&opts.AuditURL, "audit-url", "", "remote endpoint URL for sending audit events")
+	fs.StringVar(&opts.DecryptionPrivateKeyFile, "crypto-key", "", "path to a file with server's X25519 private key (for decryption)")
+}
 
-	if err := fs.Parse(args); err != nil {
-		return config.Config{}, fmt.Errorf("invalid args: %w", err)
+func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
+	parser := cli.Parser[cliOptions, config.Config]{
+		DefineArgs:        defineArgs,
+		GetConfigFilePath: func(opts *cliOptions) string { return opts.ConfigFilePath },
+		CreateConfig:      createConfig,
 	}
 
-	if err := envParser.Parse(&opts); err != nil {
-		return config.Config{}, fmt.Errorf("invalid env vars: %w", err)
-	}
+	return parser.Parse(fs, args, envParser)
+}
 
+func createConfig(opts *cliOptions) (config.Config, error) {
 	cfg, err := config.New(
 		config.ListenAddress(opts.ListenAddress),
 		config.ShutdownTimeout(opts.ShutdownTimeout),
@@ -71,6 +77,7 @@ func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (con
 		config.MetricStoreLoadOnStartup(opts.MetricStoreLoadOnStartup),
 		config.DatabaseURL(opts.DatabaseDSN),
 		config.HMACSecretKey(opts.HMACSecretkey),
+		config.DecryptionPrivateKey(opts.DecryptionPrivateKeyFile),
 		config.AuditFilePath(opts.AuditFilePath),
 		config.AuditURL(opts.AuditURL),
 	)

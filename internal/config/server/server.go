@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type Config struct {
 	MetricStoreLoadOnStartup bool
 	DatabaseURL              url.URL
 	HMACSecretKey            []byte
+	DecryptionPrivateKey     []byte
 	AuditFilePath            string
 	AuditURL                 url.URL
 }
@@ -137,6 +139,27 @@ func DatabaseURL(dsn string) Option {
 func HMACSecretKey(key string) Option {
 	return func(c *Config) error {
 		c.HMACSecretKey = hmacsigner.LoadSecretKey(key)
+		return nil
+	}
+}
+
+// DecryptionPrivateKey loads file contents from a given path and stores it in [Config.DecryptionPrivateKey].
+// The path can be an empty string, in which case [Config.DecryptionPrivateKey] is set to `nil`.
+func DecryptionPrivateKey(path string) Option {
+	return func(c *Config) error {
+		if path == "" {
+			c.DecryptionPrivateKey = nil
+
+			return nil
+		}
+
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		c.DecryptionPrivateKey = contents
+
 		return nil
 	}
 }

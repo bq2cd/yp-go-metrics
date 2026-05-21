@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
 )
 
 func TestNew(t *testing.T) {
@@ -750,6 +752,96 @@ func TestAuditURL(t *testing.T) {
 			err := AuditURL(tt.args.input)(c)
 			tt.assertion(t, &tt.config, err, tt.want)
 			assert.Equal(t, tt.want.url, c.AuditURL)
+		})
+	}
+}
+
+func TestDecryptionPrivateKey(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
+	type args struct {
+		path string
+	}
+	type want struct {
+		content []byte
+		wantErr func(testing.TB, error)
+	}
+	type testcase struct {
+		config Config
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"empty path and empty config": {
+			config: Config{},
+			args:   args{path: ""},
+			want: want{
+				content: nil,
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+		"empty path and populated config": {
+			config: Config{DecryptionPrivateKey: []byte(`1234`)},
+			args:   args{path: ""},
+			want: want{
+				content: nil,
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+		"path is a directory": {
+			config: Config{DecryptionPrivateKey: []byte(`1234`)},
+			args:   args{path: "/tmp"},
+			want: want{
+				content: []byte(`1234`),
+				wantErr: func(t testing.TB, err error) { require.Error(t, err) },
+			},
+		},
+		"path to a file that does not exist": {
+			config: Config{DecryptionPrivateKey: []byte(`1234`)},
+			args:   args{path: "/nonexistent/key-file"},
+			want: want{
+				content: []byte(`1234`),
+				wantErr: func(t testing.TB, err error) { require.Error(t, err) },
+			},
+		},
+		"path to an empty file": {
+			config: Config{DecryptionPrivateKey: []byte(`1234`)},
+			args: args{
+				path: func() string {
+					keyFile := tempFactory.Create("key-file-*")
+
+					return keyFile
+				}(),
+			},
+			want: want{
+				content: []byte{},
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+		"path to an non-empty file": {
+			config: Config{DecryptionPrivateKey: []byte(`1234`)},
+			args: args{
+				path: func() string {
+					keyFile := tempFactory.Create("key-file-*")
+					err := os.WriteFile(keyFile, []byte(`5678`), 0600)
+					require.NoError(t, err)
+
+					return keyFile
+				}(),
+			},
+			want: want{
+				content: []byte(`5678`),
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := DecryptionPrivateKey(tt.args.path)(c)
+			tt.want.wantErr(t, err)
+			assert.Equal(t, tt.want.content, c.DecryptionPrivateKey)
 		})
 	}
 }

@@ -1,10 +1,12 @@
 package handlertest
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -281,6 +283,61 @@ func TestBodyData_AsType(t *testing.T) {
 			}
 			got := b.AsType(tt.args.contentType)
 			assert.Equal(t, tt.want.got, got)
+		})
+	}
+}
+
+func TestBodyData_TransformData(t *testing.T) {
+	type fields struct {
+		T           *testing.T
+		data        []byte
+		contentType httpheaders.ContentType
+	}
+	type args struct {
+		transform func([]byte) []byte
+	}
+	type want struct {
+		got BodyData
+	}
+	type testcase struct {
+		fields fields
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"nil transform function keeps original data": {
+			fields: fields{T: t, data: []byte(`123`), contentType: httpheaders.ContentTypeEmpty},
+			args: args{
+				transform: nil,
+			},
+			want: want{got: BodyData{T: t, data: []byte(`123`), contentType: httpheaders.ContentTypeEmpty}},
+		},
+		"transform function returns nil": {
+			fields: fields{T: t, data: []byte(`123`), contentType: httpheaders.ContentTypeTextPlain},
+			args: args{
+				transform: func(data []byte) []byte { return nil },
+			},
+			want: want{got: BodyData{T: t, data: nil, contentType: httpheaders.ContentTypeTextPlain}},
+		},
+		"transform function returns prefixed data": {
+			fields: fields{T: t, data: []byte(`123`), contentType: httpheaders.ContentTypeApplicationJSON},
+			args: args{
+				transform: func(data []byte) []byte { return slices.Concat([]byte(`000`), data) },
+			},
+			want: want{got: BodyData{T: t, data: []byte(`000123`), contentType: httpheaders.ContentTypeApplicationJSON}},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			b := BodyData{
+				T:           tt.fields.T,
+				data:        tt.fields.data,
+				contentType: tt.fields.contentType,
+			}
+			origData := bytes.Clone(b.data)
+			got := b.TransformData(tt.args.transform)
+			assert.Equal(t, tt.want.got, got)
+			assert.Equal(t, origData, b.data)
 		})
 	}
 }

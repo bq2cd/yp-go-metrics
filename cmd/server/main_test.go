@@ -23,15 +23,19 @@ import (
 )
 
 func Test_parseArgs(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
 	type args struct {
 		args []string
 	}
-	tests := []struct {
+	type testcase struct {
 		name      string
 		args      args
 		want      config.Config
 		assertion assert.ErrorAssertionFunc
-	}{
+	}
+	tests := []testcase{
 		{
 			name: "no args",
 			args: args{args: []string{}},
@@ -109,6 +113,42 @@ func Test_parseArgs(t *testing.T) {
 			want:      config.Config{},
 			assertion: assert.Error,
 		},
+		{
+			name:      "bad args, non-existent private key file",
+			args:      args{args: []string{"-crypto-key=/nonexistent/key.pem"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, private key file is a directory",
+			args:      args{args: []string{"-crypto-key=/tmp"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, non-existent config file file",
+			args:      args{args: []string{"-c", "/nonexistent/config.json"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, config file is a directory",
+			args:      args{args: []string{"-c=/tmp"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		func() testcase {
+			cfg := tempFactory.Create("config-file-*")
+			err := os.WriteFile(cfg, []byte(`invalid JSON`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name:      "bad args, config file contains invalid JSON",
+				args:      args{args: []string{"-c", cfg}},
+				want:      config.Config{},
+				assertion: assert.Error,
+			}
+		}(),
 		{
 			name: "good args, address",
 			args: args{args: []string{"-a=host1"}},
@@ -280,6 +320,42 @@ func Test_parseArgs(t *testing.T) {
 			},
 			assertion: assert.NoError,
 		},
+		func() testcase {
+			keyFile := tempFactory.Create("crypto-key-*")
+			err := os.WriteFile(keyFile, []byte(`1234`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name: "good args, private key file",
+				args: args{args: []string{"-crypto-key", keyFile}},
+				want: config.Config{
+					ListenAddress:        defaultAddress,
+					ShutdownTimeout:      defaultShutdownTimeoutSec * time.Second,
+					MetricStoreInterval:  defaultMetricStoreIntervalSec * time.Second,
+					MetricStoreFilePath:  filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+					DecryptionPrivateKey: []byte(`1234`),
+				},
+				assertion: assert.NoError,
+			}
+		}(),
+		func() testcase {
+			cfg := tempFactory.Create("config-file-*")
+			err := os.WriteFile(cfg, []byte(`{"address": "9.9.9.9:1234", "shutdown_timeout": 123, "store_interval": 123, "restore": true}`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name: "good args, config file provides default values but CLI flags override",
+				args: args{args: []string{"-c", cfg, "-i", "12"}},
+				want: config.Config{
+					ListenAddress:            "9.9.9.9:1234",
+					ShutdownTimeout:          123 * time.Second,
+					MetricStoreInterval:      12 * time.Second,
+					MetricStoreFilePath:      filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+					MetricStoreLoadOnStartup: true,
+				},
+				assertion: assert.NoError,
+			}
+		}(),
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -293,6 +369,9 @@ func Test_parseArgs(t *testing.T) {
 }
 
 func Test_parseArgs_withEnv(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
 	type args struct {
 		args []string
 		env  map[string]string
@@ -502,6 +581,53 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
 				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				AuditURL:            url.URL{Scheme: "http", Host: "localhost:9999", Path: "/audit-2"},
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides private key file",
+			args: args{
+				args: []string{"-crypto-key=/nonexistent/key.pem"},
+				env: func() map[string]string {
+					keyFile := tempFactory.Create("crypto-key-*")
+					err := os.WriteFile(keyFile, []byte(`5678`), 0600)
+					require.NoError(t, err)
+
+					return map[string]string{"CRYPTO_KEY": keyFile}
+				}(),
+			},
+			want: config.Config{
+				ListenAddress:        defaultAddress,
+				ShutdownTimeout:      defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval:  defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath:  filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				DecryptionPrivateKey: []byte(`5678`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides config file",
+			args: args{
+				args: []string{"-c", "/nonexistent/config.json", "-i", "456"},
+				env: func() map[string]string {
+					cfg := tempFactory.Create("config-file-*")
+					err := os.WriteFile(cfg, []byte(`{"address": "9.9.9.9:1234", "shutdown_timeout": 123, "store_interval": 123, "restore": true}`), 0600)
+					require.NoError(t, err)
+
+					return map[string]string{
+						"CONFIG":         cfg,
+						"STORE_INTERVAL": "789",
+						"DATABASE_DSN":   "postgres://localhost:5432/test",
+					}
+				}(),
+			},
+			want: config.Config{
+				ListenAddress:            "9.9.9.9:1234",
+				ShutdownTimeout:          123 * time.Second,
+				MetricStoreInterval:      789 * time.Second,
+				MetricStoreFilePath:      filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				MetricStoreLoadOnStartup: true,
+				DatabaseURL:              url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/test"},
 			},
 			assertion: assert.NoError,
 		},

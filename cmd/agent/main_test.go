@@ -15,23 +15,29 @@ import (
 	"github.com/caarlos0/env/v11"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/cli"
 	"github.com/bq2cd/yp-go-metrics/internal/app/envparser"
+	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 )
 
 func Test_parseArgs(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
 	type args struct {
 		args []string
 	}
-	tests := []struct {
+	type testcase struct {
 		name      string
 		args      args
 		want      config.Config
 		assertion assert.ErrorAssertionFunc
-	}{
+	}
+	tests := []testcase{
 		{
 			name: "no args",
 			args: args{args: []string{}},
@@ -139,6 +145,42 @@ func Test_parseArgs(t *testing.T) {
 			assertion: assert.Error,
 		},
 		{
+			name:      "bad args, non-existent public key file",
+			args:      args{args: []string{"-crypto-key=/nonexistent/key.pem"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, public key file is a directory",
+			args:      args{args: []string{"-crypto-key=/tmp"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, non-existent config file file",
+			args:      args{args: []string{"-c", "/nonexistent/config.json"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
+			name:      "bad args, config file is a directory",
+			args:      args{args: []string{"-c=/tmp"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		func() testcase {
+			cfg := tempFactory.Create("config-file-*")
+			err := os.WriteFile(cfg, []byte(`invalid JSON`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name:      "bad args, config file contains invalid JSON",
+				args:      args{args: []string{"-c", cfg}},
+				want:      config.Config{},
+				assertion: assert.Error,
+			}
+		}(),
+		{
 			name: "good args",
 			args: args{args: []string{"-a=localhost:9090"}},
 			want: config.Config{UpstreamURL: url.URL{Scheme: "http", Host: "localhost:9090"}, PollInterval: defaultPollIntervalSec * time.Second, ReportInterval: defaultReportIntervalSec * time.Second},
@@ -195,6 +237,40 @@ func Test_parseArgs(t *testing.T) {
 			},
 			assertion: assert.NoError,
 		},
+		func() testcase {
+			keyFile := tempFactory.Create("crypto-key-*")
+			err := os.WriteFile(keyFile, []byte(`1234`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name: "good args, server public key file",
+				args: args{args: []string{"-crypto-key", keyFile}},
+				want: config.Config{
+					UpstreamURL:     url.URL{Scheme: "http", Host: defaultUpstreamURL},
+					PollInterval:    defaultPollIntervalSec * time.Second,
+					ReportInterval:  defaultReportIntervalSec * time.Second,
+					ServerPublicKey: []byte(`1234`),
+				},
+				assertion: assert.NoError,
+			}
+		}(),
+		func() testcase {
+			cfg := tempFactory.Create("config-file-*")
+			err := os.WriteFile(cfg, []byte(`{"address": "9.9.9.9:1234", "poll_interval": 123, "report_interval": 123, "rate_limit": 5}`), 0600)
+			require.NoError(t, err)
+
+			return testcase{
+				name: "good args, config file provides default values but CLI flags override",
+				args: args{args: []string{"-c", cfg, "-p", "12"}},
+				want: config.Config{
+					UpstreamURL:    url.URL{Scheme: "http", Host: "9.9.9.9:1234"},
+					PollInterval:   12 * time.Second,
+					ReportInterval: 123 * time.Second,
+					SenderPoolSize: 5,
+				},
+				assertion: assert.NoError,
+			}
+		}(),
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -208,6 +284,9 @@ func Test_parseArgs(t *testing.T) {
 }
 
 func Test_parseArgs_withEnv(t *testing.T) {
+	tempFactory := servertest.NewTempFileFactory(t)
+	t.Cleanup(tempFactory.RemoveAll)
+
 	type args struct {
 		args []string
 		env  map[string]string
@@ -355,6 +434,50 @@ func Test_parseArgs_withEnv(t *testing.T) {
 			assertion: func(t assert.TestingT, err error, v ...any) bool {
 				return assert.NoError(t, err)
 			},
+		},
+		{
+			name: "env overrides public key file",
+			args: args{
+				args: []string{"-crypto-key=/nonexistent/key.pem"},
+				env: func() map[string]string {
+					keyFile := tempFactory.Create("crypto-key-*")
+					err := os.WriteFile(keyFile, []byte(`5678`), 0600)
+					require.NoError(t, err)
+
+					return map[string]string{"CRYPTO_KEY": keyFile}
+				}(),
+			},
+			want: config.Config{
+				UpstreamURL:     url.URL{Scheme: "http", Host: defaultUpstreamURL},
+				PollInterval:    defaultPollIntervalSec * time.Second,
+				ReportInterval:  defaultReportIntervalSec * time.Second,
+				ServerPublicKey: []byte(`5678`),
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides config file",
+			args: args{
+				args: []string{"-c=/nonexistent/config.json", "-p=25"},
+				env: func() map[string]string {
+					cfg := tempFactory.Create("config-file-*")
+					err := os.WriteFile(cfg, []byte(`{"address": "9.9.9.9:1234", "poll_interval": 123, "report_interval": 123, "rate_limit": 5}`), 0600)
+					require.NoError(t, err)
+
+					return map[string]string{
+						"CONFIG":        cfg,
+						"RATE_LIMIT":    "10",
+						"POLL_INTERVAL": "37",
+					}
+				}(),
+			},
+			want: config.Config{
+				UpstreamURL:    url.URL{Scheme: "http", Host: "9.9.9.9:1234"},
+				PollInterval:   37 * time.Second,
+				ReportInterval: 123 * time.Second,
+				SenderPoolSize: 10,
+			},
+			assertion: assert.NoError,
 		},
 	}
 	for _, tt := range tests {

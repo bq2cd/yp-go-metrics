@@ -40,6 +40,20 @@ func (m *MockSource) EXPECT() *MockSourceMockRecorder {
 	return m.recorder
 }
 
+// AvailableMetricNames mocks base method.
+func (m *MockSource) AvailableMetricNames() map[string]model.MetricType {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AvailableMetricNames")
+	ret0, _ := ret[0].(map[string]model.MetricType)
+	return ret0
+}
+
+// AvailableMetricNames indicates an expected call of AvailableMetricNames.
+func (mr *MockSourceMockRecorder) AvailableMetricNames() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AvailableMetricNames", reflect.TypeOf((*MockSource)(nil).AvailableMetricNames))
+}
+
 // ReadMetrics mocks base method.
 func (m *MockSource) ReadMetrics() ([]model.Metric, error) {
 	m.ctrl.T.Helper()

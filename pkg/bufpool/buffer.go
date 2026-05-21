@@ -29,6 +29,11 @@ func (b *Buffer) Read(p []byte) (int, error) {
 	return b.buf.Read(p)
 }
 
+// Reset calls the underlying [bytes.Buffer.Reset].
+func (b *Buffer) Reset() {
+	b.buf.Reset()
+}
+
 // Close implements release of the underlying [bytes.Buffer] to the [sync.Pool].
 // It ensures that the release is performed only once via [sync.Once] primitive.
 func (b *Buffer) Close() error {

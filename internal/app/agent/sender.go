@@ -14,6 +14,7 @@ import (
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/urlpath"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
 	"github.com/bq2cd/yp-go-metrics/pkg/bufpool"
 	"github.com/bq2cd/yp-go-metrics/pkg/gzippool"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
@@ -74,13 +75,19 @@ func (s *senderPlain) Send(ctx context.Context, metric model.Metric) error {
 }
 
 // NewSenderJSON creates an instance of a sender that reports metrics encoded in JSON.
-func NewSenderJSON(client *resty.Client, retrierFactory retrymgr.RetrierFactory, hmacSigner hmacsigner.HMACSigner) *senderJSON {
+func NewSenderJSON(
+	client *resty.Client,
+	retrierFactory retrymgr.RetrierFactory,
+	hmacSigner hmacsigner.HMACSigner,
+	encryptor asymcrypt.Encryptor,
+) *senderJSON {
 	compressorPool, _ := gzippool.NewWriterPool(gzip.BestSpeed)
 
 	return &senderJSON{
 		client:         client,
 		retrierFactory: retrierFactory,
 		hmacSigner:     hmacSigner,
+		encryptor:      encryptor,
 		shouldCompress: true,
 		compressorPool: compressorPool,
 		bufferPool:     bufpool.New(),
@@ -91,9 +98,36 @@ type senderJSON struct {
 	client         *resty.Client
 	retrierFactory retrymgr.RetrierFactory
 	hmacSigner     hmacsigner.HMACSigner
+	encryptor      asymcrypt.Encryptor
 	shouldCompress bool
 	compressorPool *gzippool.WriterPool
 	bufferPool     *bufpool.Pool
+}
+
+func (s *senderJSON) encryptBody(src *bufpool.Buffer) error {
+	if s.encryptor == nil {
+		return nil
+	}
+
+	ciphertext, err := s.encryptor.Encrypt(src.Bytes())
+	if err != nil {
+		return err
+	}
+
+	// reuse original buffer
+	src.Reset()
+
+	n, err := src.Write(ciphertext)
+	if err != nil {
+		return fmt.Errorf("cannot reuse body buffer: %w", err)
+	}
+
+	// sanity check
+	if n != len(ciphertext) {
+		return fmt.Errorf("incomplete encrypted body written to buffer: written %d, expected %d", n, len(ciphertext))
+	}
+
+	return nil
 }
 
 func (s *senderJSON) signBody(src *bufpool.Buffer, headers map[string]string) error {
@@ -132,7 +166,13 @@ func (s *senderJSON) compressBody(src *bufpool.Buffer, headers map[string]string
 func (s *senderJSON) prepareBody(src *bufpool.Buffer) (*bufpool.Buffer, map[string]string, error) {
 	headers := make(map[string]string)
 
-	err := s.signBody(src, headers)
+	// encrypt before signing to get message authentication regardless of the encryption mechanism.
+	err := s.encryptBody(src)
+	if err != nil {
+		return src, headers, fmt.Errorf("cannot encrypt body: %w", err)
+	}
+
+	err = s.signBody(src, headers)
 	if err != nil {
 		return src, headers, fmt.Errorf("cannot sign body: %w", err)
 	}
