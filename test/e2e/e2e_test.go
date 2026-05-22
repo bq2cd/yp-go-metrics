@@ -14,6 +14,7 @@ import (
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
 	"github.com/bq2cd/yp-go-metrics/test/e2e"
 )
 
@@ -302,16 +303,16 @@ type keyPairFiles struct {
 }
 
 func generateKeyPairFiles(t *testing.T) keyPairFiles {
-	keypair, err := servertest.NewX25519KeyPair()
+	keypair, err := asymcrypt.NewX25519KeyPair()
 	require.NoErrorf(t, err, "unable to generate X25519 key pair")
 
 	privateKeyFile := tempFiles.Create("private-key-*")
 	publicKeyFile := tempFiles.Create("public-key-*")
 
-	err = os.WriteFile(privateKeyFile, keypair.Private.Bytes(), 0600)
+	err = os.WriteFile(privateKeyFile, keypair.Private, 0600)
 	require.NoErrorf(t, err, "cannot write private key to file")
 
-	os.WriteFile(publicKeyFile, keypair.Public.Bytes(), 0600)
+	os.WriteFile(publicKeyFile, keypair.Public, 0600)
 	require.NoErrorf(t, err, "cannot write public key to file")
 
 	return keyPairFiles{

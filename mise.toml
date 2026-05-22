@@ -51,4 +51,5 @@ run = [
   { task = "fmt" },
   { task = "lint" },
   { task = "test" },
+  { task = "e2e" },
 ]

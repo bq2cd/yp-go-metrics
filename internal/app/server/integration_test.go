@@ -43,7 +43,7 @@ type IntegrationTestSuite struct {
 	addrFactory *servertest.ListenAddressFactory
 	tempFactory *servertest.TempFileFactory
 	requester   *handlertest.Requester
-	keypair     *servertest.X25519KeyPair
+	keypair     *asymcrypt.X25519KeyPair
 }
 
 type IntegrationCase struct {
@@ -58,7 +58,7 @@ type IntegrationCase struct {
 func (ts *IntegrationTestSuite) SetupSuite() {
 	var err error
 
-	ts.keypair, err = servertest.NewX25519KeyPair()
+	ts.keypair, err = asymcrypt.NewX25519KeyPair()
 	ts.Require().NoErrorf(err, "unable to generate X25519 key pair")
 }
 
@@ -402,7 +402,7 @@ func (ts *IntegrationTestSuite) TestEncryptedMetricsUpload() {
 		timeout:     500 * time.Millisecond,
 		warmupDelay: 100 * time.Millisecond,
 		config: config.Config{
-			DecryptionPrivateKey: ts.keypair.Private.Bytes(),
+			DecryptionPrivateKey: ts.keypair.Private,
 		},
 		assertRunning: func(addr string) {
 			collectedMetrics := []model.Metric{
@@ -427,7 +427,7 @@ func (ts *IntegrationTestSuite) TestClearTextMetricsUploadFailsWhenEncryptionEna
 		timeout:     500 * time.Millisecond,
 		warmupDelay: 100 * time.Millisecond,
 		config: config.Config{
-			DecryptionPrivateKey: ts.keypair.Private.Bytes(),
+			DecryptionPrivateKey: ts.keypair.Private,
 		},
 		assertRunning: func(addr string) {
 			collectedMetrics := []model.Metric{
@@ -545,7 +545,7 @@ func (ts *IntegrationTestSuite) metricsToBodyData(metrics []model.Metric) handle
 
 func (ts *IntegrationTestSuite) metricsToEncryptedBodyData(metrics []model.Metric) handlertest.BodyData {
 	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics).TransformData(func(data []byte) []byte {
-		pubkey, err := asymcrypt.ParsePublicKey(ts.keypair.Public.Bytes())
+		pubkey, err := asymcrypt.ParsePublicKey(ts.keypair.Public)
 		ts.Require().NoErrorf(err, "unable to parse pre-generated X25519 public key")
 
 		encryptor, err := asymcrypt.NewEncryptor(pubkey)

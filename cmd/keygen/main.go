@@ -10,7 +10,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
+	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
 )
 
 var (
@@ -25,7 +25,7 @@ type writerPair struct {
 func main() {
 	flag.Parse()
 
-	keys, err := servertest.NewX25519KeyPair()
+	keys, err := asymcrypt.NewX25519KeyPair()
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -36,7 +36,7 @@ func main() {
 	}
 }
 
-func printOrWriteToFile(keys *servertest.X25519KeyPair, outPath string) (err error) {
+func printOrWriteToFile(keys *asymcrypt.X25519KeyPair, outPath string) (err error) {
 	var (
 		writers *writerPair
 		closeFn func() error
@@ -53,12 +53,12 @@ func printOrWriteToFile(keys *servertest.X25519KeyPair, outPath string) (err err
 
 	err = errors.Join(
 		func() error {
-			_, err = keys.Private.WriteTo(writers.private)
+			_, err = writers.private.Write(keys.Private)
 
 			return err
 		}(),
 		func() error {
-			_, err = keys.Public.WriteTo(writers.public)
+			_, err = writers.public.Write(keys.Public)
 
 			return err
 		}(),
