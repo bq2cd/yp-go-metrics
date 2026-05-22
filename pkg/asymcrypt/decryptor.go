@@ -46,12 +46,26 @@ func (d *decryptor) Decrypt(ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("asymcrypt.Decryptor(public key): %w", err)
 	}
 
+	aead, err := d.prepareAEAD(remote, msg.salt)
+	if err != nil {
+		return nil, err
+	}
+
+	cleartext, err := msg.Open(aead)
+	if err != nil {
+		return nil, fmt.Errorf("asymcrypt.Decryptor(open): %w", err)
+	}
+
+	return cleartext, nil
+}
+
+func (d *decryptor) prepareAEAD(remote *ecdh.PublicKey, salt []byte) (cipher.AEAD, error) {
 	shared, err := d.local.ECDH(remote)
 	if err != nil {
 		return nil, fmt.Errorf("asymcrypt.Decryptor(ecdh): %w", err)
 	}
 
-	symmetric, err := hkdf.Key(sha256.New, shared, msg.salt, "", symmetricKeySize)
+	symmetric, err := hkdf.Key(sha256.New, shared, salt, "", symmetricKeySize)
 	if err != nil {
 		return nil, fmt.Errorf("asymcrypt.Decryptor(hkdf): %w", err)
 	}
@@ -66,10 +80,5 @@ func (d *decryptor) Decrypt(ciphertext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("asymcrypt.Decryptor(gcm): %w", err)
 	}
 
-	cleartext, err := msg.Open(aead)
-	if err != nil {
-		return nil, fmt.Errorf("asymcrypt.Decryptor(open): %w", err)
-	}
-
-	return cleartext, nil
+	return aead, nil
 }

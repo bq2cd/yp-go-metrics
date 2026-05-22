@@ -22,8 +22,7 @@ const (
 )
 
 type encryptor struct {
-	local  *ecdh.PrivateKey // ephemeral, generated on initialization
-	remote *ecdh.PublicKey  // static, provided externally
+	remote *ecdh.PublicKey // static, provided externally
 }
 
 // NewEncryptor creates an instance of [Encryptor] that implements AES-GCM encryption using
@@ -32,13 +31,7 @@ type encryptor struct {
 // The ephemeral public key is then sent over the wire in clear text, for a [Decryptor] to be able to use ECDH
 // to derive the same symmetric encryption key.
 func NewEncryptor(remote *ecdh.PublicKey) (*encryptor, error) {
-	private, err := ecdh.X25519().GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, err
-	}
-
 	enc := &encryptor{
-		local:  private,
 		remote: remote,
 	}
 
@@ -51,17 +44,53 @@ func NewEncryptor(remote *ecdh.PublicKey) (*encryptor, error) {
 // Resulting ciphertext is combined with local (ephemeral) X25519 public key, HKDF salt and AES-GCM nonce
 // into a single message, ready to be sent over the wire.
 func (e *encryptor) Encrypt(cleartext []byte) ([]byte, error) {
-	msg, err := e.prepareMessage()
+	ephemeral, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("asymcrypt.Encryptor(ephemeral): %w", err)
+	}
+
+	msg, err := e.prepareMessage(ephemeral.PublicKey())
 	if err != nil {
 		return nil, err
 	}
 
-	shared, err := e.local.ECDH(e.remote)
+	aead, err := e.prepareAEAD(ephemeral, msg.salt)
+	if err != nil {
+		return nil, err
+	}
+
+	msg.Seal(aead, cleartext)
+
+	return msg.ToWire(), nil
+}
+
+func (e *encryptor) prepareMessage(ephemeralPub *ecdh.PublicKey) (*Message, error) {
+	var err error
+
+	msg := &Message{
+		publicKey: ephemeralPub.Bytes(),
+	}
+
+	err = msg.InitSalt()
+	if err != nil {
+		return nil, fmt.Errorf("asymcrypt.Encryptor(salt): %w", err)
+	}
+
+	err = msg.InitNonce()
+	if err != nil {
+		return nil, fmt.Errorf("asymcrypt.Encryptor(nonce): %w", err)
+	}
+
+	return msg, nil
+}
+
+func (e *encryptor) prepareAEAD(ephemeral *ecdh.PrivateKey, salt []byte) (cipher.AEAD, error) {
+	shared, err := ephemeral.ECDH(e.remote)
 	if err != nil {
 		return nil, fmt.Errorf("asymcrypt.Encryptor(ecdh): %w", err)
 	}
 
-	symmetric, err := hkdf.Key(sha256.New, shared, msg.salt, "", symmetricKeySize)
+	symmetric, err := hkdf.Key(sha256.New, shared, salt, "", symmetricKeySize)
 	if err != nil {
 		return nil, fmt.Errorf("asymcrypt.Encryptor(hkdf): %w", err)
 	}
@@ -76,27 +105,5 @@ func (e *encryptor) Encrypt(cleartext []byte) ([]byte, error) {
 		return nil, fmt.Errorf("asymcrypt.Encryptor(gcm): %w", err)
 	}
 
-	msg.Seal(aead, cleartext)
-
-	return msg.ToWire(), nil
-}
-
-func (e *encryptor) prepareMessage() (*Message, error) {
-	var err error
-
-	msg := &Message{
-		publicKey: e.local.PublicKey().Bytes(),
-	}
-
-	err = msg.InitSalt()
-	if err != nil {
-		return nil, fmt.Errorf("asymcrypt.Encryptor(salt): %w", err)
-	}
-
-	err = msg.InitNonce()
-	if err != nil {
-		return nil, fmt.Errorf("asymcrypt.Encryptor(nonce): %w", err)
-	}
-
-	return msg, nil
+	return aead, nil
 }
