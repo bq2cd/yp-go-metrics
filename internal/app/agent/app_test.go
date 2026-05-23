@@ -127,7 +127,7 @@ MCowBQYDK2VuAyEAkZEdmg2VjtMlDU5mDWH76QagkM22DkDqVxt0W7NjqFM=
 				cfg: config.Config{
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 50 * time.Millisecond,
-					UpstreamURL:    url.URL{Host: "localhost"},
+					UpstreamURL:    url.URL{Host: "localhost:65535"},
 				},
 			},
 			want: want{

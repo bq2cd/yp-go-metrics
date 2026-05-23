@@ -80,6 +80,7 @@ func NewSenderJSON(
 	retrierFactory retrymgr.RetrierFactory,
 	hmacSigner hmacsigner.HMACSigner,
 	encryptor asymcrypt.Encryptor,
+	realIP httpheaders.XRealIP,
 ) *senderJSON {
 	compressorPool, _ := gzippool.NewWriterPool(gzip.BestSpeed)
 
@@ -89,6 +90,7 @@ func NewSenderJSON(
 		hmacSigner:     hmacSigner,
 		encryptor:      encryptor,
 		shouldCompress: true,
+		realIP:         realIP,
 		compressorPool: compressorPool,
 		bufferPool:     bufpool.New(),
 	}
@@ -100,6 +102,7 @@ type senderJSON struct {
 	hmacSigner     hmacsigner.HMACSigner
 	encryptor      asymcrypt.Encryptor
 	shouldCompress bool
+	realIP         httpheaders.XRealIP
 	compressorPool *gzippool.WriterPool
 	bufferPool     *bufpool.Pool
 }
@@ -191,6 +194,10 @@ func (s *senderJSON) prepareBody(src *bufpool.Buffer) (*bufpool.Buffer, map[stri
 	return buf, headers, nil
 }
 
+func (s *senderJSON) setRealIPHeader(headers map[string]string) {
+	headers[httpheaders.HeaderKeyXRealIP] = s.realIP.String()
+}
+
 func (s *senderJSON) sendSingleRequest(ctx context.Context, method, url string, headers map[string]string, body *bufpool.Buffer) (*resty.Response, error) {
 	req := s.client.R().
 		SetContext(ctx).
@@ -221,6 +228,8 @@ func (s *senderJSON) sendWithRetries(ctx context.Context, method, url string, or
 	}
 
 	defer body.Close()
+
+	s.setRealIPHeader(headers)
 
 	return retrymgr.NewRetrier[*resty.Response](s.retrierFactory).Do(
 		ctx, "send_metrics_json",

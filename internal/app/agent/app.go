@@ -23,12 +23,18 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return err
 	}
 
+	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
+
+	realIP, err := prepareRealIPHeader(cfg.UpstreamURL.Host, hmacSigner)
+	if err != nil {
+		return err
+	}
+
 	collector := NewCollector(source.DefaultSources(), repository.NewMemStorage())
 
 	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
 	retrierFactory := retrymgr.NewRetrierFactory(logger, retrymgr.NewSleeper(), retrymgr.NewStrategy1s3s5s)
-	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
-	sender := NewSenderJSON(client, retrierFactory, hmacSigner, encryptor)
+	sender := NewSenderJSON(client, retrierFactory, hmacSigner, encryptor, realIP)
 	reporter := NewReporter(sender, repository.NewMemStorage(), cfg.SenderPoolSize)
 
 	logger.Info().
