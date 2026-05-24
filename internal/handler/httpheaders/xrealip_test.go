@@ -272,3 +272,57 @@ func TestXRealIP_Matches(t *testing.T) {
 		})
 	}
 }
+
+func TestXRealIP_Apply(t *testing.T) {
+	type testcase struct {
+		header     http.Header
+		realIP     XRealIP
+		wantValues []string
+	}
+
+	tests := map[string]testcase{
+		"empty header and empty real IP produce no header": {
+			header:     http.Header{},
+			realIP:     XRealIP{},
+			wantValues: []string{},
+		},
+		"empty header and real IP produce single value": {
+			header:     http.Header{},
+			realIP:     XRealIP{IP: net.ParseIP("127.0.0.1")},
+			wantValues: []string{"127.0.0.1"},
+		},
+		"header with multiple values and real IP produce single value": {
+			header: func() http.Header {
+				h := http.Header{}
+				h.Add(HeaderKeyXRealIP, "not-an-ip")
+				h.Add(HeaderKeyXRealIP, "10.0.1.1")
+				return h
+			}(),
+			realIP:     XRealIP{IP: net.ParseIP("127.0.0.1")},
+			wantValues: []string{"127.0.0.1"},
+		},
+		"header with multiple values and empty real IP remove all values": {
+			header: func() http.Header {
+				h := http.Header{}
+				h.Add(HeaderKeyXRealIP, "not-an-ip")
+				h.Add(HeaderKeyXRealIP, "10.0.1.1")
+				return h
+			}(),
+			realIP:     XRealIP{},
+			wantValues: []string{},
+		},
+	}
+
+	for tname, tc := range tests {
+		t.Run(tname, func(t *testing.T) {
+			tc.realIP.Apply(tc.header)
+
+			canonical := http.CanonicalHeaderKey(HeaderKeyXRealIP)
+			if len(tc.wantValues) == 0 {
+				assert.NotContains(t, tc.header, canonical)
+			} else {
+				assert.ElementsMatch(t, tc.wantValues, tc.header[canonical])
+			}
+		})
+	}
+}

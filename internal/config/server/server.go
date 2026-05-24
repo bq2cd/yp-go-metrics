@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strings"
@@ -28,6 +29,7 @@ type Config struct {
 	DecryptionPrivateKey     []byte
 	AuditFilePath            string
 	AuditURL                 url.URL
+	TrustedSubnet            net.IPNet
 }
 
 // Option is function that take pointer to config as an argument,
@@ -195,6 +197,27 @@ func AuditURL(urlText string) Option {
 		}
 
 		c.AuditURL = *uri
+
+		return nil
+	}
+}
+
+// TrustedSubnet parses provided CIDR address and stores resulting [net.IPNet] as trusted subnet.
+// If provided address is an empty string, trusted subnet is reset to zero (allowing all IP addresses).
+func TrustedSubnet(ipCidr string) Option {
+	return func(c *Config) error {
+		if ipCidr == "" {
+			c.TrustedSubnet = net.IPNet{}
+
+			return nil
+		}
+
+		_, subnet, err := net.ParseCIDR(ipCidr)
+		if err != nil {
+			return fmt.Errorf("cannot parse CIDR address %s: %w", ipCidr, err)
+		}
+
+		c.TrustedSubnet = *subnet // net.ParseCIDR never returns nil when parsing was successful (err == nil)
 
 		return nil
 	}

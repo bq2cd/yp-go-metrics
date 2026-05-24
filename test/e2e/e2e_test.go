@@ -41,8 +41,13 @@ func TestE2E(t *testing.T) {
 		"report metrics with HMAC signature":                           testReportWithHMACSignature,
 		"report metrics with asymmetric encryption":                    testReportWithEncryption,
 		"report metrics with asymmetric encryption and HMAC signature": testReportWithEncryptionAndHMACSignature,
+		"report metrics with trusted subnet":                           testReportWithTrustedSubnet,
+		"report metrics with trusted subnet and hash ignored":          testReportWithTrustedSubnetHashIgnored,
+		"report metrics with trusted subnet and correct hash":          testReportWithTrustedSubnetAndCorrectHash,
 		"no metrics reported with incorrect encryption configuration":  testNoReportWithIncorrectEncryptionConfig,
 		"no metrics reported with invalid HMAC signature":              testNoReportWithInvalidHMACSignature,
+		"no metrics reported with different trusted subnet":            testNoReportWithDifferentTrustedSubnet,
+		"no metrics reported with trusted subnet but without hash":     testNoReportWithTrustedSubnetButWithoutHash,
 	}
 
 	for tname, tfunc := range tests {
@@ -138,6 +143,64 @@ func testReportWithEncryptionAndHMACSignature(t *testing.T) {
 	runE2ECase(t, tc, assertCollectedMetricsNotZero)
 }
 
+func testReportWithTrustedSubnet(t *testing.T) {
+	t.Parallel()
+
+	tc := E2ECase{
+		timeout: 5 * time.Second,
+		agentEnv: map[string]string{
+			"POLL_INTERVAL":   "1", // 1 second
+			"REPORT_INTERVAL": "1", // 1 second
+		},
+		serverEnv: map[string]string{
+			"TRUSTED_SUBNET": "127.0.0.0/8", // X-Real-IP is 127.0.0.1
+		},
+	}
+
+	runE2ECase(t, tc, assertCollectedMetricsNotZero)
+}
+
+func testReportWithTrustedSubnetHashIgnored(t *testing.T) {
+	t.Parallel()
+
+	hmacKey := servertest.GenerateHMACKeyBase64()
+
+	tc := E2ECase{
+		timeout: 5 * time.Second,
+		agentEnv: map[string]string{
+			"POLL_INTERVAL":   "1", // 1 second
+			"REPORT_INTERVAL": "1", // 1 second
+			"KEY":             hmacKey,
+		},
+		serverEnv: map[string]string{
+			"TRUSTED_SUBNET": "127.0.0.0/8", // X-Real-IP is 127.0.0.1
+		},
+	}
+
+	runE2ECase(t, tc, assertCollectedMetricsNotZero)
+}
+
+func testReportWithTrustedSubnetAndCorrectHash(t *testing.T) {
+	t.Parallel()
+
+	hmacKey := servertest.GenerateHMACKeyBase64()
+
+	tc := E2ECase{
+		timeout: 5 * time.Second,
+		agentEnv: map[string]string{
+			"POLL_INTERVAL":   "1", // 1 second
+			"REPORT_INTERVAL": "1", // 1 second
+			"KEY":             hmacKey,
+		},
+		serverEnv: map[string]string{
+			"TRUSTED_SUBNET": "127.0.0.0/8", // X-Real-IP is 127.0.0.1
+			"KEY":            hmacKey,
+		},
+	}
+
+	runE2ECase(t, tc, assertCollectedMetricsNotZero)
+}
+
 func testNoReportWithIncorrectEncryptionConfig(t *testing.T) {
 	t.Parallel()
 
@@ -175,6 +238,45 @@ func testNoReportWithInvalidHMACSignature(t *testing.T) {
 		},
 		serverEnv: map[string]string{
 			"KEY": hmacKey2,
+		},
+		wantErrString: "exit status 1",
+	}
+
+	runE2ECase(t, tc, assertMetricsNotCollected)
+}
+
+func testNoReportWithDifferentTrustedSubnet(t *testing.T) {
+	t.Parallel()
+
+	tc := E2ECase{
+		timeout: 5 * time.Second,
+		agentEnv: map[string]string{
+			"POLL_INTERVAL":   "1", // 1 second
+			"REPORT_INTERVAL": "1", // 1 second
+		},
+		serverEnv: map[string]string{
+			"TRUSTED_SUBNET": "10.0.0.0/24", // X-Real-IP is 127.0.0.1
+		},
+		wantErrString: "exit status 1",
+	}
+
+	runE2ECase(t, tc, assertMetricsNotCollected)
+}
+
+func testNoReportWithTrustedSubnetButWithoutHash(t *testing.T) {
+	t.Parallel()
+
+	hmacKey := servertest.GenerateHMACKeyBase64()
+
+	tc := E2ECase{
+		timeout: 5 * time.Second,
+		agentEnv: map[string]string{
+			"POLL_INTERVAL":   "1", // 1 second
+			"REPORT_INTERVAL": "1", // 1 second
+		},
+		serverEnv: map[string]string{
+			"TRUSTED_SUBNET": "127.0.0.0/8", // X-Real-IP is 127.0.0.1
+			"KEY":            hmacKey,
 		},
 		wantErrString: "exit status 1",
 	}

@@ -52,11 +52,33 @@ func (h XRealIP) String() string {
 	return sb.String()
 }
 
+// Empty returns `true` if [XRealIP] has no IP address and no hash.
+func (h XRealIP) Empty() bool {
+	return len(h.IP) == 0 && len(h.Hash) == 0
+}
+
+// Equal returns `true` if two [XRealIP] structs have the same IP address and the same hash (even if empty).
+func (h XRealIP) Equal(other XRealIP) bool {
+	return h.IP.Equal(other.IP) && bytes.Equal(h.Hash, other.Hash)
+}
+
 // Matches returns `true` if current [XRealIP] matches the value decoded from provided HTTP header.
 func (h XRealIP) Matches(header http.Header) bool {
 	other := GetXRealIP(header)
 
-	return h.IP.Equal(other.IP) && bytes.Equal(h.Hash, other.Hash)
+	return h.Equal(other)
+}
+
+// Apply adds [XRealIP] to HTTP header, encoded as string; all previous values of the header are
+// overwritten. If [XRealIP] is empty, HTTP header is removed instead.
+func (h XRealIP) Apply(header http.Header) XRealIP {
+	if h.Empty() {
+		header.Del(HeaderKeyXRealIP)
+	} else {
+		header.Set(HeaderKeyXRealIP, h.String())
+	}
+
+	return h
 }
 
 type xRealIPParser struct {

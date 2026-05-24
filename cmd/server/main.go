@@ -42,12 +42,13 @@ type cliOptions struct {
 	DecryptionPrivateKeyFile string `env:"CRYPTO_KEY" json:"crypto_key"`
 	AuditFilePath            string `env:"AUDIT_FILE" json:"audit_file"`
 	AuditURL                 string `env:"AUDIT_URL" json:"audit_url"`
+	TrustedSubnet            string `env:"TRUSTED_SUBNET" json:"trusted_subnet"`
 }
 
 func defineArgs(fs *flag.FlagSet, opts *cliOptions) {
 	fs.StringVar(&opts.ConfigFilePath, "c", "", "path to config file in JSON format (e.g. config.json)")
 	fs.StringVar(&opts.ListenAddress, "a", defaultAddress, "listen address in the format [HOST]:PORT")
-	fs.UintVar(&opts.ShutdownTimeout, "t", defaultShutdownTimeoutSec, "graceful shutdown timeout in seconds")
+	fs.UintVar(&opts.ShutdownTimeout, "st", defaultShutdownTimeoutSec, "graceful shutdown timeout in seconds")
 	fs.UintVar(&opts.MetricStoreInterval, "i", defaultMetricStoreIntervalSec, "dump metrics on disk each interval (in seconds)")
 	fs.StringVar(&opts.MetricStoreFilePath, "f", defaultMetricStoreFilePath, "path to file for dumping metrics")
 	fs.BoolVar(&opts.MetricStoreLoadOnStartup, "r", defaultMetricStoreLoadOnStartup, "restore metrics from file on startup")
@@ -56,6 +57,7 @@ func defineArgs(fs *flag.FlagSet, opts *cliOptions) {
 	fs.StringVar(&opts.AuditFilePath, "audit-file", "", "path to file for writing audit events")
 	fs.StringVar(&opts.AuditURL, "audit-url", "", "remote endpoint URL for sending audit events")
 	fs.StringVar(&opts.DecryptionPrivateKeyFile, "crypto-key", "", "path to a file with server's X25519 private key (for decryption)")
+	fs.StringVar(&opts.TrustedSubnet, "t", "", "trusted subnet CIDR to accept requests only from its IP addresses (e.g. 10.0.0.0/24)")
 }
 
 func parseArgs(fs *flag.FlagSet, args []string, envParser envparser.Parser) (config.Config, error) {
@@ -80,6 +82,7 @@ func createConfig(opts *cliOptions) (config.Config, error) {
 		config.DecryptionPrivateKey(opts.DecryptionPrivateKeyFile),
 		config.AuditFilePath(opts.AuditFilePath),
 		config.AuditURL(opts.AuditURL),
+		config.TrustedSubnet(opts.TrustedSubnet),
 	)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("unable to construct config: %w", err)

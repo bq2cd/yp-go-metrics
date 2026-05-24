@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -79,7 +80,7 @@ func Test_parseArgs(t *testing.T) {
 		},
 		{
 			name:      "bad args, shutdown timeout",
-			args:      args{args: []string{"-t=0"}},
+			args:      args{args: []string{"-st=0"}},
 			want:      config.Config{},
 			assertion: assert.Error,
 		},
@@ -150,6 +151,12 @@ func Test_parseArgs(t *testing.T) {
 			}
 		}(),
 		{
+			name:      "bad args, trusted subnet invalid CIDR",
+			args:      args{args: []string{"-t", "10.0.0.2"}},
+			want:      config.Config{},
+			assertion: assert.Error,
+		},
+		{
 			name: "good args, address",
 			args: args{args: []string{"-a=host1"}},
 			want: config.Config{
@@ -206,7 +213,7 @@ func Test_parseArgs(t *testing.T) {
 		},
 		{
 			name: "good args, shutdown timeout",
-			args: args{args: []string{"-a", ":0", "-t=5"}},
+			args: args{args: []string{"-a", ":0", "-st=5"}},
 			want: config.Config{
 				ListenAddress:       ":0",
 				ShutdownTimeout:     5 * time.Second,
@@ -217,7 +224,7 @@ func Test_parseArgs(t *testing.T) {
 		},
 		{
 			name: "good args, metric store interval",
-			args: args{args: []string{"-a", ":0", "-t=5", "-i=12"}},
+			args: args{args: []string{"-a", ":0", "-st=5", "-i=12"}},
 			want: config.Config{
 				ListenAddress:       ":0",
 				ShutdownTimeout:     5 * time.Second,
@@ -228,7 +235,7 @@ func Test_parseArgs(t *testing.T) {
 		},
 		{
 			name: "good args, metric store interval 2",
-			args: args{args: []string{"-a", ":0", "-t=5", "-i=0"}},
+			args: args{args: []string{"-a", ":0", "-st=5", "-i=0"}},
 			want: config.Config{
 				ListenAddress:       ":0",
 				ShutdownTimeout:     5 * time.Second,
@@ -239,7 +246,7 @@ func Test_parseArgs(t *testing.T) {
 		},
 		{
 			name: "good args, metric store path",
-			args: args{args: []string{"-a", ":0", "-t=5", "-i=12", "-f=/some/path/here.txt"}},
+			args: args{args: []string{"-a", ":0", "-st=5", "-i=12", "-f=/some/path/here.txt"}},
 			want: config.Config{
 				ListenAddress:       ":0",
 				ShutdownTimeout:     5 * time.Second,
@@ -250,7 +257,7 @@ func Test_parseArgs(t *testing.T) {
 		},
 		{
 			name: "good args, metric store load at startup",
-			args: args{args: []string{"-a", ":0", "-t=5", "-i=12", "-f=/some/path/here.txt", "-r"}},
+			args: args{args: []string{"-a", ":0", "-st=5", "-i=12", "-f=/some/path/here.txt", "-r"}},
 			want: config.Config{
 				ListenAddress:            ":0",
 				ShutdownTimeout:          5 * time.Second,
@@ -356,6 +363,18 @@ func Test_parseArgs(t *testing.T) {
 				assertion: assert.NoError,
 			}
 		}(),
+		{
+			name: "good args, trusted subnet valid CIDR",
+			args: args{args: []string{"-t", "10.1.2.3/16"}},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				TrustedSubnet:       net.IPNet{IP: net.ParseIP("10.1.0.0").To4(), Mask: net.CIDRMask(16, 32)},
+			},
+			assertion: assert.NoError,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -413,7 +432,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 		{
 			name: "env overrides shutdown timeout 2",
 			args: args{
-				args: []string{"-a=localhost:9090", "-t=13"},
+				args: []string{"-a=localhost:9090", "-st=13"},
 				env:  map[string]string{"SHUTDOWN_TIMEOUT": "21"},
 			},
 			want: config.Config{
@@ -445,7 +464,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 		{
 			name: "env overrides metric store interval",
 			args: args{
-				args: []string{"-a=localhost:9090", "-t=13", "-i=8"},
+				args: []string{"-a=localhost:9090", "-st=13", "-i=8"},
 				env:  map[string]string{"STORE_INTERVAL": "18"},
 			},
 			want: config.Config{
@@ -459,7 +478,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 		{
 			name: "env overrides metric store path",
 			args: args{
-				args: []string{"-a=localhost:9090", "-t=13", "-i=8", "-f=/a/path/to/some/file.json"},
+				args: []string{"-a=localhost:9090", "-st=13", "-i=8", "-f=/a/path/to/some/file.json"},
 				env:  map[string]string{"FILE_STORAGE_PATH": "/an/override/to/a/different/file.json"},
 			},
 			want: config.Config{
@@ -473,7 +492,7 @@ func Test_parseArgs_withEnv(t *testing.T) {
 		{
 			name: "env overrides metric store load on startup",
 			args: args{
-				args: []string{"-a=localhost:9090", "-t=13", "-i=8", "-f=/a/path/to/some/file.json", "-r"},
+				args: []string{"-a=localhost:9090", "-st=13", "-i=8", "-f=/a/path/to/some/file.json", "-r"},
 				env:  map[string]string{"RESTORE": "false"},
 			},
 			want: config.Config{
@@ -628,6 +647,23 @@ func Test_parseArgs_withEnv(t *testing.T) {
 				MetricStoreFilePath:      filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
 				MetricStoreLoadOnStartup: true,
 				DatabaseURL:              url.URL{Scheme: "postgres", Host: "localhost:5432", Path: "/test"},
+			},
+			assertion: assert.NoError,
+		},
+		{
+			name: "env overrides trusted subnet",
+			args: args{
+				args: []string{"-t=10.1.2.3/16"},
+				env: map[string]string{
+					"TRUSTED_SUBNET": "192.168.3.128/25",
+				},
+			},
+			want: config.Config{
+				ListenAddress:       defaultAddress,
+				ShutdownTimeout:     defaultShutdownTimeoutSec * time.Second,
+				MetricStoreInterval: defaultMetricStoreIntervalSec * time.Second,
+				MetricStoreFilePath: filepath.Join(servertest.GetCwd(t), defaultMetricStoreFilePath),
+				TrustedSubnet:       net.IPNet{IP: net.ParseIP("192.168.3.128").To4(), Mask: net.CIDRMask(25, 32)},
 			},
 			assertion: assert.NoError,
 		},

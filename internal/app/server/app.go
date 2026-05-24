@@ -47,7 +47,7 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	handlers := handler.NewRegistry(logger, snapshotter, pinger, auditor)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
 
-	router, err := router.New(logger, handlers, hmacSigner, decryptor)
+	router, err := router.New(logger, handlers, hmacSigner, decryptor, cfg.TrustedSubnet)
 	if err != nil {
 		return fmt.Errorf("cannot create router: %w", err)
 	}

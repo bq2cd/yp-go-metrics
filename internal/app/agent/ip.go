@@ -44,7 +44,7 @@ func prepareRealIPHeader(remoteAddr string, signer hmacsigner.HMACSigner) (httph
 		return realIP, fmt.Errorf("cannot detect outgoing IPv4: %w", err)
 	}
 
-	signature, err := signer.Sign(realIP.IP)
+	signature, err := signer.Sign(realIP.IP.To16()) // ensure we sign longest possible IP bytes since the server must do the same
 	switch {
 	case errors.Is(err, hmacsigner.ErrMissingSecretKey):
 		// no secret key, proceed without signature

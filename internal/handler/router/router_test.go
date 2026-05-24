@@ -3,6 +3,7 @@ package router
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -44,6 +45,7 @@ type testHandlerArgs struct {
 	shouldSign          bool
 	expectNoHandlerCall bool
 	overrideHash        httpheaders.HashSHA256
+	overrideXRealIP     httpheaders.XRealIP
 	encryptionEnabled   bool
 	shouldDecrypt       bool
 }
@@ -57,9 +59,10 @@ type testHandlerWant struct {
 }
 
 type testHandlerCase struct {
-	args      testHandlerArgs
-	want      testHandlerWant
-	secretKey []byte
+	args          testHandlerArgs
+	want          testHandlerWant
+	secretKey     []byte
+	trustedSubnet net.IPNet
 }
 
 func testRouterServeHTTPHandlers(t *testing.T) {
@@ -187,6 +190,13 @@ func testRouterServeHTTPHandlers(t *testing.T) {
 			w.Write(tt.body)
 		})
 		testHandlerTable(t, ident, fn, cases)
+	}
+}
+
+func testHandlerFuncEmptyResponse(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
@@ -528,6 +538,248 @@ func testRouterServeHTTPMiddleware(t *testing.T) {
 				},
 			},
 		},
+		"when trusted subnet configured, rejects request without X-Real-IP header": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+				},
+			},
+		},
+		"when trusted subnet configured, rejects batch request without X-Real-IP header": {
+			ident: handler.IdentUpdateBatchJSON,
+			fn:    testHandlerFuncMirrorMetrics(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method: http.MethodPost,
+						url:    "/updates",
+						bodyData: handlertest.NewBodyDataFromMetrics(t, []model.Metric{
+							model.NewCounterMetric("id1", 123),
+							model.NewGaugeMetric("id2", -1.23)}),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+				},
+			},
+		},
+		"when trusted subnet configured, rejects plain request without X-Real-IP header": {
+			ident: handler.IdentUpdate,
+			fn:    testHandlerFuncEmptyResponse(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update/counter/id1/123",
+						bodyData:            handlertest.NewBodyDataOfType(t, []byte{}, httpheaders.ContentTypeTextPlain),
+						shouldCompress:      false,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+				},
+			},
+		},
+		"when trusted subnet configured, rejects request with X-Real-IP header containing IP from different subnet": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						overrideXRealIP:     httpheaders.XRealIP{IP: net.ParseIP("128.0.0.1")},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+				},
+			},
+		},
+		"when trusted subnet and secret key configured, rejects request with X-Real-IP header without hash": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						overrideXRealIP:     httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1")},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when trusted subnet and secret key configured, rejects request with X-Real-IP header with invalid hash": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:              http.MethodPost,
+						url:                 "/update",
+						bodyData:            handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:      true,
+						acceptedEncodings:   []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						overrideXRealIP:     httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1"), Hash: []byte(`invalid hash`)},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when trusted subnet and secret key configured, rejects request with X-Real-IP header and valid hash but with IP from different subnet": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:            http.MethodPost,
+						url:               "/update",
+						bodyData:          handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:    true,
+						acceptedEncodings: []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						overrideXRealIP: httpheaders.XRealIP{
+							IP: net.ParseIP("128.0.0.1"),
+							Hash: func() []byte {
+								s := hmacsigner.NewHMACSigner([]byte(`super-secret-key`))
+								out, err := s.Sign(net.ParseIP("128.0.0.1"))
+								require.NoErrorf(t, err, "cannot sign IP address")
+								return out
+							}(),
+						},
+						expectNoHandlerCall: true,
+					},
+					want: testHandlerWant{
+						status:          http.StatusForbidden,
+						contentType:     httpheaders.ContentTypeEmpty,
+						contentEncoding: httpheaders.ContentEncodingEmpty,
+						body:            []byte{},
+						hash:            httpheaders.HashSHA256Empty,
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
+		"when trusted subnet and secret key configured, allows request with X-Real-IP header and valid hash": {
+			ident: handler.IdentUpdateJSON,
+			fn:    testHandlerFuncMirrorMetric(t),
+			cases: []testHandlerCase{
+				{
+					args: testHandlerArgs{
+						method:            http.MethodPost,
+						url:               "/update",
+						bodyData:          handlertest.NewBodyDataFromMetric(t, model.NewCounterMetric("id1", 123)),
+						shouldCompress:    true,
+						acceptedEncodings: []httpheaders.ContentEncoding{httpheaders.ContentEncodingGzip},
+						overrideXRealIP: httpheaders.XRealIP{
+							IP: net.ParseIP("127.0.0.1"),
+							Hash: func() []byte {
+								s := hmacsigner.NewHMACSigner([]byte(`super-secret-key`))
+								out, err := s.Sign(net.ParseIP("127.0.0.1"))
+								require.NoErrorf(t, err, "cannot sign IP address")
+								return out
+							}(),
+						},
+					},
+					want: testHandlerWant{
+						status:          http.StatusOK,
+						contentType:     httpheaders.ContentTypeApplicationJSON,
+						contentEncoding: httpheaders.ContentEncodingGzip,
+						body:            []byte(`{"id": "id1", "type": "counter", "delta": 123}`),
+						hash:            httpheaders.HashSHA256("6159e85f20e3dc1f908997d0150102acf21c52efe580ff4b3c24c2076801dc4e"), // https://tools.onecompiler.com/hmac-sha256
+					},
+					trustedSubnet: net.IPNet{
+						IP:   net.ParseIP("127.0.0.0"),
+						Mask: net.CIDRMask(24, 32), // 127.0.0.0/24
+					},
+					secretKey: []byte(`super-secret-key`),
+				},
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -540,12 +792,12 @@ func testHandlerTable(t *testing.T, handlerID handler.Ident, handlerFn http.Hand
 	for _, tc := range cases {
 		name := fmt.Sprintf("%s %s %s", handlerID, tc.args.method, tc.args.url)
 		t.Run(name, func(t *testing.T) {
-			testHandlerRun(t, handlerID, handlerFn, tc.args, tc.want, tc.secretKey)
+			testHandlerRun(t, handlerID, handlerFn, tc.args, tc.want, tc.secretKey, tc.trustedSubnet)
 		})
 	}
 }
 
-func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handler, args testHandlerArgs, want testHandlerWant, secretKey []byte) {
+func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handler, args testHandlerArgs, want testHandlerWant, secretKey []byte, trustedSubnet net.IPNet) {
 	t.Helper()
 
 	// Arrange
@@ -586,7 +838,7 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 	}
 
 	signer := hmacsigner.NewHMACSigner(secretKey)
-	rtr, err := New(logger, handlers, signer, decryptor)
+	rtr, err := New(logger, handlers, signer, decryptor, trustedSubnet)
 	require.NoError(t, err)
 
 	ts := httptest.NewServer(rtr)
@@ -602,12 +854,15 @@ func testHandlerRun(t *testing.T, handlerID handler.Ident, handlerFn http.Handle
 	if args.overrideHash != httpheaders.HashSHA256Empty {
 		args.overrideHash.Apply(req.Header)
 	}
+	if !args.overrideXRealIP.Empty() {
+		args.overrideXRealIP.Apply(req.Header)
+	}
 
 	// Act
 
 	resp, err := ts.Client().Do(req)
-	defer func() { _ = resp.Body.Close() }()
 	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
 	bodyData := handlertest.NewBodyDataFromResponse(t, resp)
 
 	// Assert
@@ -769,7 +1024,7 @@ func TestNew(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := New(tt.args.logger, tt.args.handlers, tt.args.signer, nil)
+			got, err := New(tt.args.logger, tt.args.handlers, tt.args.signer, nil, net.IPNet{})
 			if tt.want.wantErr {
 				require.Error(t, err)
 				assert.Nil(t, got)

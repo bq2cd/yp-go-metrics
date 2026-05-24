@@ -3,6 +3,7 @@ package router
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -42,9 +43,9 @@ func RouteDefinitions() []RouteDefinition {
 	return []RouteDefinition{
 		{ident: handler.IdentDefault, patterns: []string{"/*"}},
 		{ident: handler.IdentRead, patterns: []string{"GET /"}},
-		{ident: handler.IdentUpdateJSON, patterns: []string{"POST /update", "POST /update/"}, encrypted: true},
-		{ident: handler.IdentUpdateBatchJSON, patterns: []string{"POST /updates", "POST /updates/"}, encrypted: true},
-		{ident: handler.IdentUpdate, patterns: []string{"POST /update/*"}},
+		{ident: handler.IdentUpdateJSON, patterns: []string{"POST /update", "POST /update/"}, encrypted: true, trustedSubnet: true},
+		{ident: handler.IdentUpdateBatchJSON, patterns: []string{"POST /updates", "POST /updates/"}, encrypted: true, trustedSubnet: true},
+		{ident: handler.IdentUpdate, patterns: []string{"POST /update/*"}, trustedSubnet: true},
 		{ident: handler.IdentValueJSON, patterns: []string{"POST /value", "POST /value/"}},
 		{ident: handler.IdentValue, patterns: []string{"GET /value/*"}},
 		{ident: handler.IdentPing, patterns: []string{"GET /ping"}},
@@ -53,9 +54,10 @@ func RouteDefinitions() []RouteDefinition {
 
 // RouteDefinition describes a link between a [handler.Ident] and a list of patterns.
 type RouteDefinition struct {
-	ident     handler.Ident
-	patterns  []string
-	encrypted bool
+	ident         handler.Ident
+	patterns      []string
+	encrypted     bool
+	trustedSubnet bool
 }
 
 type routeDefinitionKey string
@@ -145,7 +147,7 @@ type Router struct {
 
 // New returns an instance of the [Router] with preconfigured middlewares and routes.
 // For each route, a handler must exist in the given [handler.Registry].
-func New(logger log.Logger, handlers handler.Registry, signer hmacsigner.HMACSigner, decryptor asymcrypt.Decryptor) (*Router, error) {
+func New(logger log.Logger, handlers handler.Registry, signer hmacsigner.HMACSigner, decryptor asymcrypt.Decryptor, trustedSubnet net.IPNet) (*Router, error) {
 	rtr := &Router{
 		mux: chi.NewRouter(),
 	}
@@ -162,7 +164,7 @@ func New(logger log.Logger, handlers handler.Registry, signer hmacsigner.HMACSig
 
 	middlewares := Middlewares(logger, signer)
 	definitions := RouteDefinitions()
-	perRouteMiddlewares := constructPerRouteMiddlewares(definitions, logger, decryptor)
+	perRouteMiddlewares := constructPerRouteMiddlewares(definitions, logger, signer, decryptor, trustedSubnet)
 
 	routes, err := Routes(definitions, handlers, perRouteMiddlewares)
 	if err != nil {
@@ -180,15 +182,28 @@ func New(logger log.Logger, handlers handler.Registry, signer hmacsigner.HMACSig
 	return rtr, nil
 }
 
-func constructPerRouteMiddlewares(definitions []RouteDefinition, logger log.Logger, decryptor asymcrypt.Decryptor) map[routeDefinitionKey]chi.Middlewares {
+func constructPerRouteMiddlewares(definitions []RouteDefinition, logger log.Logger, signer hmacsigner.HMACSigner, decryptor asymcrypt.Decryptor, trustedSubnet net.IPNet) map[routeDefinitionKey]chi.Middlewares {
 	middlewares := make(map[routeDefinitionKey]chi.Middlewares)
 
+	trustedSubnetValidator := middleware.TrustedSubnet(logger, trustedSubnet, signer)
 	requestDecryptor := middleware.RequestDecryptor(logger, decryptor)
 	recoverer := middleware.Recoverer(logger)
 
 	for _, rd := range definitions {
+		key := rd.Key()
+
+		// trusted subnet comes first - no point in decrypting if request comes from untrusted subnet
+		if rd.trustedSubnet {
+			middlewares[key] = append(middlewares[key], trustedSubnetValidator)
+		}
+
 		if rd.encrypted {
-			middlewares[rd.Key()] = append(middlewares[rd.Key()], requestDecryptor, recoverer) // ensure recoverer is the last
+			middlewares[key] = append(middlewares[key], requestDecryptor)
+		}
+
+		// ensure recoverer is the last middleware to catch panics
+		if len(middlewares[key]) > 0 {
+			middlewares[key] = append(middlewares[key], recoverer)
 		}
 	}
 

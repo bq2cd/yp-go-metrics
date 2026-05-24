@@ -54,7 +54,7 @@ func TestGetOutgoingIPv4(t *testing.T) {
 
 func TestPrepareRealIPHeader(t *testing.T) {
 	type testcase struct {
-		signer        func(*gomock.Controller) *hmacsignertest.MockHMACSigner
+		signer        func(*gomock.Controller) hmacsigner.HMACSigner
 		remoteAddr    string
 		wantIP        httpheaders.XRealIP
 		wantErrString string
@@ -62,7 +62,7 @@ func TestPrepareRealIPHeader(t *testing.T) {
 
 	tests := map[string]testcase{
 		"empty remote address": {
-			signer: func(ctrl *gomock.Controller) *hmacsignertest.MockHMACSigner {
+			signer: func(ctrl *gomock.Controller) hmacsigner.HMACSigner {
 				return hmacsignertest.NewMockHMACSigner(ctrl)
 			},
 			remoteAddr:    "",
@@ -70,7 +70,7 @@ func TestPrepareRealIPHeader(t *testing.T) {
 			wantErrString: "cannot detect outgoing IPv4:",
 		},
 		"invalid remote address (no port)": {
-			signer: func(ctrl *gomock.Controller) *hmacsignertest.MockHMACSigner {
+			signer: func(ctrl *gomock.Controller) hmacsigner.HMACSigner {
 				return hmacsignertest.NewMockHMACSigner(ctrl)
 			},
 			remoteAddr:    "127.0.0.1",
@@ -78,9 +78,9 @@ func TestPrepareRealIPHeader(t *testing.T) {
 			wantErrString: "cannot detect outgoing IPv4:",
 		},
 		"valid remote address but signer misses secret key": {
-			signer: func(ctrl *gomock.Controller) *hmacsignertest.MockHMACSigner {
+			signer: func(ctrl *gomock.Controller) hmacsigner.HMACSigner {
 				m := hmacsignertest.NewMockHMACSigner(ctrl)
-				m.EXPECT().Sign(net.ParseIP("127.0.0.1").To4()).Return(nil, hmacsigner.ErrMissingSecretKey)
+				m.EXPECT().Sign(net.ParseIP("127.0.0.1").To16()).Return(nil, hmacsigner.ErrMissingSecretKey)
 				return m
 			},
 			remoteAddr: "127.0.0.1:23456",
@@ -90,9 +90,9 @@ func TestPrepareRealIPHeader(t *testing.T) {
 			wantErrString: "",
 		},
 		"valid remote address and signer configured with secret key": {
-			signer: func(ctrl *gomock.Controller) *hmacsignertest.MockHMACSigner {
+			signer: func(ctrl *gomock.Controller) hmacsigner.HMACSigner {
 				m := hmacsignertest.NewMockHMACSigner(ctrl)
-				m.EXPECT().Sign(net.ParseIP("127.0.0.1").To4()).Return([]byte(`dummy hash`), nil)
+				m.EXPECT().Sign(net.ParseIP("127.0.0.1").To16()).Return([]byte(`dummy hash`), nil)
 				return m
 			},
 			remoteAddr: "127.0.0.1:23456",
@@ -103,9 +103,9 @@ func TestPrepareRealIPHeader(t *testing.T) {
 			wantErrString: "",
 		},
 		"valid remote address but signer fails on signing": {
-			signer: func(ctrl *gomock.Controller) *hmacsignertest.MockHMACSigner {
+			signer: func(ctrl *gomock.Controller) hmacsigner.HMACSigner {
 				m := hmacsignertest.NewMockHMACSigner(ctrl)
-				m.EXPECT().Sign(net.ParseIP("127.0.0.1").To4()).Return(nil, fmt.Errorf("IP signing error"))
+				m.EXPECT().Sign(net.ParseIP("127.0.0.1").To16()).Return(nil, fmt.Errorf("IP signing error"))
 				return m
 			},
 			remoteAddr: "127.0.0.1:23456",
@@ -114,6 +114,26 @@ func TestPrepareRealIPHeader(t *testing.T) {
 			},
 			wantErrString: "IP signing error",
 		},
+		"valid remote address and real signer configured with secret key": func() testcase {
+			signer := hmacsigner.NewHMACSigner([]byte(`super-secret-key`))
+
+			return testcase{
+				signer: func(ctrl *gomock.Controller) hmacsigner.HMACSigner {
+					return signer
+				},
+				remoteAddr: "127.0.0.1:23456",
+				wantIP: func() httpheaders.XRealIP {
+					hash, err := signer.Sign(net.ParseIP("127.0.0.1").To16())
+					require.NoErrorf(t, err, "cannot sign IP address")
+
+					return httpheaders.XRealIP{
+						IP:   net.ParseIP("127.0.0.1").To4(),
+						Hash: hash,
+					}
+				}(),
+				wantErrString: "",
+			}
+		}(),
 	}
 
 	for tname, tc := range tests {
