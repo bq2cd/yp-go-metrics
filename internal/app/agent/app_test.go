@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,11 +17,14 @@ import (
 	"github.com/goccy/go-json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/errhelper"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
@@ -63,10 +67,12 @@ func TestRun(t *testing.T) {
 		cfg              config.Config
 		overrideURL      bool
 		serverStatusCode int
+		grpcWantRealIP   httpheaders.XRealIP
 	}
 	type want struct {
-		calledServer bool
-		wantErr      bool
+		calledServer           bool
+		wantErr                bool
+		grpcMetricsNotUploaded bool
 	}
 	type testcase struct {
 		args args
@@ -82,6 +88,46 @@ func TestRun(t *testing.T) {
 				},
 				overrideURL:      true,
 				serverStatusCode: http.StatusOK,
+			},
+			want: want{
+				calledServer: true,
+			},
+		},
+		"agent collects metrics and reports to server successfully via GRPC": {
+			args: args{
+				timeout: 500 * time.Millisecond,
+				cfg: config.Config{
+					UpstreamURL:    url.URL{Scheme: "grpc"},
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
+				},
+				overrideURL:      true,
+				serverStatusCode: http.StatusOK,
+			},
+			want: want{
+				calledServer: true,
+			},
+		},
+		"agent collects metrics and reports to server successfully via GRPC with IP address signed": {
+			args: args{
+				timeout: 500 * time.Millisecond,
+				cfg: config.Config{
+					UpstreamURL:    url.URL{Scheme: "grpc"},
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
+					HMACSecretKey:  []byte(`super-secret-key`),
+				},
+				overrideURL:      true,
+				serverStatusCode: http.StatusOK,
+				grpcWantRealIP: httpheaders.XRealIP{
+					IP: net.ParseIP("127.0.0.1"),
+					Hash: func() []byte {
+						signer := hmacsigner.NewHMACSigner([]byte(`super-secret-key`))
+						hash, err := signer.Sign(net.ParseIP("127.0.0.1").To16())
+						require.NoErrorf(t, err, "cannot sign IP address bytes")
+						return hash
+					}(),
+				},
 			},
 			want: want{
 				calledServer: true,
@@ -121,13 +167,46 @@ MCowBQYDK2VuAyEAkZEdmg2VjtMlDU5mDWH76QagkM22DkDqVxt0W7NjqFM=
 				wantErr:      true,
 			},
 		},
+		"agent collects metrics but GRPC server responds with error due to real IP mismatch": {
+			args: args{
+				timeout: 300 * time.Millisecond,
+				cfg: config.Config{
+					UpstreamURL:    url.URL{Scheme: "grpc"},
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
+				},
+				overrideURL: true,
+				grpcWantRealIP: httpheaders.XRealIP{
+					IP: net.ParseIP("10.0.0.1"), // agent sends 127.0.0.1
+				},
+			},
+			want: want{
+				calledServer:           true,
+				wantErr:                true,
+				grpcMetricsNotUploaded: true,
+			},
+		},
 		"agent collects metrics but server unreachable": {
 			args: args{
 				timeout: 300 * time.Millisecond,
 				cfg: config.Config{
+					UpstreamURL:    url.URL{Host: "localhost:65535"},
 					PollInterval:   50 * time.Millisecond,
 					ReportInterval: 50 * time.Millisecond,
-					UpstreamURL:    url.URL{Host: "localhost:65535"},
+				},
+			},
+			want: want{
+				calledServer: false,
+				wantErr:      true,
+			},
+		},
+		"agent collects metrics but server unreachable via GRPC": {
+			args: args{
+				timeout: 300 * time.Millisecond,
+				cfg: config.Config{
+					UpstreamURL:    url.URL{Scheme: "grpc", Host: "localhost:65535"},
+					PollInterval:   50 * time.Millisecond,
+					ReportInterval: 50 * time.Millisecond,
 				},
 			},
 			want: want{
@@ -147,12 +226,32 @@ MCowBQYDK2VuAyEAkZEdmg2VjtMlDU5mDWH76QagkM22DkDqVxt0W7NjqFM=
 			ts := httptest.NewServer(handler)
 			defer ts.Close()
 
+			if tt.args.grpcWantRealIP.Empty() {
+				tt.args.grpcWantRealIP = httpheaders.XRealIP{
+					IP: net.ParseIP("127.0.0.1"),
+				}
+			}
+
+			grpcServer := &mockGRPCServer{
+				wantRealIP: tt.args.grpcWantRealIP,
+			}
+
+			grpcAddr, stopGRPCServer := launchMockGRPCServer(t, grpcServer)
+			t.Cleanup(func() {
+				stopGRPCServer()
+			})
+
 			time.Sleep(20 * time.Millisecond)
 
 			if tt.args.overrideURL {
-				upstreamURL, err := url.Parse(ts.URL)
-				require.NoError(t, err)
-				tt.args.cfg.UpstreamURL = *upstreamURL
+				switch tt.args.cfg.UpstreamURL.Scheme {
+				case "grpc":
+					tt.args.cfg.UpstreamURL.Host = grpcAddr
+				default:
+					upstreamURL, err := url.Parse(ts.URL)
+					require.NoError(t, err)
+					tt.args.cfg.UpstreamURL = *upstreamURL
+				}
 			}
 
 			ctx, cancel := context.WithTimeoutCause(t.Context(), tt.args.timeout, errTestFinished)
@@ -164,14 +263,36 @@ MCowBQYDK2VuAyEAkZEdmg2VjtMlDU5mDWH76QagkM22DkDqVxt0W7NjqFM=
 			errRun := Run(ctx, logger, tt.args.cfg)
 
 			// Assert
+			defer func() {
+				assert.NotEmpty(t, logger.RecordedEvents())
+			}()
+
 			errFinal := extractFinalError(errRun)
 			if tt.want.wantErr {
 				require.Error(t, errFinal)
 			} else {
 				require.NoError(t, errFinal)
 			}
-			if tt.want.calledServer {
-				assert.GreaterOrEqual(t, handler.numCalls, 1)
+
+			if !tt.want.calledServer {
+				assert.Equalf(t, int64(0), grpcServer.calls.Load(), "no GRPC requests to server should've happened")
+				assert.Equalf(t, 0, handler.numCalls, "no HTTP requests to server should've happened")
+
+				return
+			}
+
+			switch tt.args.cfg.UpstreamURL.Scheme {
+			case "grpc":
+				assert.GreaterOrEqualf(t, grpcServer.calls.Load(), int64(1), "expected at least 1 call to GRPC server")
+				assert.Equalf(t, 0, handler.numCalls, "no HTTP requests to server should've happened")
+				if tt.want.grpcMetricsNotUploaded {
+					assert.Emptyf(t, grpcServer.GetUploadedMetrics(), "expected no metrics to be uploaded to GRPC server")
+				} else {
+					assert.NotEmptyf(t, grpcServer.GetUploadedMetrics(), "expected at least some metrics to be uploaded to GRPC server")
+				}
+			default:
+				assert.Equalf(t, int64(0), grpcServer.calls.Load(), "no GRPC requests to server should've happened")
+				assert.GreaterOrEqualf(t, handler.numCalls, 1, "expected at least 1 call to HTTP server")
 				assert.NotEmpty(t, handler.lastRequestBody.Bytes())
 
 				var lastRequestData any
@@ -181,10 +302,7 @@ MCowBQYDK2VuAyEAkZEdmg2VjtMlDU5mDWH76QagkM22DkDqVxt0W7NjqFM=
 				} else {
 					require.Errorf(t, err, "server should've received encrypted data (not cleartext JSON)")
 				}
-			} else {
-				assert.Equalf(t, 0, handler.numCalls, "no HTTP requests to server should've happened")
 			}
-			assert.NotEmpty(t, logger.RecordedEvents())
 		})
 	}
 }
@@ -222,6 +340,20 @@ func extractFinalError(errRun error) error {
 
 				continue
 			}
+		}
+
+		// ignore gRPC errors caused by context cancellation
+		if st, ok := status.FromError(curr); ok && st.Code() == codes.DeadlineExceeded {
+			i++
+
+			continue
+		}
+
+		// these errors might creep in when gRPC is involved; ignore them
+		if errors.Is(curr, context.DeadlineExceeded) {
+			i++
+
+			continue
 		}
 
 		errFinal = errors.Join(errFinal, curr)

@@ -11,8 +11,9 @@ message Metric {
 
   // MType задаёт тип метрики.
   enum MType {
-    GAUGE = 0;
-    COUNTER = 1;
+    UNSPECIFIED = 0;
+    GAUGE = 1;
+    COUNTER = 2;
   }
 
   MType type = 2; // тип метрики
