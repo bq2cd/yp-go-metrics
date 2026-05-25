@@ -2,6 +2,13 @@
 go = "1.24"
 golangci-lint = "latest"
 "go:golang.org/x/tools/cmd/godoc" = "latest"
+fd = "latest"
+protoc = "latest"
+protoc-gen-go = "1.36.11"
+protoc-gen-go-grpc = "1.6.2"
+
+[vars]
+proto_out = "api/gen"
 
 [tasks.fmt]
 description = "Format Go code"
@@ -9,7 +16,17 @@ run = ["golangci-lint fmt"]
 
 [tasks.generate]
 description = "Generate Go code"
-run = ["go generate ./..."]
+run = ["go generate ./...", '''
+mkdir -p {{ vars.proto_out }} && \
+protoc \
+  --proto_path=api/proto \
+  --go_out={{ vars.proto_out }} \
+  --go_opt=paths=source_relative \
+  --go-grpc_out={{ vars.proto_out }} \
+  --go-grpc_opt=paths=source_relative \
+  --go_opt=default_api_level=API_OPAQUE \
+$(fd -t file -g '*.proto' api/proto)
+''']
 
 [tasks.lint]
 description = "Lint Go code"
