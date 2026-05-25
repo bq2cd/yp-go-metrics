@@ -8,7 +8,6 @@ import (
 	"errors"
 
 	"golang.org/x/tools/go/analysis"
-	"golang.org/x/tools/go/analysis/passes/buildssa"
 )
 
 const (
@@ -20,10 +19,9 @@ const (
 
 // Analyzer defines entry point for [analysis] framework.
 var Analyzer = &analysis.Analyzer{
-	Name:     "osexit",
-	Doc:      "check for calls of os.Exit in main function of the main package",
-	Requires: []*analysis.Analyzer{buildssa.Analyzer},
-	Run:      run,
+	Name: "osexit",
+	Doc:  "check for calls of os.Exit in main function of the main package",
+	Run:  run,
 }
 
 var (

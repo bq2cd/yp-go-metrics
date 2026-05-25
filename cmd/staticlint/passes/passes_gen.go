@@ -26,6 +26,7 @@ import (
 	"golang.org/x/tools/go/analysis/passes/httpmux"
 	"golang.org/x/tools/go/analysis/passes/httpresponse"
 	"golang.org/x/tools/go/analysis/passes/ifaceassert"
+	"golang.org/x/tools/go/analysis/passes/inline"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/analysis/passes/loopclosure"
 	"golang.org/x/tools/go/analysis/passes/lostcancel"
@@ -55,7 +56,7 @@ import (
 	"golang.org/x/tools/go/analysis/passes/waitgroup"
 )
 
-var Analyzers = [50]*analysis.Analyzer{
+var Analyzers = [51]*analysis.Analyzer{
 	inspect.Analyzer,
 	appends.Analyzer,
 	asmdecl.Analyzer,
@@ -63,12 +64,12 @@ var Analyzers = [50]*analysis.Analyzer{
 	atomic.Analyzer,
 	atomicalign.Analyzer,
 	bools.Analyzer,
+	ctrlflow.Analyzer,
 	buildssa.Analyzer,
 	buildtag.Analyzer,
 	cgocall.Analyzer,
 	composite.Analyzer,
 	copylock.Analyzer,
-	ctrlflow.Analyzer,
 	deepequalerrors.Analyzer,
 	defers.Analyzer,
 	directive.Analyzer,
@@ -80,6 +81,7 @@ var Analyzers = [50]*analysis.Analyzer{
 	httpmux.Analyzer,
 	httpresponse.Analyzer,
 	ifaceassert.Analyzer,
+	inline.Analyzer,
 	loopclosure.Analyzer,
 	lostcancel.Analyzer,
 	nilfunc.Analyzer,

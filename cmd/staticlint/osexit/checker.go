@@ -1,24 +1,24 @@
 package osexit
 
 import (
+	"fmt"
 	"go/token"
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
-	"golang.org/x/tools/go/analysis/passes/buildssa"
 	"golang.org/x/tools/go/callgraph/rta"
 	"golang.org/x/tools/go/ssa"
 )
 
 type checker struct {
 	pass *analysis.Pass
-	ssa  *buildssa.SSA
+	ssa  *SSA
 }
 
 func newChecker(pass *analysis.Pass) (*checker, error) {
-	ssa, ok := pass.ResultOf[buildssa.Analyzer].(*buildssa.SSA)
-	if !ok {
-		return nil, ErrMissingRequiredAnalyzers
+	ssa, err := buildSSA(pass)
+	if err != nil {
+		return nil, fmt.Errorf("cannot build SSA program: %w", err)
 	}
 
 	c := &checker{
