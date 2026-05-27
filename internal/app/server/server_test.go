@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
@@ -167,11 +168,12 @@ func Test_server_Run(t *testing.T) {
 		lnFactory      ListenerFactory
 	}
 	type innerTest struct {
-		name              string
-		fields            fields
-		assertRouter      func(*testing.T, *mockRouter, *http.Request, chan error)
-		expectSnapshotter func(*testing.T, *mockMetricSnapshotter)
-		assertSnapshotter func(*testing.T, *mockMetricSnapshotter)
+		name                  string
+		fields                fields
+		assertRouter          func(*testing.T, *mockRouter, *http.Request, chan error)
+		expectSnapshotter     func(*testing.T, *mockMetricSnapshotter)
+		assertSnapshotter     func(*testing.T, *mockMetricSnapshotter)
+		skipMockConfiguration bool
 	}
 	tests := []struct {
 		name  string
@@ -226,14 +228,12 @@ func Test_server_Run(t *testing.T) {
 						m.AssertNotCalled(t, "ServeHTTP")
 						require.Error(t, <-errCh)
 					},
-					expectSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
-						m.On("C").Return(mock.AnythingOfType("chan")).Once()
-					},
 					assertSnapshotter: func(t *testing.T, m *mockMetricSnapshotter) {
 						m.AssertExpectations(t)
 						m.AssertNotCalled(t, "DumpClose")
 						m.AssertNotCalled(t, "LoadClose")
 					},
+					skipMockConfiguration: true,
 				},
 				{
 					name: "slow router",
@@ -511,13 +511,15 @@ func Test_server_Run(t *testing.T) {
 						defer func() { _ = os.Remove(tt.fields.config.MetricStoreFilePath) }()
 					}
 
-					s := New(log.NewNoopLogger(), tt.fields.config, tt.fields.router, tt.fields.snapshotter, tt.fields.batchWriter, tt.fields.auditProcessor)
+					s := New(log.NewNoopLogger(), tt.fields.config, tt.fields.router, tt.fields.snapshotter, tt.fields.batchWriter, tt.fields.auditProcessor, grpc.NewServer())
 					s.lnFactory = tt.fields.lnFactory
 
-					tt.fields.router.On("ServeHTTP", mock.Anything, mock.Anything).Return()
-					tt.expectSnapshotter(t, tt.fields.snapshotter)
-					tt.fields.batchWriter.On("StartProcessing", ctx).Return().Once()
-					tt.fields.auditProcessor.On("StartProcessing", ctx).Return().Once()
+					if !tt.skipMockConfiguration {
+						tt.fields.router.On("ServeHTTP", mock.Anything, mock.Anything).Return()
+						tt.expectSnapshotter(t, tt.fields.snapshotter)
+						tt.fields.batchWriter.On("StartProcessing", mock.Anything).Return().Once()
+						tt.fields.auditProcessor.On("StartProcessing", mock.Anything).Return().Once()
+					}
 
 					errCh := make(chan error, 1)
 					go func() {

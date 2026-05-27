@@ -57,9 +57,10 @@ run = [
 description = "Run end-to-end tests (test/e2e)"
 usage = '''
 flag "-p --parallel <parallel>" default="2" help="Tests parallelism (default: 2)"
+flag "-r --run <run>" help="Regex for tests to run"
 '''
 env = { "TEST_E2E" = "1" }
-run = "go test -failfast -race -parallel {{ usage.parallel }} -count 1 -v ./test/e2e/..."
+run = "go test -failfast -race -parallel {{ usage.parallel }} -count 1 -v ./test/e2e/... {% if usage.run %}-run {{ usage.run }}{% endif %}"
 
 [tasks.pre-push]
 description = "Validate Go code before pushing/creating PR"

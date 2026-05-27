@@ -26,6 +26,7 @@ type LauncherOpts struct {
 	AgentArgs    []string
 	AgentEnv     map[string]string
 	AgentOutput  io.Writer
+	AgentGRPC    bool
 	ServerArgs   []string
 	ServerEnv    map[string]string
 	ServerOutput io.Writer
@@ -178,8 +179,13 @@ func (l *Launcher) runAgent(ctx context.Context, addr string) error {
 		env = make(map[string]string)
 	}
 
+	scheme := "http"
+	if l.opts.AgentGRPC {
+		scheme = "grpc"
+	}
+
 	maps.Insert(env, maps.All(map[string]string{
-		"ADDRESS": fmt.Sprintf("http://%s", addr),
+		"ADDRESS": fmt.Sprintf("%s://%s", scheme, addr),
 	}))
 
 	return l.runCmd(ctx, "agent", func(ctx context.Context) *exec.Cmd {

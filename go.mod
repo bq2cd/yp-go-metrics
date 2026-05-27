@@ -22,6 +22,7 @@ require (
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/rs/zerolog v1.34.0
 	github.com/shirou/gopsutil/v4 v4.25.10
+	github.com/soheilhy/cmux v0.1.5
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.6.0
 	go.uber.org/zap v1.27.0

@@ -1,2 +1,2 @@
-// Package grpc contains implementation of gRPC server methods.
+// Package grpc contains implementation of gRPC handlers.
 package grpc

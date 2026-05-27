@@ -3,14 +3,19 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"google.golang.org/grpc"
 
+	pbmetrics "github.com/bq2cd/yp-go-metrics/api/gen/metrics/v1"
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
 	"github.com/bq2cd/yp-go-metrics/internal/handler"
+	grpchandler "github.com/bq2cd/yp-go-metrics/internal/handler/grpc"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/grpc/interceptors"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/router"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/auditsink"
@@ -40,8 +45,11 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 	}
 
 	writer := service.NewStorageBatchWriter(storage)
-	storer := service.NewMetricStorer(storage, writer)
-	snapshotter := service.NewMetricSnapshotter(storer, service.NewMetricJSONEncoder(), service.NewMetricJSONDecoder())
+	snapshotter := service.NewMetricSnapshotter(
+		service.NewMetricStorer(storage, writer),
+		service.NewMetricJSONEncoder(),
+		service.NewMetricJSONDecoder(),
+	)
 	auditor := service.NewMetricAuditor(logger, auditProcessor)
 
 	handlers := handler.NewRegistry(logger, snapshotter, pinger, auditor)
@@ -52,7 +60,9 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return fmt.Errorf("cannot create router: %w", err)
 	}
 
-	srv := New(logger, cfg, router, snapshotter, writer, auditProcessor)
+	grpcServer := initGRPCServer(logger, snapshotter, auditor, cfg.TrustedSubnet, hmacSigner)
+
+	srv := New(logger, cfg, router, snapshotter, writer, auditProcessor, grpcServer)
 
 	return srv.Run(ctx)
 }
@@ -118,6 +128,24 @@ func initDecryptor(cfg config.Config) (asymcrypt.Decryptor, error) {
 	decryptor := asymcrypt.NewDecryptor(key)
 
 	return decryptor, nil
+}
+
+func initGRPCServer(
+	logger log.Logger,
+	storer service.MetricStorer,
+	auditor service.MetricAuditor,
+	trustedSubnet net.IPNet,
+	signer hmacsigner.HMACSigner,
+) *grpc.Server {
+	srv := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.TrustedSubnet(logger, trustedSubnet, signer).Intercept),
+	)
+
+	metricsHandler := grpchandler.NewMetricsHandler(logger, storer, auditor)
+
+	pbmetrics.RegisterMetricsServer(srv, metricsHandler)
+
+	return srv
 }
 
 func maybeRegisterAuditFileSink(logger log.Logger, processor service.AuditEventProcessor, path string) error {
