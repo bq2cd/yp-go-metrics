@@ -1,20 +1,18 @@
 package middleware
 
 import (
-	"errors"
-	"fmt"
 	"net"
 	"net/http"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/validators"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type trustedSubnetMiddleware struct {
-	logger        log.Logger
-	trustedSubnet net.IPNet
-	signer        hmacsigner.HMACSigner
+	logger    log.Logger
+	validator *validators.TrustedSubnet
 }
 
 // TrustedSubnet creates a middleware responsible for validation of `X-Real-IP` header.
@@ -26,9 +24,8 @@ func TrustedSubnet(l log.Logger, trustedSubnet net.IPNet, signer hmacsigner.HMAC
 	}
 
 	m := &trustedSubnetMiddleware{
-		logger:        l.With(log.Str("middleware", "trusted_subnet")),
-		trustedSubnet: trustedSubnet,
-		signer:        signer,
+		logger:    l.With(log.Str("middleware", "trusted_subnet")),
+		validator: validators.NewTrustedSubnet(trustedSubnet, signer),
 	}
 
 	return createMiddleware(m)
@@ -57,48 +54,8 @@ func (m *trustedSubnetMiddleware) Intercept(w http.ResponseWriter, r *http.Reque
 	next.ServeHTTP(w, r)
 }
 
-func (m *trustedSubnetMiddleware) isTrustedSubnetConfigured() bool {
-	return len(m.trustedSubnet.IP) > 0 && len(m.trustedSubnet.Mask) > 0
-}
-
 func (m *trustedSubnetMiddleware) validateXRealIP(r *http.Request) (bool, error) {
-	if !m.isTrustedSubnetConfigured() {
-		return true, nil // allow all requests when trusted subnet is not configured
-	}
-
 	realIP := httpheaders.GetXRealIP(r.Header)
-	if realIP.Empty() {
-		return false, nil // requests without header are rejected
-	}
 
-	ok, err := m.verifyXRealIPHash(realIP)
-	if err != nil {
-		return false, err
-	}
-
-	if !ok {
-		return false, nil // reject requests with invalid hash
-	}
-
-	if !m.trustedSubnet.Contains(realIP.IP) {
-		return false, nil // reject requests with IP not in trusted subnet
-	}
-
-	return true, nil
-}
-
-func (m *trustedSubnetMiddleware) verifyXRealIPHash(realIP httpheaders.XRealIP) (bool, error) {
-	if !m.signer.HasKey() {
-		return true, nil // ignore hash if no secret key is configured; assume IP is valid
-	}
-
-	err := m.signer.Verify(realIP.IP.To16(), realIP.Hash) // ensure we verify longest possible IP bytes; the sender must sign the same length
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, hmacsigner.ErrSignatureMismatch):
-		return false, nil
-	default:
-		return false, fmt.Errorf("cannot verify X-Real-IP hash: %w", err)
-	}
+	return m.validator.IsXRealIPTrusted(realIP)
 }

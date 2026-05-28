@@ -2,8 +2,6 @@ package interceptors
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"strings"
 
@@ -13,14 +11,14 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/validators"
 	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/log"
 )
 
 type trustedSubnet struct {
-	logger log.Logger
-	subnet net.IPNet
-	signer hmacsigner.HMACSigner
+	logger    log.Logger
+	validator *validators.TrustedSubnet
 }
 
 // TrustedSubnet creates an instance of [UnaryInterceptor] that validates incoming requests
@@ -31,9 +29,8 @@ func TrustedSubnet(logger log.Logger, subnet net.IPNet, signer hmacsigner.HMACSi
 	}
 
 	return &trustedSubnet{
-		logger: logger.With(log.Str("interceptor", "trusted_subnet")),
-		subnet: subnet,
-		signer: signer,
+		logger:    logger.With(log.Str("interceptor", "trusted_subnet")),
+		validator: validators.NewTrustedSubnet(subnet, signer),
 	}
 }
 
@@ -59,67 +56,23 @@ func (m *trustedSubnet) Intercept(ctx context.Context, req any, info *grpc.Unary
 }
 
 func (m *trustedSubnet) validateXRealIP(ctx context.Context) (bool, error) {
-	if !m.isTrustedSubnetConfigured() {
-		return true, nil // allow all requests when trusted subnet is not configured
-	}
+	realIP := m.extractXRealIPFromMetadata(ctx)
 
-	realIP, ok := m.extractXRealIPFromMetadata(ctx)
-	if !ok {
-		return false, nil
-	}
-
-	ok, err := m.verifyXRealIPHash(realIP)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil // reject requests with invalid hash
-	}
-
-	if !m.subnet.Contains(realIP.IP) {
-		return false, nil // reject requests with IP not in trusted subnet
-	}
-
-	return true, nil
+	return m.validator.IsXRealIPTrusted(realIP)
 }
 
-func (m *trustedSubnet) isTrustedSubnetConfigured() bool {
-	return len(m.subnet.IP) > 0 && len(m.subnet.Mask) > 0
-}
-
-func (m *trustedSubnet) extractXRealIPFromMetadata(ctx context.Context) (httpheaders.XRealIP, bool) {
+func (m *trustedSubnet) extractXRealIPFromMetadata(ctx context.Context) httpheaders.XRealIP {
 	var zero httpheaders.XRealIP
 
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return zero, false // requests without metadata are rejected
+		return zero
 	}
 
 	values := md.Get(strings.ToLower(httpheaders.HeaderKeyXRealIP))
 	if len(values) != 1 {
-		return zero, false // requests with empty x-real-ip or with multi-value x-real-ip are rejected
+		return zero // requests with multi-value x-real-ip are treated as not having x-real-ip at all
 	}
 
-	realIP := httpheaders.GetXRealIPFromBytes([]byte(values[0]))
-	if realIP.Empty() {
-		return zero, false // requests with invalid IP address are rejected
-	}
-
-	return realIP, true
-}
-
-func (m *trustedSubnet) verifyXRealIPHash(realIP httpheaders.XRealIP) (bool, error) {
-	if !m.signer.HasKey() {
-		return true, nil // ignore hash if no secret key is configured; assume IP is valid
-	}
-
-	err := m.signer.Verify(realIP.IP.To16(), realIP.Hash) // ensure we verify longest possible IP bytes; the sender must sign the same length
-	switch {
-	case err == nil:
-		return true, nil
-	case errors.Is(err, hmacsigner.ErrSignatureMismatch):
-		return false, nil
-	default:
-		return false, fmt.Errorf("cannot verify X-Real-IP hash: %w", err)
-	}
+	return httpheaders.GetXRealIPFromBytes([]byte(values[0]))
 }
