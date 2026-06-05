@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package metrics.v1;
+
+// При необходимости поправьте go_package в соответствии со структурой вашего проекта.
+option go_package = "github.com/bq2cd/yp-go-metrics/api/gen/metrics/v1;pbmetrics";
+
+// Metric определяет единичную метрику.
+message Metric {
+  string id = 1; // имя метрики
+
+  // MType задаёт тип метрики.
+  enum MType {
+    UNSPECIFIED = 0;
+    GAUGE = 1;
+    COUNTER = 2;
+  }
+
+  MType type = 2; // тип метрики
+  // Поле delta для метрик-счётчиков.
+  int64 delta = 3;
+  // Поле value для метрик-измерителей.
+  double value = 4;
+}
+
+// UpdateMetricsRequest содержит список метрик для обновления.
+message UpdateMetricsRequest {
+  repeated Metric metrics = 1;
+}
+
+// UpdateMetricsResponse — ответ для подтверждения успешного обновления.
+// Returns the list of updated metrics.
+message UpdateMetricsResponse {
+  repeated Metric metrics = 1;
+}
+
+// MetricsService определяет сервис для работы с метриками.
+service Metrics {
+  // UpdateMetrics обновляет метрики на сервере.
+  // Этот метод подходит для отправки как единичных метрик, так и батчей.
+  rpc UpdateMetrics(UpdateMetricsRequest) returns (UpdateMetricsResponse);
+}

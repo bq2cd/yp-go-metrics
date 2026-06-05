@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -842,6 +843,77 @@ func TestDecryptionPrivateKey(t *testing.T) {
 			err := DecryptionPrivateKey(tt.args.path)(c)
 			tt.want.wantErr(t, err)
 			assert.Equal(t, tt.want.content, c.DecryptionPrivateKey)
+		})
+	}
+}
+
+func TestTrustedSubnet(t *testing.T) {
+	type args struct {
+		ipCidr string
+	}
+	type want struct {
+		subnet  net.IPNet
+		wantErr func(testing.TB, error)
+	}
+	type testcase struct {
+		config Config
+		args   args
+		want   want
+	}
+	tests := map[string]testcase{
+		"empty CIDR address does nothing to empty config": {
+			config: Config{},
+			args: args{
+				ipCidr: "",
+			},
+			want: want{
+				subnet:  net.IPNet{},
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+		"empty CIDR address resets prepopulated config": {
+			config: Config{
+				TrustedSubnet: net.IPNet{IP: net.ParseIP("128.1.2.3"), Mask: net.CIDRMask(24, 32)},
+			},
+			args: args{
+				ipCidr: "",
+			},
+			want: want{
+				subnet:  net.IPNet{},
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+		"valid CIDR address overrides prepopulated config": {
+			config: Config{
+				TrustedSubnet: net.IPNet{IP: net.ParseIP("128.1.2.3"), Mask: net.CIDRMask(24, 32)},
+			},
+			args: args{
+				ipCidr: "8.9.10.11/16",
+			},
+			want: want{
+				subnet:  net.IPNet{IP: net.ParseIP("8.9.0.0").To4(), Mask: net.CIDRMask(16, 32)},
+				wantErr: func(t testing.TB, err error) { require.NoError(t, err) },
+			},
+		},
+		"invalid CIDR address overrides prepopulated config": {
+			config: Config{
+				TrustedSubnet: net.IPNet{IP: net.ParseIP("128.1.2.3"), Mask: net.CIDRMask(24, 32)},
+			},
+			args: args{
+				ipCidr: "908.8.8.8/16",
+			},
+			want: want{
+				subnet:  net.IPNet{IP: net.ParseIP("128.1.2.3"), Mask: net.CIDRMask(24, 32)},
+				wantErr: func(t testing.TB, err error) { require.Error(t, err) },
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			c := &tt.config
+			err := TrustedSubnet(tt.args.ipCidr)(c)
+			tt.want.wantErr(t, err)
+			assert.Equal(t, tt.want.subnet, c.TrustedSubnet)
 		})
 	}
 }

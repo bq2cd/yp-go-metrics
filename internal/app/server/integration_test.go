@@ -6,27 +6,38 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	neturl "net/url"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
+	pbmetrics "github.com/bq2cd/yp-go-metrics/api/gen/metrics/v1"
 	logger "github.com/bq2cd/yp-go-metrics/internal/app/logger"
 	"github.com/bq2cd/yp-go-metrics/internal/app/server"
 	"github.com/bq2cd/yp-go-metrics/internal/app/server/servertest"
 	dbconfig "github.com/bq2cd/yp-go-metrics/internal/config/db"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/server"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/grpc/converters"
 	"github.com/bq2cd/yp-go-metrics/internal/handler/handlertest"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/model"
 	"github.com/bq2cd/yp-go-metrics/internal/repository/sqlstorage"
 	"github.com/bq2cd/yp-go-metrics/internal/testutil"
 	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
+	"github.com/bq2cd/yp-go-metrics/pkg/hmacsigner"
 	"github.com/bq2cd/yp-go-metrics/pkg/retrymgr/retrymgrtest/mockretrierfactory"
 )
 
@@ -43,7 +54,7 @@ type IntegrationTestSuite struct {
 	addrFactory *servertest.ListenAddressFactory
 	tempFactory *servertest.TempFileFactory
 	requester   *handlertest.Requester
-	keypair     *servertest.X25519KeyPair
+	keypair     *asymcrypt.X25519KeyPair
 }
 
 type IntegrationCase struct {
@@ -58,7 +69,7 @@ type IntegrationCase struct {
 func (ts *IntegrationTestSuite) SetupSuite() {
 	var err error
 
-	ts.keypair, err = servertest.NewX25519KeyPair()
+	ts.keypair, err = asymcrypt.NewX25519KeyPair()
 	ts.Require().NoErrorf(err, "unable to generate X25519 key pair")
 }
 
@@ -402,7 +413,7 @@ func (ts *IntegrationTestSuite) TestEncryptedMetricsUpload() {
 		timeout:     500 * time.Millisecond,
 		warmupDelay: 100 * time.Millisecond,
 		config: config.Config{
-			DecryptionPrivateKey: ts.keypair.Private.Bytes(),
+			DecryptionPrivateKey: ts.keypair.Private,
 		},
 		assertRunning: func(addr string) {
 			collectedMetrics := []model.Metric{
@@ -422,12 +433,12 @@ func (ts *IntegrationTestSuite) TestEncryptedMetricsUpload() {
 	ts.runIntegrationCase(ic)
 }
 
-func (ts *IntegrationTestSuite) TestClearTextMetricsUploadFailsWhenEncryptionEnabled() {
+func (ts *IntegrationTestSuite) TestFailClearTextMetricsUploadWhenEncryptionEnabled() {
 	ic := IntegrationCase{
 		timeout:     500 * time.Millisecond,
 		warmupDelay: 100 * time.Millisecond,
 		config: config.Config{
-			DecryptionPrivateKey: ts.keypair.Private.Bytes(),
+			DecryptionPrivateKey: ts.keypair.Private,
 		},
 		assertRunning: func(addr string) {
 			collectedMetrics := []model.Metric{
@@ -450,10 +461,319 @@ func (ts *IntegrationTestSuite) TestClearTextMetricsUploadFailsWhenEncryptionEna
 	ts.runIntegrationCase(ic)
 }
 
+func (ts *IntegrationTestSuite) TestMetricsUploadViaGRPC() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config:      config.Config{},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetricsViaGRPC(addr, collectedMetrics, 50*time.Millisecond, nil)
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestMetricsUploadViaGRPCAndHTTP() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config:      config.Config{},
+		assertRunning: func(addr string) {
+			collectedMetrics1 := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+			collectedMetrics2 := []model.Metric{
+				model.NewCounterMetric("id101", 456),
+				model.NewCounterMetric("id201", -456),
+				model.NewGaugeMetric("id1010", 4.56),
+				model.NewGaugeMetric("id1020", -4.56),
+			}
+
+			ts.uploadAndValidateMetrics(addr, collectedMetrics1, ts.metricsToBodyData, 50*time.Millisecond)
+			ts.uploadAndValidateMetricsViaGRPC(addr, collectedMetrics2, 50*time.Millisecond, nil)
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestMetricsUploadViaGRPCWithTrustedSubnetAndCorrectIP() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetricsViaGRPC(addr, collectedMetrics, 50*time.Millisecond, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): "10.2.3.45",
+			})
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestMetricsUploadViaGRPCWithTrustedSubnetAndCorrectIPWithIgnoredHash() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetricsViaGRPC(addr, collectedMetrics, 50*time.Millisecond, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): ts.signRealIP("10.2.3.45", []byte(`super-secret-key`)).String(),
+			})
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestMetricsUploadViaGRPCWithTrustedSubnetHMACAndCorrectIPHash() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+			HMACSecretKey: []byte(`super-secret-key`),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			ts.uploadAndValidateMetricsViaGRPC(addr, collectedMetrics, 50*time.Millisecond, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): ts.signRealIP("10.2.3.45", []byte(`super-secret-key`)).String(),
+			})
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestFailMetricsUploadViaGRPCWithTrustedSubnetAndMissingIP() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			_, st := ts.uploadMetricsViaGRPC(addr, collectedMetrics, map[string]string{})
+
+			ts.Equalf(codes.PermissionDenied, st.Code(), "expected PermissionDenied, got %s", st.String())
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestFailMetricsUploadViaGRPCWithTrustedSubnetAndIncorrectIP() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			_, st := ts.uploadMetricsViaGRPC(addr, collectedMetrics, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): "10.4.5.6",
+			})
+
+			ts.Equalf(codes.PermissionDenied, st.Code(), "expected PermissionDenied, got %s", st.String())
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestFailMetricsUploadViaGRPCWithTrustedSubnetHMACAndCorrectIPButMissingHash() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+			HMACSecretKey: []byte(`super-secret-key`),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			_, st := ts.uploadMetricsViaGRPC(addr, collectedMetrics, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): "10.2.3.45",
+			})
+
+			ts.Equalf(codes.PermissionDenied, st.Code(), "expected PermissionDenied, got %s", st.String())
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestFailMetricsUploadViaGRPCWithTrustedSubnetHMACAndCorrectIPButIncorrectHash() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+			HMACSecretKey: []byte(`super-secret-key`),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			_, st := ts.uploadMetricsViaGRPC(addr, collectedMetrics, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): ts.signRealIP("10.2.3.45", []byte(`another-key`)).String(),
+			})
+
+			ts.Equalf(codes.PermissionDenied, st.Code(), "expected PermissionDenied, got %s", st.String())
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
+func (ts *IntegrationTestSuite) TestFailMetricsUploadViaGRPCWithTrustedSubnetHMACAndCorrectHashButIncorrectIP() {
+	ic := IntegrationCase{
+		timeout:     500 * time.Millisecond,
+		warmupDelay: 100 * time.Millisecond,
+		config: config.Config{
+			TrustedSubnet: net.IPNet{
+				IP:   net.ParseIP("10.2.3.0"),
+				Mask: net.CIDRMask(24, 32), // 10.2.3.0/24
+			},
+			HMACSecretKey: []byte(`super-secret-key`),
+		},
+		assertRunning: func(addr string) {
+			collectedMetrics := []model.Metric{
+				model.NewCounterMetric("id1", 123),
+				model.NewCounterMetric("id2", -123),
+				model.NewGaugeMetric("id10", 1.23),
+				model.NewGaugeMetric("id20", -1.23),
+			}
+
+			_, st := ts.uploadMetricsViaGRPC(addr, collectedMetrics, map[string]string{
+				strings.ToLower(httpheaders.HeaderKeyXRealIP): ts.signRealIP("10.4.5.6", []byte(`super-secret-key`)).String(),
+			})
+
+			ts.Equalf(codes.PermissionDenied, st.Code(), "expected PermissionDenied, got %s", st.String())
+		},
+		assertStopped: func(cfg config.Config) {
+			// all validation happens while the server is running;
+		},
+	}
+
+	ts.runIntegrationCase(ic)
+}
+
 func (ts *IntegrationTestSuite) runIntegrationCase(ic IntegrationCase) {
 	addr := ts.addrFactory.New()
 
 	ic.config.ListenAddress = addr
+
+	if ic.config.ShutdownTimeout == 0 {
+		ic.config.ShutdownTimeout = ic.timeout / 2
+	}
 
 	errCh := make(chan error, 1)
 
@@ -516,13 +836,66 @@ func (ts *IntegrationTestSuite) uploadAndValidateMetrics(addr string, metrics []
 	ts.Equal(http.StatusOK, resp.Status)
 
 	uploadedMetrics, err := handlertest.DecodeBodyDataAsJSON[[]model.Metric](&resp.Body)
-
 	ts.Require().NoError(err)
 
-	uploadedSet := model.NewMetricSet(uploadedMetrics...)
+	ts.validateUploadedMetrics(addr, metrics, delay, uploadedMetrics)
+}
 
+func (ts *IntegrationTestSuite) metricsToBodyData(metrics []model.Metric) handlertest.BodyData {
+	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics)
+}
+
+func (ts *IntegrationTestSuite) metricsToEncryptedBodyData(metrics []model.Metric) handlertest.BodyData {
+	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics).TransformData(func(data []byte) []byte {
+		pubkey, err := asymcrypt.ParsePublicKey(ts.keypair.Public)
+		ts.Require().NoErrorf(err, "unable to parse pre-generated X25519 public key")
+
+		encryptor, err := asymcrypt.NewEncryptor(pubkey)
+		ts.Require().NoErrorf(err, "unable to initialize encryptor")
+
+		ciphertext, err := encryptor.Encrypt(data)
+		ts.Require().NoErrorf(err, "unable to encrypt clear text data")
+
+		return ciphertext
+	})
+}
+
+func (ts *IntegrationTestSuite) uploadAndValidateMetricsViaGRPC(addr string, metrics []model.Metric, delay time.Duration, requestMetadata map[string]string) {
+	ts.T().Helper()
+
+	resp, st := ts.uploadMetricsViaGRPC(addr, metrics, requestMetadata)
+	ts.Require().Equalf(codes.OK, st.Code(), "expected GRPC status OK, got %s", st.String())
+
+	uploadedMetrics := converters.ProtoToMetrics(resp.GetMetrics())
+
+	ts.validateUploadedMetrics(addr, metrics, delay, uploadedMetrics)
+}
+
+func (ts *IntegrationTestSuite) uploadMetricsViaGRPC(addr string, metrics []model.Metric, requestMetadata map[string]string) (*pbmetrics.UpdateMetricsResponse, *status.Status) {
+	ts.T().Helper()
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	ts.Require().NoError(err)
+
+	client := pbmetrics.NewMetricsClient(conn)
+
+	req := new(pbmetrics.UpdateMetricsRequest)
+	req.SetMetrics(converters.MetricsToProto(metrics...))
+
+	ctx := metadata.NewOutgoingContext(ts.T().Context(), metadata.New(requestMetadata))
+
+	resp, err := client.UpdateMetrics(ctx, req)
+
+	st, _ := status.FromError(err)
+
+	return resp, st
+}
+
+func (ts *IntegrationTestSuite) validateUploadedMetrics(addr string, metrics []model.Metric, delay time.Duration, uploadedMetrics []model.Metric) {
 	// wait
 	time.Sleep(delay)
+
+	uploadedSet := model.NewMetricSet(uploadedMetrics...)
 
 	// validate metrics retrieval
 	for key := range model.NewMetricSet(metrics...) {
@@ -537,25 +910,6 @@ func (ts *IntegrationTestSuite) uploadAndValidateMetrics(addr string, metrics []
 
 		ts.Equal(uploadedSet[key], metric)
 	}
-}
-
-func (ts *IntegrationTestSuite) metricsToBodyData(metrics []model.Metric) handlertest.BodyData {
-	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics)
-}
-
-func (ts *IntegrationTestSuite) metricsToEncryptedBodyData(metrics []model.Metric) handlertest.BodyData {
-	return handlertest.NewBodyDataFromMetrics(ts.T(), metrics).TransformData(func(data []byte) []byte {
-		pubkey, err := asymcrypt.ParsePublicKey(ts.keypair.Public.Bytes())
-		ts.Require().NoErrorf(err, "unable to parse pre-generated X25519 public key")
-
-		encryptor, err := asymcrypt.NewEncryptor(pubkey)
-		ts.Require().NoErrorf(err, "unable to initialize encryptor")
-
-		ciphertext, err := encryptor.Encrypt(data)
-		ts.Require().NoErrorf(err, "unable to encrypt clear text data")
-
-		return ciphertext
-	})
 }
 
 func (ts *IntegrationTestSuite) validateMetricsInPostgres(dbCfg dbconfig.Config, wantMetrics []model.Metric) {
@@ -642,6 +996,16 @@ func (ts *IntegrationTestSuite) validateAuditEvent(wantEvent, gotEvent model.Aud
 	ts.Greater(gotEvent.Timestamp, wantEvent.Timestamp-5) // 5 seconds difference should be enough
 	ts.Equal(wantEvent.IPAddress, gotEvent.IPAddress)
 	ts.ElementsMatch(wantEvent.MetricNames, gotEvent.MetricNames)
+}
+
+func (ts *IntegrationTestSuite) signRealIP(ipValue string, secretKey []byte) httpheaders.XRealIP {
+	signer := hmacsigner.NewHMACSigner(secretKey)
+	ip := net.ParseIP(ipValue)
+
+	hash, err := signer.Sign(ip.To16())
+	ts.Require().NoError(err)
+
+	return httpheaders.XRealIP{IP: ip, Hash: hash}
 }
 
 type mockAuditReceiver struct {

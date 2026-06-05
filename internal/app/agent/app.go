@@ -5,9 +5,13 @@ import (
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
+	pbmetrics "github.com/bq2cd/yp-go-metrics/api/gen/metrics/v1"
 	"github.com/bq2cd/yp-go-metrics/internal/app/agent/source"
 	config "github.com/bq2cd/yp-go-metrics/internal/config/agent"
+	"github.com/bq2cd/yp-go-metrics/internal/handler/httpheaders"
 	"github.com/bq2cd/yp-go-metrics/internal/repository"
 
 	"github.com/bq2cd/yp-go-metrics/pkg/asymcrypt"
@@ -23,12 +27,19 @@ func Run(ctx context.Context, logger log.Logger, cfg config.Config) error {
 		return err
 	}
 
-	collector := NewCollector(source.DefaultSources(), repository.NewMemStorage())
-
-	client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
-	retrierFactory := retrymgr.NewRetrierFactory(logger, retrymgr.NewSleeper(), retrymgr.NewStrategy1s3s5s)
 	hmacSigner := hmacsigner.NewHMACSigner(cfg.HMACSecretKey)
-	sender := NewSenderJSON(client, retrierFactory, hmacSigner, encryptor)
+
+	realIP, err := prepareRealIPHeader(cfg.UpstreamURL.Host, hmacSigner)
+	if err != nil {
+		return err
+	}
+
+	sender, err := initSender(logger, cfg, hmacSigner, encryptor, realIP)
+	if err != nil {
+		return err
+	}
+
+	collector := NewCollector(source.DefaultSources(), repository.NewMemStorage())
 	reporter := NewReporter(sender, repository.NewMemStorage(), cfg.SenderPoolSize)
 
 	logger.Info().
@@ -58,4 +69,21 @@ func initEncryptor(cfg config.Config) (asymcrypt.Encryptor, error) {
 	}
 
 	return encryptor, nil
+}
+
+func initSender(logger log.Logger, cfg config.Config, hmacSigner hmacsigner.HMACSigner, encryptor asymcrypt.Encryptor, realIP httpheaders.XRealIP) (SenderBatch, error) {
+	switch cfg.UpstreamURL.Scheme {
+	case "grpc":
+		conn, err := grpc.NewClient(cfg.UpstreamURL.Host, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err != nil {
+			return nil, fmt.Errorf("cannot create new GRPC channel for %s: %w", cfg.UpstreamURL.Host, err)
+		}
+
+		return NewSenderGRPC(logger, pbmetrics.NewMetricsClient(conn), realIP), nil
+	default:
+		client := resty.New().SetBaseURL(cfg.UpstreamURL.String()).SetTimeout(cfg.ReportInterval)
+		retrierFactory := retrymgr.NewRetrierFactory(logger, retrymgr.NewSleeper(), retrymgr.NewStrategy1s3s5s)
+
+		return NewSenderJSON(client, retrierFactory, hmacSigner, encryptor, realIP), nil
+	}
 }

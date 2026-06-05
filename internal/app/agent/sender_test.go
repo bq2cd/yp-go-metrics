@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"slices"
@@ -283,6 +284,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			setupMockHMACSignerNoKey,
 			setupMockEncryptorNotConfigured,
 			httpheaders.HashSHA256Empty,
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1")},
 		)
 	})
 
@@ -291,6 +293,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			setupMockHMACSignerNoKey,
 			setupMockEncryptorWithPrefix,
 			httpheaders.HashSHA256Empty,
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1")},
 		)
 	})
 
@@ -300,6 +303,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			setupMockHMACSignerDummyHash,
 			setupMockEncryptorNotConfigured,
 			httpheaders.HashSHA256(dummyHashSHA256),
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1"), Hash: []byte(dummyHashSHA256)},
 		)
 	})
 
@@ -309,6 +313,7 @@ func Test_senderJSON_Send(t *testing.T) {
 			setupMockHMACSignerDummyHash,
 			setupMockEncryptorWithPrefix,
 			httpheaders.HashSHA256(dummyHashSHA256),
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1"), Hash: []byte(dummyHashSHA256)},
 		)
 	})
 }
@@ -318,6 +323,7 @@ func testSenderJSONSendHelper(
 	setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner,
 	setupEncryptor func(*gomock.Controller, int) asymcrypt.Encryptor,
 	wantHashHeader httpheaders.HashSHA256,
+	wantRealIP httpheaders.XRealIP,
 ) {
 	t.Helper()
 
@@ -581,7 +587,7 @@ func testSenderJSONSendHelper(
 			defer cancel()
 
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
-			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner, encryptor)
+			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner, encryptor, wantRealIP)
 			s.shouldCompress = shouldCompress
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
@@ -598,6 +604,7 @@ func testSenderJSONSendHelper(
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
 				require.Truef(t, wantHashHeader.Matches(r.Header), "hash header mismatch")
+				require.Truef(t, wantRealIP.Matches(r.Header), "real IP header mismatch")
 				rbody := bytes.NewBuffer(nil)
 				_, err2 := io.Copy(rbody, r.Body)
 				require.NoError(t, err2)
@@ -653,6 +660,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			setupMockHMACSignerNoKey,
 			setupMockEncryptorNotConfigured,
 			httpheaders.HashSHA256Empty,
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1")},
 		)
 	})
 
@@ -662,6 +670,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			setupMockHMACSignerNoKey,
 			setupMockEncryptorWithPrefix,
 			httpheaders.HashSHA256Empty,
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1")},
 		)
 	})
 
@@ -670,6 +679,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			setupMockHMACSignerDummyHash,
 			setupMockEncryptorNotConfigured,
 			httpheaders.HashSHA256(dummyHashSHA256),
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1"), Hash: []byte(dummyHashSHA256)},
 		)
 	})
 
@@ -678,6 +688,7 @@ func Test_senderJSON_SendBatch(t *testing.T) {
 			setupMockHMACSignerDummyHash,
 			setupMockEncryptorWithPrefix,
 			httpheaders.HashSHA256(dummyHashSHA256),
+			httpheaders.XRealIP{IP: net.ParseIP("127.0.0.1"), Hash: []byte(dummyHashSHA256)},
 		)
 	})
 }
@@ -687,6 +698,7 @@ func testSenderJSONSendBatchHelper(
 	setupSigner func(*gomock.Controller, int) *hmacsignertest.MockHMACSigner,
 	setupEncryptor func(*gomock.Controller, int) asymcrypt.Encryptor,
 	wantHashHeader httpheaders.HashSHA256,
+	wantRealIP httpheaders.XRealIP,
 ) {
 	t.Helper()
 
@@ -1019,7 +1031,7 @@ func testSenderJSONSendBatchHelper(
 			defer cancel()
 
 			shouldCompress := tt.responder.contentEncoding != httpheaders.ContentEncodingEmpty
-			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner, encryptor)
+			s := NewSenderJSON(tt.fields.client, retrierFactory, hmacSigner, encryptor, wantRealIP)
 			s.shouldCompress = shouldCompress
 
 			rbodyCh := make(chan *bytes.Buffer, 1)
@@ -1036,6 +1048,7 @@ func testSenderJSONSendBatchHelper(
 				require.True(t, tt.responder.contentType.Matches(r.Header))
 				require.True(t, tt.responder.contentEncoding.Matches(r.Header))
 				require.Truef(t, wantHashHeader.Matches(r.Header), "hash header mismatch")
+				require.Truef(t, wantRealIP.Matches(r.Header), "real IP header mismatch")
 				rbody := bytes.NewBuffer(nil)
 				_, err2 := io.Copy(rbody, r.Body)
 				require.NoError(t, err2)
